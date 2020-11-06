@@ -1,5 +1,6 @@
 import torch
 import torch.optim as optim
+import torch.nn.functional as fn
 from data.dataset import SkeletonDataset
 from torch_geometric.data import DataLoader
 from models.net import DualGraphTransformer
