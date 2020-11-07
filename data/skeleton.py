@@ -16,24 +16,29 @@ def skeleton_parts(num_joints=25):
 def process_skeleton(path,
                      num_joints=25,
                      num_features=3,
-                     use_motion_vector=False):
+                     use_motion_vector=True):
     import os.path as osp
     t = osp.split(path)[-1][-12:-9]
+    count = 0
     with open(path, 'r') as f:
+        i = 0
         lines = f.readlines()
-        num_frames = int(lines[0])
-        start = 1
-        num_persons = int(lines[1])
-        offset = int((len(lines) - 1) / num_frames)
-        frames = [lines[start + 3 + i * offset:
-                        start + 3 + i * offset + num_joints] for i in range(num_frames)]
-        frames = process_frames(frames, num_joints, num_features, use_motion_vector)
-        if num_persons == 2:
-            frames_ = [lines[start + (i + 1) * offset - num_joints:
-                             start + (i + 1) * offset + num_joints] for i in range(num_frames)]
-            frames_ = process_frames(frames_, num_joints, num_features, use_motion_vector)
-            frames = torch.cat([frames, frames_], dim=0)
-        return frames, int(t)
+        frames = []
+        while i < len(lines):
+            if i == 0:
+                frame_number = lines[i]
+                i += 1
+            else:
+                if lines[i] == '0\n':
+                    i += 1
+                    continue
+                num_persons = int(lines[i])
+                for j in range(num_persons):
+                    frames.append(lines[i+3+j*27:i+28+j*27])
+                i += (1 + num_persons * 27)
+                    
+        frames = process_frames(frames, num_persons, num_joints, num_features, use_motion_vector)            
+    return frames, int(t)
 
 
 def motion_vector(frames):
@@ -48,13 +53,17 @@ def motion_vector(frames):
     return mv
 
 
-def process_frames(frames, num_joints, num_features, use_motion_vector=False):
+def process_frames(frames, num_persons, num_joints, num_features, use_motion_vector=False):
     fv = torch.zeros((len(frames), num_joints, num_features))
-    for i in range(len(frames)):
-        f = frames[i]
-        for j in range(num_joints):
-            vs = [float(n) for n in f[j].split()][0: num_features]
-            fv[i, j, :] = torch.tensor(vs)
+    frame_count = 0
+    for p in range(num_persons):
+        per_person = [frames[index] for index in range(len(frames)) if index % num_persons == p]
+        for i in range(len(per_person)):
+            f = per_person[i]
+            for j in range(num_joints):
+                vs = [float(n) for n in f[j].split()][0: num_features]
+                fv[frame_count, j, :] = torch.tensor(vs)
+            frame_count += 1
     if use_motion_vector:
         fv = torch.cat([fv, motion_vector(fv)], dim=-1)
     return fv
