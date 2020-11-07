@@ -24,17 +24,25 @@ class SkeletonDataset(Dataset, ABC):
         self.training_subjects = [1, 2, 4, 5, 8, 9, 13, 14, 15, 16, 17, 18, 19, 25, 27, 28, 31, 34, 35, 38]
         self.training_cameras = [2, 3]
         self.sample = sample
-
+        
         self.num_joints = 25
-
         self.skeleton_ = skeleton_parts()
         self.use_motion_vector = use_motion_vector
+
 
         if not osp.exists(osp.join(root, "raw")):
             os.mkdir(osp.join(root, "raw"))
         super(SkeletonDataset, self).__init__(root, transform, pre_transform)
-        path = osp.join(self.processed_dir, self.benchmark, '{}.pt'.format(self.name))
+        path = osp.join(self.processed_dir, '{}.pt'.format(self.name))
         self.data, self.labels = torch.load(path)
+
+    @property
+    def missing_skeleton_file_names(self):
+        f = open(osp.join(self.root, 'samples_with_missing_skeletons.txt'), 'r')
+        lines = f.readlines()
+        flist = [fnames[:-1] for fnames in lines]
+        f.close()
+        return flist
 
     @property
     def raw_file_names(self):
@@ -49,7 +57,7 @@ class SkeletonDataset(Dataset, ABC):
         # Download to `self.raw_dir`.
         pass
 
-    def process_skeleton(self):
+    def process(self):
         progress_bar = tqdm(self.raw_file_names)
         #skeletons, labels = [], torch.zeros(len(self.raw_file_names))
         skeletons, labels = [], []
