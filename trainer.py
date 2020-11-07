@@ -143,8 +143,8 @@ if __name__ == '__main__':
     args = make_args()
 
     log_dir = '/home/project/gcn/APBGCN/log'
-    train_dataset = SkeletonDataset(root="/home/project/gcn/Apb-gcn/NTU-RGB+D", name='cv_train', benchmark='cv', sample = 'train')
-    valid_dataset = SkeletonDataset(root="/home/project/gcn/Apb-gcn/NTU-RGB+D", name='cv_val', benchmark='cv', sample = 'val')
+    train_dataset = SkeletonDataset(root="/home/project/gcn/APBGCN", name='cv_train', use_motion_vector=False, benchmark='cv', sample = 'train')
+    valid_dataset = SkeletonDataset(root="/home/project/gcn/APBGCN", name='cv_val', use_motion_vector=False, benchmark='cv', sample = 'val')
     
     train_loader = DataLoader(train_dataset.data, batch_size = args.batch_size)
     valid_loader = DataLoader(valid_dataset.data, batch_size = args.batch_size)
