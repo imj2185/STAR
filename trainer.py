@@ -8,6 +8,7 @@ from einops import rearrange
 from args import make_args
 from optimizer import get_std_opt
 from tensorboardX import SummaryWriter
+from tqdm import tqdm, trange
 import torch.nn as nn
 class GCNTrainer(object):
     def __init__(self, model, train_loader, train_labels, val_loader, val_labels, adj, optimizer, loss_fn, log_dir):
@@ -42,7 +43,7 @@ class GCNTrainer(object):
             lr = self.optimizer.state_dict()['param_groups'][0]['lr']
             self.writer.add_scalar('params/lr', lr, epoch)
 
-            for i, batch in enumerate(train_loader):
+            for i, batch in tqdm(enumerate(train_loader), total=len(train_loader), desc="Train Epoch {}".format(epoch)):
                 batch = batch.to(self.device)
                 self.optimizer.zero_grad()
                 output = self.model(batch.x, adj=self.adj)
@@ -60,12 +61,12 @@ class GCNTrainer(object):
                 acc = correct_points.float()/results.size()[0]
                 self.writer.add_scalar('train/train_overall_acc', acc, i_acc+i+1)
 
-                loss.backward()
-                self.optimizer.step()
+                #loss.backward()
+                #self.optimizer.step()
 
                 log_str = 'epoch %d, step %d: train_loss %.3f; train_acc %.3f' % (epoch+1, i+1, loss, acc)
-                if (i+1)%1==0:
-                    print(log_str)
+                #if (i+1)%1==0:
+                #    print(log_str)
             i_acc += i
 
             #evaluation
@@ -149,7 +150,10 @@ if __name__ == '__main__':
     valid_loader = DataLoader(valid_dataset.data, batch_size = args.batch_size)
 
     model = DualGraphTransformer(in_channels = 3, hidden_channels = 16, out_channels = 16, num_layers = 4, num_heads = 8)
-    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=(0.9, 0.98))
+    #optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=(0.9, 0.98))
 
-    trainer = GCNTrainer(model, train_loader, train_dataset.labels, valid_loader, valid_dataset.labels, train_dataset.skeleton_, optimizer, nn.CrossEntropyLoss(), log_dir)
+    noam_opt = get_std_opt(model, args)
+
+
+    trainer = GCNTrainer(model, train_loader, train_dataset.labels, valid_loader, valid_dataset.labels, train_dataset.skeleton_, noam_opt.optimizer, nn.CrossEntropyLoss(), log_dir)
     trainer.train(args.epoch_num)
