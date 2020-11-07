@@ -14,27 +14,35 @@ def skeleton_parts(num_joints=25):
 
 
 def process_skeleton(path,
-                     name='ntu',
+                     dataset_name='ntu',
                      num_joints=25,
                      num_features=3,
                      use_motion_vector=True):
     import os.path as osp
-    t = osp.split(path)[-1][-12:-9]
-    count = 0
-    with open(path, 'r') as f:
-        lines = f.readlines()
-        frames = []
-        i = 1
-        while i < len(lines) - 1:
-            if lines[i] == '0\n':
-                i += 1
-                continue
-            num_persons = int(lines[i])
-            for j in range(num_persons):
-                frames.append(lines[i + 3 + j * 27: i + 1 + (j + 1) * 27])
-            i += (1 + num_persons * 27)
-                    
-        frames = process_frames(frames, num_persons, num_joints, num_features, use_motion_vector)            
+    t = osp.split(path)[-1][-12:-9] if ('ntu' in dataset_name) else 0
+    frames = []
+    num_persons = 0
+    if 'ntu' in dataset_name:
+        with open(path, 'r') as f:
+            lines = f.readlines()
+            i = 1
+            while i < len(lines) - 1:
+                if lines[i] == '0\n':
+                    i += 1
+                    continue
+                num_persons = int(lines[i])
+                for j in range(num_persons):
+                    frames.append(lines[i + 3 + j * 27: i + 1 + (j + 1) * 27])
+                i += (1 + num_persons * 27)
+    elif 'kinetics' in dataset_name:
+        # reference
+        # https://github.com/yysijie/st-gcn/blob/master/feeder/feeder_kinetics.py
+        import json
+        with open(path, 'r') as f:
+            video = json.load(f)
+
+    frames = process_frames(frames, num_persons, num_joints, num_features, use_motion_vector)
+
     return frames, int(t)
 
 
