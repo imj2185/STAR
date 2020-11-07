@@ -14,6 +14,7 @@ def skeleton_parts(num_joints=25):
 
 
 def process_skeleton(path,
+                     name='ntu',
                      num_joints=25,
                      num_features=3,
                      use_motion_vector=True):
@@ -21,21 +22,17 @@ def process_skeleton(path,
     t = osp.split(path)[-1][-12:-9]
     count = 0
     with open(path, 'r') as f:
-        i = 0
         lines = f.readlines()
         frames = []
-        while i < len(lines):
-            if i == 0:
-                frame_number = lines[i]
+        i = 1
+        while i < len(lines) - 1:
+            if lines[i] == '0\n':
                 i += 1
-            else:
-                if lines[i] == '0\n':
-                    i += 1
-                    continue
-                num_persons = int(lines[i])
-                for j in range(num_persons):
-                    frames.append(lines[i+3+j*27:i+28+j*27])
-                i += (1 + num_persons * 27)
+                continue
+            num_persons = int(lines[i])
+            for j in range(num_persons):
+                frames.append(lines[i + 3 + j * 27: i + 1 + (j + 1) * 27])
+            i += (1 + num_persons * 27)
                     
         frames = process_frames(frames, num_persons, num_joints, num_features, use_motion_vector)            
     return frames, int(t)
@@ -43,7 +40,8 @@ def process_skeleton(path,
 
 def motion_vector(frames):
     # dimensions: num_frames num_joints num_features (x, y, z)
-    mgd = torch.sqrt(torch.sum(torch.square(frames), dim=2))  # Magnitude
+    # Magnitude, 1e-6 for not dividing by zero
+    mgd = torch.sqrt(torch.sum(torch.square(frames), dim=2)) + 1e-6
     mv = torch.zeros(frames.shape)
     mv[1:, :, :] = frames[1:, :, :] - frames[0: -1, :, :]
     mv = torch.div(mv.view(-1, 3), mgd.view(-1, 1)).view(frames.shape)
