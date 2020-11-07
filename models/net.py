@@ -61,4 +61,4 @@ class DualGraphTransformer(nn.Module, ABC):
                 t = (s + rearrange(t, 'n b c -> b n c')) * 0.5
         t = rearrange(self.bottle_neck(t), 'b n c -> b (n c)')
         t = self.final_layer(t)
-        return t  # dimension (b, n, oc)
+        return fn.sigmoid(t)  # dimension (b, n, oc)
