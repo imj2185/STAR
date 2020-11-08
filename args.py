@@ -41,6 +41,7 @@ def make_args():
     parser.add_argument('--epoch_save', dest='epoch_save', default=500, type=int)  # save every
     parser.add_argument('--save_root', dest='save_root', default='saved_model', type=str)
     parser.add_argument('--save_name', dest='save_name', default='check_point', type=str)
+    parser.add_argument('--encoder_channels', dest='encoder_channels', default='3,16,16', type=str)
 
     parser.set_defaults(gpu=True, dataset='NTU', load_model=False)
     args = parser.parse_args()

@@ -61,8 +61,8 @@ class GCNTrainer(object):
                 acc = correct_points.float()/results.size()[0]
                 self.writer.add_scalar('train/train_overall_acc', acc, i_acc+i+1)
 
-                #loss.backward()
-                #self.optimizer.step()
+                loss.backward()
+                self.optimizer.step()
 
                 log_str = 'epoch %d, step %d: train_loss %.3f; train_acc %.3f' % (epoch+1, i+1, loss, acc)
                 #if (i+1)%1==0:
