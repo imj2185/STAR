@@ -34,15 +34,29 @@ def process_skeleton(path,
                 for j in range(num_persons):
                     frames.append(lines[i + 3 + j * 27: i + 1 + (j + 1) * 27])
                 i += (1 + num_persons * 27)
+        frames = process_frames(frames, num_persons, num_joints, num_features, use_motion_vector)
+
     elif 'kinetics' in dataset_name:
         # reference
         # https://github.com/yysijie/st-gcn/blob/master/feeder/feeder_kinetics.py
         import json
         with open(path, 'r') as f:
             video = json.load(f)
-
-    frames = process_frames(frames, num_persons, num_joints, num_features, use_motion_vector)
-
+            num_frames = len(video['data'])
+            if num_frames == 0:
+                return
+            num_persons = max([len(video['data'][i]['skeleton']) for i in range(num_frames)])
+            frames = torch.zeros(num_frames * num_persons, num_joints, num_features)
+            for i, fm in video['data']:
+                fid = fm['frame_index']
+                for m, s in enumerate(fm['skeleton']):  # m is person id, s is skeleton
+                    if len(s) == 0:
+                        continue
+                    ft = torch.tensor([s['pose'][0::2],
+                                       s['pose'][1::2],
+                                       s['score']])
+                    frames[i + m * num_frames] = ft.transpose(1, 0)
+            t = video['label_index']
     return frames, int(t)
 
 
@@ -57,6 +71,10 @@ def motion_vector(frames):
     mv = torch.cat([torch.acos(mv[:, :, [2, 0, 1]]),
                     torch.unsqueeze(mgd, dim=2)], dim=-1)
     return mv
+
+
+def motion_vector_v2(frames, num_persons):
+    pass
 
 
 def process_frames(frames, num_persons, num_joints, num_features, use_motion_vector=False):
