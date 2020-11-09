@@ -34,7 +34,7 @@ def batched_spmm(nzt, adj, x, m=None, n=None):
     if isinstance(adj, Tensor):
         m = maybe_num_nodes(adj[0], m)
         n = max(num_nodes, maybe_num_nodes(adj[1], n))
-        offset = torch.tensor([[m], [n]]).to(torch.device('cuda:0'))
+        offset = torch.tensor([[m], [n]]).to(x_.device)
         adj_ = torch.cat([adj + offset * i for i in range(heads)], dim=1)
     else:  # adj is list of adjacency matrices
         assert heads == len(

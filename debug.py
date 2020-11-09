@@ -26,7 +26,7 @@ b = next(iter(loader))
 lt = DualGraphTransformer(in_channels=7,
                           hidden_channels=16,
                           out_channels=16,
+                          sequential=False,
                           num_layers=3)
-
 t = lt(b.x, ds.skeleton_)
 print(t.shape)

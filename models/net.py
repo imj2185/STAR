@@ -30,15 +30,16 @@ class DualGraphTransformer(nn.Module, ABC):
                     heads=num_heads,
                     out_channels=channels[i + 1]) for i in range(num_layers)
         ])
-        channels_ = channels[1:] + [out_channels] if sequential else channels
+        channels_ = channels[1:] + [out_channels]
         self.temporal_layers = nn.ModuleList([
             # necessary parameters are: dim
             SelfAttention(dim=channels_[i],  # TODO ??? potential dimension problem
                           heads=num_heads,
                           causal=True) for i in range(num_layers)
         ])
-        self.bottle_neck = nn.Linear(in_features=out_channels,
-                                     out_features=out_channels)
+        if not self.sequential:
+            self.temporal_in = nn.Linear(in_features=in_channels, out_features=hidden_channels)
+        self.bottle_neck = nn.Linear(in_features=out_channels, out_features=out_channels)
         self.final_layer = nn.Linear(in_features=out_channels * num_joints, out_features=classes)
 
     def forward(self, t, adj):  # adj=dataset.skeleton_
@@ -50,7 +51,8 @@ class DualGraphTransformer(nn.Module, ABC):
                               'n b c -> b n c')
         else:  # parallel architecture
             s = t
-            t_ = rearrange(t, 'b n c -> n b c')
+            t_ = self.temporal_in(rearrange(t, 'b n c -> n b c'))
+
             for i in range(self.num_layers):
                 s = fn.relu(self.spatial_layers[i](s, adj))
                 t_ = fn.relu(self.temporal_layers[i](t_))
@@ -61,5 +63,5 @@ class DualGraphTransformer(nn.Module, ABC):
                 t = (s + rearrange(t, 'n b c -> b n c')) * 0.5
         t = rearrange(self.bottle_neck(t), 'b n c -> b (n c)')
         t = self.final_layer(t)
-        #return fn.sigmoid(t)  # dimension (b, n, oc)
+        # return fn.sigmoid(t)  # dimension (b, n, oc)
         return t
