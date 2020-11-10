@@ -17,6 +17,7 @@ class DualGraphTransformer(nn.Module, ABC):
                  num_heads=8,
                  num_joints=25,
                  classes=60,
+                 drop_rate=0.5,
                  sequential=True,
                  trainable_factor=True):
         super(DualGraphTransformer, self).__init__()
@@ -28,6 +29,7 @@ class DualGraphTransformer(nn.Module, ABC):
         self.spatial_layers = nn.ModuleList([
             HGAConv(in_channels=channels[i],
                     heads=num_heads,
+                    dropout=drop_rate,
                     out_channels=channels[i + 1]) for i in range(num_layers)
         ])
         channels_ = channels[1:] + [out_channels]
@@ -35,6 +37,7 @@ class DualGraphTransformer(nn.Module, ABC):
             # necessary parameters are: dim
             SelfAttention(dim=channels_[i],  # TODO ??? potential dimension problem
                           heads=num_heads,
+                          dropout=drop_rate,
                           causal=True) for i in range(num_layers)
         ])
         if not self.sequential:
@@ -47,7 +50,8 @@ class DualGraphTransformer(nn.Module, ABC):
             for i in range(self.num_layers):
                 t = rearrange(fn.relu(self.spatial_layers[i](t, adj)),
                               'b n c -> n b c')
-                t = rearrange(fn.relu(self.temporal_layers[i](t)),
+                t = rearrange(fn.relu(fn.layer_norm(self.temporal_layers[i](t),
+                                                    t.shape[1:]) + t),
                               'n b c -> b n c')
         else:  # parallel architecture
             s = t
@@ -55,7 +59,8 @@ class DualGraphTransformer(nn.Module, ABC):
 
             for i in range(self.num_layers):
                 s = fn.relu(self.spatial_layers[i](s, adj))
-                t = fn.relu(self.temporal_layers[i](t))
+                t = fn.relu(fn.layer_norm(self.temporal_layers[i](t),
+                                          t.shape[1:]) + t)
             if self.trainable_factor:
                 factor = fn.sigmoid(self.spatial_factor)
                 t = factor * s + (1. - factor) * rearrange(t, 'n b c -> b n c')

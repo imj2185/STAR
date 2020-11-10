@@ -21,7 +21,7 @@ def make_args():
                         help='whether pre-transform feature')
 
     # model
-    parser.add_argument('--drop_rate', dest='drop_rate', type=float, default=0.2,
+    parser.add_argument('--drop_rate', dest='drop_rate', type=float, default=0.3,
                         help='whether dropout rate, default 0.5')
     parser.add_argument('--load_model', dest='load_model', default=False, type=bool,
                         help='whether load_model')
