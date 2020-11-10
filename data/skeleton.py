@@ -73,7 +73,8 @@ def motion_vector(frames):
     return mv
 
 
-def motion_vector_v2(frames, num_persons):
+def motion_vector_v2(frames, batch_index):
+
     pass
 
 

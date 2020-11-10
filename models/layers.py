@@ -278,7 +278,6 @@ class HGAConv(MessagePassing):
                                              self.in_channels,
                                              self.out_channels, self.heads)
 
-#
 # class DotProductAttention(nn.Module, ABC):
 #     def __init__(self, dropout, **kwargs):
 #         super(DotProductAttention, self).__init__(**kwargs)

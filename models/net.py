@@ -51,11 +51,11 @@ class DualGraphTransformer(nn.Module, ABC):
                               'n b c -> b n c')
         else:  # parallel architecture
             s = t
-            t_ = self.temporal_in(rearrange(t, 'b n c -> n b c'))
+            t = self.temporal_in(rearrange(t, 'b n c -> n b c'))
 
             for i in range(self.num_layers):
                 s = fn.relu(self.spatial_layers[i](s, adj))
-                t_ = fn.relu(self.temporal_layers[i](t_))
+                t = fn.relu(self.temporal_layers[i](t))
             if self.trainable_factor:
                 factor = fn.sigmoid(self.spatial_factor)
                 t = factor * s + (1. - factor) * rearrange(t, 'n b c -> b n c')

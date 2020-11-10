@@ -67,7 +67,7 @@ class SkeletonDataset(Dataset, ABC):
             if 'ntu' in self.name:
                 fl = f[-29:-9]
                 if fl in self.missing_skeleton_file_names:
-                    print('Skip file: ', fl)
+                    # print('Skip file: ', fl)
                     continue
 
                 # action_class = int(fl[fl.find('A') + 1: fl.find('A') + 4])
@@ -127,7 +127,7 @@ def test():
     ds = SkeletonDataset(root='../dataset',
                          name='ntu')
     loader = DataLoader(ds, batch_size=4)
-    for b in loader:
+    for b in loader[0: 4]:
         print(b.batch)
 
 
