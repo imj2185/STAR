@@ -1,22 +1,18 @@
 import copy
-from abc import ABC
-import math
 from inspect import Parameter as Pr
 from typing import Union, Tuple, Any
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as fn
+from einops import rearrange, reduce
 from torch import Tensor
 from torch.nn import Parameter, Linear
-from torch_sparse import spmm
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.nn.inits import glorot, zeros
 from torch_geometric.utils import remove_self_loops, add_self_loops, softmax
-from einops import rearrange, reduce
 
-from utility.linalg import batched_spmm, batched_transpose,\
-    transpose_, masked_softmax, get_factorized_dim, to_band_sparse
+from utility.linalg import batched_spmm, batched_transpose
 
 
 def clones(module, k):
@@ -96,13 +92,13 @@ class HGAConv(MessagePassing):
             a_r: Tensor           [num_nodes, heads]
         """
         if isinstance(adj, Tensor):
-            if len(a_l.shape) == 2:
-                return a_l[adj[1], :] + a_r[adj[0], :]  # [num_edges, heads]
-            else:
-                a_l_ = rearrange(a_l, 'b n c -> n (b c)')
-                a_r_ = rearrange(a_r, 'b n c -> n (b c)')
+            if len(a_l.shape) == 2: # [num_edges, heads]
+                return a_l[adj[1], :] + a_r[adj[0], :]
+            else:  # [batch, num_edges, heads]
+                a_l_ = rearrange(a_l, 'b n h -> n (b h)')
+                a_r_ = rearrange(a_r, 'b n h -> n (b h)')
                 out = a_l_[adj[1], :] + a_r_[adj[0], :]
-                return rearrange(out, 'n (b c) -> b n c', c=a_l.shape[-1])
+                return rearrange(out, 'n (b h) -> b n h', h=a_l.shape[-1])
         a = []
         for i in range(len(adj)):
             a[i] = a_l[adj[i][1], i] + a_r[adj[i][0], i]
