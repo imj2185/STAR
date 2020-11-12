@@ -10,6 +10,8 @@ from optimizer import get_std_opt
 from tensorboardX import SummaryWriter
 from tqdm import tqdm, trange
 import torch.nn as nn
+import numpy as np
+
 class GCNTrainer(object):
     def __init__(self, model, train_loader, train_labels, val_loader, val_labels, adj, optimizer, loss_fn, log_dir):
 
@@ -110,7 +112,7 @@ class GCNTrainer(object):
 
             batch = batch.to(self.device)
             output = self.model(batch.x, adj=self.adj)
-            target = train_labels.gather(0, batch.batch)
+            target = train_labels.gather(0, batch.batch).to(self.device).long()
 
             pred = torch.max(output, 1)[1]
             all_loss += self.loss_fn(output, target).cpu().data.numpy()
@@ -143,8 +145,8 @@ if __name__ == '__main__':
     args = make_args()
 
     log_dir = '/home/project/gcn/APBGCN/log'
-    train_dataset = SkeletonDataset(root="/home/project/gcn/APBGCN", name='cv_train', use_motion_vector=False, benchmark='cv', sample = 'train')
-    valid_dataset = SkeletonDataset(root="/home/project/gcn/APBGCN", name='cv_val', use_motion_vector=False, benchmark='cv', sample = 'val')
+    train_dataset = SkeletonDataset(root="/home/project/gcn/APBGCN", name='ntu_cv_train', use_motion_vector=False, benchmark='cv', sample = 'train')
+    valid_dataset = SkeletonDataset(root="/home/project/gcn/APBGCN", name='ntu_cv_val', use_motion_vector=False, benchmark='cv', sample = 'val')
     
     train_loader = DataLoader(train_dataset.data, batch_size = args.batch_size)
     valid_loader = DataLoader(valid_dataset.data, batch_size = args.batch_size)
