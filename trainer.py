@@ -67,22 +67,26 @@ class GCNTrainer(object):
                 self.optimizer.step()
 
                 log_str = 'epoch %d, step %d: train_loss %.3f; train_acc %.3f' % (epoch+1, i+1, loss, acc)
-                #if (i+1)%1==0:
-                #    print(log_str)
+                if (i+1)%1==0:
+                    print(log_str)
             i_acc += i
 
             #evaluation
             if (epoch+1)%1==0:
                 with torch.no_grad():
-                    loss, val_overall_acc, val_mean_class_acc = self.update_validation_accuracy()
-                self.writer.add_scalar('val/val_mean_class_acc', val_mean_class_acc, epoch+1)
+                    #loss, val_overall_acc, val_mean_class_acc = self.update_validation_accuracy()
+                    loss, val_overall_acc = self.update_validation_accuracy()
+                #self.writer.add_scalar('val/val_mean_class_acc', val_mean_class_acc, epoch+1)
                 self.writer.add_scalar('val/val_overall_acc', val_overall_acc, epoch+1)
                 self.writer.add_scalar('val/val_loss', loss, epoch+1)
 
             # save best model
             if val_overall_acc > best_acc:
                 best_acc = val_overall_acc
-                self.model.save(self.log_dir, epoch)
+                #self.model.save(self.log_dir, epoch)
+                torch.save(self.model.state_dict(), 
+                self.log_dir, 
+                    "model-{}.pt".format(str(epoch)))
  
             # adjust learning rate manually
             if epoch > 0 and (epoch+1) % 10 == 0:
@@ -112,7 +116,7 @@ class GCNTrainer(object):
 
             batch = batch.to(self.device)
             output = self.model(batch.x, adj=self.adj)
-            target = train_labels.gather(0, batch.batch).to(self.device).long()
+            target = self.train_labels.gather(0, batch.batch).to(self.device).long()
 
             pred = torch.max(output, 1)[1]
             all_loss += self.loss_fn(output, target).cpu().data.numpy()
@@ -128,25 +132,26 @@ class GCNTrainer(object):
             all_points += results.size()[0]
 
         print ('Total # of test models: ', all_points)
-        val_mean_class_acc = np.mean((samples_class - wrong_class) / samples_class)
+        #val_mean_class_acc = np.mean((samples_class - wrong_class) / samples_class)
         acc = all_correct_points.float() / all_points
         val_overall_acc = acc.cpu().data.numpy()
         loss = all_loss / len(self.val_loader)
 
-        print ('val mean class acc. : ', val_mean_class_acc)
+        #print ('val mean class acc. : ', val_mean_class_acc)
         print ('val overall acc. : ', val_overall_acc)
         print ('val loss : ', loss)
 
         self.model.train()
 
-        return loss, val_overall_acc, val_mean_class_acc
+        #return loss, val_overall_acc, val_mean_class_acc
+        return loss, val_overall_acc
 
 if __name__ == '__main__':
     args = make_args()
 
     log_dir = '/home/project/gcn/APBGCN/log'
-    train_dataset = SkeletonDataset(root="/home/project/gcn/APBGCN", name='ntu_cv_train', use_motion_vector=False, benchmark='cv', sample = 'train')
-    valid_dataset = SkeletonDataset(root="/home/project/gcn/APBGCN", name='ntu_cv_val', use_motion_vector=False, benchmark='cv', sample = 'val')
+    train_dataset = SkeletonDataset(root="/home/project/gcn/APBGCN", name='ntu_cs_train_test', use_motion_vector=False, benchmark='cs', sample = 'train')
+    valid_dataset = SkeletonDataset(root="/home/project/gcn/APBGCN", name='ntu_cs_val_test', use_motion_vector=False, benchmark='cs', sample = 'val')
     
     train_loader = DataLoader(train_dataset.data, batch_size = args.batch_size)
     valid_loader = DataLoader(valid_dataset.data, batch_size = args.batch_size)
