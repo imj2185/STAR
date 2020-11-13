@@ -72,21 +72,20 @@ class GCNTrainer(object):
             i_acc += i
 
             #evaluation
-            if (epoch+1)%1==0:
-                with torch.no_grad():
-                    #loss, val_overall_acc, val_mean_class_acc = self.update_validation_accuracy()
-                    loss, val_overall_acc = self.update_validation_accuracy()
-                #self.writer.add_scalar('val/val_mean_class_acc', val_mean_class_acc, epoch+1)
-                self.writer.add_scalar('val/val_overall_acc', val_overall_acc, epoch+1)
-                self.writer.add_scalar('val/val_loss', loss, epoch+1)
+            with torch.no_grad():
+                #loss, val_overall_acc, val_mean_class_acc = self.update_validation_accuracy()
+                loss, val_overall_acc = self.update_validation_accuracy()
+            #self.writer.add_scalar('val/val_mean_class_acc', val_mean_class_acc, epoch+1)
+            self.writer.add_scalar('val/val_overall_acc', val_overall_acc, epoch+1)
+            self.writer.add_scalar('val/val_loss', loss, epoch+1)
 
             # save best model
             if val_overall_acc > best_acc:
                 best_acc = val_overall_acc
                 #self.model.save(self.log_dir, epoch)
                 torch.save(self.model.state_dict(), 
-                self.log_dir, 
-                    "model-{}.pt".format(str(epoch)))
+                    self.log_dir, 
+                    "best_model.pt")
  
             # adjust learning rate manually
             if epoch > 0 and (epoch+1) % 10 == 0:
@@ -150,8 +149,8 @@ if __name__ == '__main__':
     args = make_args()
 
     log_dir = '/home/project/gcn/APBGCN/log'
-    train_dataset = SkeletonDataset(root="/home/project/gcn/APBGCN", name='ntu_cs_train_test', use_motion_vector=False, benchmark='cs', sample = 'train')
-    valid_dataset = SkeletonDataset(root="/home/project/gcn/APBGCN", name='ntu_cs_val_test', use_motion_vector=False, benchmark='cs', sample = 'val')
+    train_dataset = SkeletonDataset(root="/home/project/gcn/APBGCN", name='ntu_cv_train', use_motion_vector=False, benchmark='cv', sample = 'train')
+    valid_dataset = SkeletonDataset(root="/home/project/gcn/APBGCN", name='ntu_cv_val', use_motion_vector=False, benchmark='cv', sample = 'val')
     
     train_loader = DataLoader(train_dataset.data, batch_size = args.batch_size)
     valid_loader = DataLoader(valid_dataset.data, batch_size = args.batch_size)
