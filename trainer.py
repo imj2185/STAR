@@ -64,7 +64,7 @@ class GCNTrainer(object):
                 acc = correct_points.float() / results.size()[0]
                 self.writer.add_scalar('train/train_overall_acc', acc, i_acc + i + 1)
 
-                loss.backward()
+                loss.backward(retain_graph=True)
                 self.optimizer.step()
 
                 log_str = 'epoch %d, step %d: train_loss %.3f; train_acc %.3f' % (epoch + 1, i + 1, loss, acc)
@@ -159,7 +159,7 @@ if __name__ == '__main__':
     train_loader = DataLoader(train_dataset.data, batch_size=args.batch_size)
     valid_loader = DataLoader(valid_dataset.data, batch_size=args.batch_size)
 
-    model = DualGraphTransformer(in_channels=3, hidden_channels=16, out_channels=16, num_layers=4, num_heads=8)
+    model = DualGraphTransformer(in_channels=3, hidden_channels=16, out_channels=16, num_layers=4, num_heads=8, sequential=True)
     # optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=(0.9, 0.98))
 
     noam_opt = get_std_opt(model, args)

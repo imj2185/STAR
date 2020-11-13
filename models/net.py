@@ -62,7 +62,7 @@ class DualGraphTransformer(nn.Module, ABC):
                 t = fn.relu(fn.layer_norm(self.temporal_layers[i](t),
                                           t.shape[1:]) + t)
             if self.trainable_factor:
-                factor = fn.sigmoid(self.spatial_factor)
+                factor = fn.sigmoid(self.spatial_factor).cuda()
                 t = factor * s + (1. - factor) * rearrange(t, 'n b c -> b n c')
             else:
                 t = (s + rearrange(t, 'n b c -> b n c')) * 0.5
