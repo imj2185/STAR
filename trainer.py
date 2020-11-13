@@ -5,6 +5,7 @@ import torch.nn.functional as fn
 from tensorboardX import SummaryWriter
 from torch_geometric.data import DataLoader
 from tqdm import tqdm
+import os
 
 from args import make_args
 from data.dataset import SkeletonDataset
@@ -84,8 +85,8 @@ class GCNTrainer(object):
                 best_acc = val_overall_acc
                 #self.model.save(self.log_dir, epoch)
                 torch.save(self.model.state_dict(), 
-                    self.log_dir, 
-                    "best_model.pt")
+                    os.path.join(self.log_dir, 
+                    "best_model.pth"))
  
             # adjust learning rate manually
             if epoch > 0 and (epoch + 1) % 10 == 0:
