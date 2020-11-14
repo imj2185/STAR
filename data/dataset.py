@@ -25,7 +25,7 @@ class SkeletonDataset(Dataset, ABC):
         self.training_cameras = {2, 3}
         self.sample = sample
 
-        self.num_joints = 25 if 'nut' in self.name else 18
+        self.num_joints = 25 if 'ntu' in self.name else 18
         self.skeleton_ = skeleton_parts(num_joints=self.num_joints,
                                         dataset=self.name)
         self.use_motion_vector = use_motion_vector
