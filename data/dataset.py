@@ -17,7 +17,7 @@ class SkeletonDataset(Dataset, ABC):
                  use_motion_vector=True,
                  transform=None,
                  pre_transform=None,
-                 benchmark='cv',
+                 benchmark=None,
                  sample='train'):
         self.name = name
         self.benchmark = benchmark
@@ -25,13 +25,14 @@ class SkeletonDataset(Dataset, ABC):
         self.training_cameras = {2, 3}
         self.sample = sample
 
-        self.num_joints = 25
-        self.skeleton_ = skeleton_parts()
+        self.num_joints = 25 if 'nut' in self.name else 18
+        self.skeleton_ = skeleton_parts(num_joints=self.num_joints,
+                                        dataset=self.name)
         self.use_motion_vector = use_motion_vector
         self.cached_missing_files = None
-
-        if not osp.exists(osp.join(root, "raw")):
-            os.mkdir(osp.join(root, "raw"))
+        # raw_path = osp.join(os.getcwd(), root, "raw")
+        # if not osp.exists(raw_path):
+        #     os.mkdir(raw_path)
         super(SkeletonDataset, self).__init__(root, transform, pre_transform)
         path = osp.join(self.processed_dir, '{}.pt'.format(self.name))
         self.data, self.labels = torch.load(path)
@@ -60,6 +61,8 @@ class SkeletonDataset(Dataset, ABC):
         pass
 
     def process(self):
+        # if osp.exists(osp.join(self.root, 'processed')):
+        #     os.rmdir(osp.join(self.root, 'processed'))
         progress_bar = tqdm(self.raw_file_names)
         skeletons, labels = [], []
         i = 0
@@ -99,7 +102,10 @@ class SkeletonDataset(Dataset, ABC):
             progress_bar.set_description("processing %s" % f)
             data, label = process_skeleton(f,
                                            num_joints=self.num_joints,
+                                           dataset_name=self.name,
                                            use_motion_vector=self.use_motion_vector)
+            if data is None:
+                continue
 
             if self.pre_filter is not None and not self.pre_filter(data):
                 continue
@@ -123,9 +129,16 @@ class SkeletonDataset(Dataset, ABC):
 
 
 def test():
+    from argparse import ArgumentParser
     from torch_geometric.data import DataLoader
-    ds = SkeletonDataset(root='../dataset',
-                         name='ntu')
+    parser = ArgumentParser()
+    parser.add_argument('--root', dest='root', default='../dataset/ntu_60',
+                        type=str, help='Dataset')
+    parser.add_argument('--dataset', dest='dataset', default='ntu_60',
+                        type=str, help='Dataset')
+    args = parser.parse_args()
+    ds = SkeletonDataset(root=args.root,
+                         name=args.dataset)
     loader = DataLoader(ds, batch_size=4)
     for b in loader[0: 4]:
         print(b.batch)
