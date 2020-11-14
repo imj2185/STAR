@@ -11,6 +11,7 @@ from data.skeleton2 import process_skeleton, skeleton_parts
 from functools import partial
 from multiprocessing import Pool
 
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 def num_processes():
     return os.cpu_count()
