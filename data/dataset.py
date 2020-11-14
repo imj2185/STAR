@@ -139,8 +139,8 @@ def test():
     args = parser.parse_args()
     ds = SkeletonDataset(root=args.root,
                          name=args.dataset)
-    loader = DataLoader(ds, batch_size=4)
-    for b in loader[0: 4]:
+    loader = DataLoader(ds[0: 8], batch_size=4)
+    for b in loader:
         print(b.batch)
 
 
