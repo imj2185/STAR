@@ -2,7 +2,6 @@ from __future__ import with_statement
 
 import torch
 import os.path as osp
-import ujson
 
 from utility.linalg import power_adj
 
@@ -106,7 +105,7 @@ def process_skeleton(path,
         # https://github.com/yysijie/st-gcn/blob/master/feeder/feeder_kinetics.py
         import json
         with open(path, 'r') as f:
-            video = ujson.load(f)
+            video = json.load(f)
             num_frames = len(video['data'])
             if num_frames == 0:
                 return None, None
