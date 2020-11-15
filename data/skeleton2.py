@@ -80,7 +80,7 @@ def process_skeleton(path,
                      benchmark='cv',
                      sample='train',
                      use_motion_vector=True):
-    t = osp.split(path)[-1][-12:-9] if ('ntu' in dataset_name) else 0
+    t = osp.split(path)[-1][-12:-9] if ('ntu' in dataset_name) else 0  # 'ntu' label
     frames = []
     num_persons = 0
     if 'ntu' in dataset_name:
@@ -104,26 +104,29 @@ def process_skeleton(path,
         # reference
         # https://github.com/yysijie/st-gcn/blob/master/feeder/feeder_kinetics.py
         import json
-        with open(path, 'r') as f:
-            video = json.load(f)
-            num_frames = len(video['data'])
-            if num_frames == 0:
-                return None, None
-            num_persons = max([len(video['data'][i]['skeleton']) for i in range(num_frames)])
-            frames = torch.zeros(num_frames * num_persons, num_joints, num_features)
-            i = 0
-            for data in video['data']:
-                fid = data['frame_index']
-                for m, s in enumerate(data['skeleton']):  # m is person id, s is skeleton
-                    if len(s) == 0:
-                        continue
-                    ft = torch.tensor([s['pose'][0::2],  # x
-                                       s['pose'][1::2],  # y
-                                       s['score']])
-                    frames[i + m * num_frames] = ft.transpose(1, 0)
-                i += 1
-            t = video['label_index']
-    return frames, int(t)
+        try:
+            with open(path, 'r') as f:
+                video = json.load(f)
+                num_frames = len(video['data'])
+                if num_frames == 0:
+                    return None, None
+                num_persons = max([len(video['data'][i]['skeleton']) for i in range(num_frames)])
+                frames = torch.zeros(num_frames * num_persons, num_joints, num_features)
+                i = 0
+                for data in video['data']:
+                    for m, s in enumerate(data['skeleton']):  # m is person id, s is skeleton
+                        if len(s) == 0:
+                            continue
+                        ft = torch.tensor([s['pose'][0::2],  # x
+                                           s['pose'][1::2],  # y
+                                           s['score']])
+                        frames[i + m * num_frames] = ft.transpose(1, 0)
+                    i += 1
+                t = video['label_index']
+                uid = path.split('/')[-1][:-5]
+        except EnvironmentError as e:
+            print(path, str(e))
+    return frames, int(t), uid
 
 
 def motion_vector(frames):

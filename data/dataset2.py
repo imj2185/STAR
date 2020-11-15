@@ -1,20 +1,20 @@
-from abc import ABC
-
 import os
 import os.path as osp
-from time import sleep
+from abc import ABC
+from functools import partial
+from multiprocessing import Pool
 
 import torch
 from torch_geometric.data import Dataset, Data
 from tqdm import tqdm
+
 from data.skeleton2 import process_skeleton, skeleton_parts
-from functools import partial
-from multiprocessing import Pool
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 
+
 def num_processes():
-    return os.cpu_count()
+    return os.cpu_count() - 4
 
 
 class SkeletonDataset(Dataset, ABC):
@@ -39,16 +39,24 @@ class SkeletonDataset(Dataset, ABC):
         #     os.mkdir(raw_path)
         super(SkeletonDataset, self).__init__(root, transform, pre_transform)
         path = osp.join(self.processed_dir, '{}.pt'.format(self.name))
-        self.data, self.labels = torch.load(path)
+        if 'ntu' in self.name:
+            self.data, self.labels = torch.load(path)
+        # else:
+        #     self.labels = torch.load(osp.join(self.root, 'kinetics_labels.pt'))
 
     @property
     def raw_file_names(self):
+        if 'kinetics' in self.name:
+            return [f for f in os.listdir(self.raw_dir)]
         fp = lambda x: osp.join(self.root, 'raw', x)
         return [fp(f) for f in os.listdir(self.raw_dir)]  # if osp.isfile(fp(f))]
 
     @property
     def processed_file_names(self):
-        return '{}.pt'.format(self.name)
+        if 'kinetics' in self.name:
+            return [f for f in os.listdir(self.processed_dir)]
+        else:
+            return '{}.pt'.format(self.name)
 
     def download(self):
         # Download to `self.raw_dir`.
@@ -64,11 +72,10 @@ class SkeletonDataset(Dataset, ABC):
                                benchmark=self.benchmark,
                                sample=self.sample)
         progress_bar = tqdm(pool.imap(func=partial_func,
-                                      iterable=self.raw_file_names),
+                                      iterable=self.raw_paths),
                             total=len(self.raw_file_names))
         skeletons, labels = [], []
-        i = 0
-        for (data, label) in progress_bar:
+        for (data, label, uid) in progress_bar:
             if data is None:
                 continue
 
@@ -78,19 +85,31 @@ class SkeletonDataset(Dataset, ABC):
             if self.pre_transform is not None:
                 data = self.pre_transform(data)
 
-            data = Data(x=data)  # , edge_index=self.skeleton_)
-            skeletons.append(data)
-            labels.append(label)
-            i += 1
+            data = Data(x=data, y=label)  # , edge_index=self.skeleton_)
+            if 'kinetics' in self.name:
+                torch.save(data, osp.join(self.processed_dir,
+                                          '{}.pt'.format(uid)))
+            else:
+                skeletons.append(data)
+                labels.append(label)
 
-        torch.save([skeletons, torch.FloatTensor(labels)],
-                   osp.join(self.processed_dir,
-                            self.processed_file_names))
+        if 'kinetics' in self.name:
+            torch.save(torch.FloatTensor(labels),
+                       osp.join(self.root, 'kinetics_labels.pt'))
+        else:
+            torch.save([skeletons, torch.FloatTensor(labels)],
+                       osp.join(self.processed_dir,
+                                self.processed_file_names))
 
     def len(self):
-        return len(self.data)
+        if 'kinetics' in self.name:
+            return len(self.processed_file_names)
+        else:
+            return len(self.data)
 
     def get(self, idx):
+        if 'kinetics' in self.name:
+            return torch.load(osp.join(self.processed_dir, 'kinetics_{}.pt'.format(idx)))
         return self.data[idx]
 
 
