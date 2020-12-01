@@ -109,9 +109,9 @@ class SkeletonDataset(Dataset, ABC):
         if 'kinetics' in self.name:
             if isinstance(idx, int):
                 return torch.load(osp.join(self.processed_dir,
-                                           '{}.pt'.format(self.processed_file_names[idx])))
+                                           self.processed_file_names[idx]))
             return [torch.load(osp.join(self.processed_dir,
-                                        '{}.pt'.format(self.processed_file_names[i]))) for i in idx]
+                                        self.processed_file_names[i])) for i in idx]
         return self.data[idx]
 
 
