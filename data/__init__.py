@@ -3,7 +3,7 @@
 # from .utils import PadSequence, RandomTemporalCrop, RandomTemporalSampling,
 # RandomTemporalShift, RandomGaussianNoise, RandomAffineTransformAcrossTime
 from .signals import displacementVectors, orientedDisplacements, relativeAngularCoordinates, relativeCoordinates
-from .skeleton import process_skeleton, skeleton_parts
+from .skeleton2 import process_skeleton, skeleton_parts
 # __all__ = ['NTULoader', 'HDM05Loader', 'RandomAffineTransformAcrossTime',
 # __all__ = ['RandomAffineTransformAcrossTime',
 #            'RandomGaussianNoise', 'RandomTemporalCrop', 'RandomTemporalSampling',

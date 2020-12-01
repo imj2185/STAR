@@ -8,6 +8,7 @@ import torch
 from torch_geometric.data import Dataset, Data
 from tqdm import tqdm
 
+# from data.skeleton2 import process_skeleton, skeleton_parts
 from data.skeleton2 import process_skeleton, skeleton_parts
 
 torch.multiprocessing.set_sharing_strategy('file_system')
@@ -33,13 +34,14 @@ class SkeletonDataset(Dataset, ABC):
         self.num_joints = 25 if 'ntu' in self.name else 18
         self.skeleton_ = skeleton_parts(num_joints=self.num_joints,
                                         dataset=self.name)
+        print('processed the adjacency matrices of skeleton')
         self.use_motion_vector = use_motion_vector
         # raw_path = osp.join(os.getcwd(), root, "raw")
         # if not osp.exists(raw_path):
         #     os.mkdir(raw_path)
         super(SkeletonDataset, self).__init__(root, transform, pre_transform)
-        path = osp.join(self.processed_dir, '{}.pt'.format(self.name))
         if 'ntu' in self.name:
+            path = osp.join(self.processed_dir, '{}.pt'.format(self.name))
             self.data, self.labels = torch.load(path)
         # else:
         #     self.labels = torch.load(osp.join(self.root, 'kinetics_labels.pt'))
@@ -71,8 +73,7 @@ class SkeletonDataset(Dataset, ABC):
                                root=self.root,
                                benchmark=self.benchmark,
                                sample=self.sample)
-        progress_bar = tqdm(pool.imap(func=partial_func,
-                                      iterable=self.raw_paths),
+        progress_bar = tqdm(pool.imap(func=partial_func, iterable=self.raw_file_names),
                             total=len(self.raw_file_names))
         skeletons, labels = [], []
         for (data, label, uid) in progress_bar:
@@ -93,10 +94,7 @@ class SkeletonDataset(Dataset, ABC):
                 skeletons.append(data)
                 labels.append(label)
 
-        if 'kinetics' in self.name:
-            torch.save(torch.FloatTensor(labels),
-                       osp.join(self.root, 'kinetics_labels.pt'))
-        else:
+        if 'ntu' in self.name:
             torch.save([skeletons, torch.FloatTensor(labels)],
                        osp.join(self.processed_dir,
                                 self.processed_file_names))
@@ -109,7 +107,11 @@ class SkeletonDataset(Dataset, ABC):
 
     def get(self, idx):
         if 'kinetics' in self.name:
-            return torch.load(osp.join(self.processed_dir, 'kinetics_{}.pt'.format(idx)))
+            if isinstance(idx, int):
+                return torch.load(osp.join(self.processed_dir,
+                                           '{}.pt'.format(self.processed_file_names[idx])))
+            return [torch.load(osp.join(self.processed_dir,
+                                        '{}.pt'.format(self.processed_file_names[i]))) for i in idx]
         return self.data[idx]
 
 

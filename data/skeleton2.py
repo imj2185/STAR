@@ -83,6 +83,7 @@ def process_skeleton(path,
     t = osp.split(path)[-1][-12:-9] if ('ntu' in dataset_name) else 0  # 'ntu' label
     frames = []
     num_persons = 0
+    path = osp.join(root, 'raw', path)
     if 'ntu' in dataset_name:
         if _file_available(path, root, benchmark, sample):
             return None, None
@@ -109,7 +110,7 @@ def process_skeleton(path,
                 video = json.load(f)
                 num_frames = len(video['data'])
                 if num_frames == 0:
-                    return None, None
+                    return None, None, None
                 num_persons = max([len(video['data'][i]['skeleton']) for i in range(num_frames)])
                 frames = torch.zeros(num_frames * num_persons, num_joints, num_features)
                 i = 0
@@ -123,7 +124,7 @@ def process_skeleton(path,
                         frames[i + m * num_frames] = ft.transpose(1, 0)
                     i += 1
                 t = video['label_index']
-                uid = path.split('/')[-1][:-5]
+                uid = osp.split(path)[-1][:-5]
         except EnvironmentError as e:
             print(path, str(e))
     return frames, int(t), uid
