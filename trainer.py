@@ -50,7 +50,7 @@ class GCNTrainer(object):
                 batch = batch.to(self.device)
                 self.optimizer.zero_grad()
                 output = self.model(batch.x, adj=self.adj)
-                target = self.train_labels.gather(0, batch.batch)
+                target = self.train_labels[i].gather(0, batch.batch)
                 # one_hot = fn.one_hot(target.long(), num_classes = 60)
 
                 # loss = fn.cross_entropy(output, one_hot)
@@ -112,11 +112,11 @@ class GCNTrainer(object):
         all_target = []
         all_pred = []
 
-        for _, batch in enumerate(self.val_loader, 0):
+        for i, batch in enumerate(self.val_loader, 0):
 
             batch = batch.to(self.device)
             output = self.model(batch.x, adj=self.adj)
-            target = self.train_labels.gather(0, batch.batch).to(self.device).long()
+            target = self.val_labels[i].gather(0, batch.batch).to(self.device).long()
 
             pred = torch.max(output, 1)[1]
             all_loss += self.loss_fn(output, target).cpu().data.numpy()
