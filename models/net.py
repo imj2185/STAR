@@ -31,6 +31,12 @@ class DualGraphTransformer(nn.Module, ABC):
                     heads=num_heads,
                     dropout=drop_rate,
                     out_channels=channels[i + 1]) for i in range(num_layers)])
+
+        if not self.sequential:
+            self.temporal_lls = nn.ModuleList([nn.Linear(in_features=channels[i],
+                                                         out_features=channels[i + 1])
+                                               for i in range(num_layers)])
+
         channels_ = channels[1:] + [out_channels]
         self.temporal_layers = nn.ModuleList([
             # necessary parameters are: dim
@@ -38,10 +44,7 @@ class DualGraphTransformer(nn.Module, ABC):
                           heads=num_heads,
                           dropout=drop_rate,
                           causal=True) for i in range(num_layers)])
-        if not self.sequential:
-            self.temporal_lls = nn.ModuleList([nn.Linear(in_features=channels_[i],
-                                                         out_features=channels_[i + 1])
-                                               for i in range(num_layers)])
+
         self.bottle_neck = nn.Linear(in_features=out_channels, out_features=out_channels)
         self.final_layer = nn.Linear(in_features=out_channels * num_joints, out_features=classes)
 

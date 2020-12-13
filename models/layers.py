@@ -274,6 +274,14 @@ class HGAConv(MessagePassing):
                                              self.in_channels,
                                              self.out_channels, self.heads)
 
+
+class GlobalContextAttention(nn.Module):
+    def __init__(self):
+        super(GlobalContextAttention, self).__init__()
+
+    def forward(self):
+        return
+
 # class DotProductAttention(nn.Module, ABC):
 #     def __init__(self, dropout, **kwargs):
 #         super(DotProductAttention, self).__init__(**kwargs)

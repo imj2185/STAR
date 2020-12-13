@@ -7,7 +7,7 @@ from einops import rearrange
 from models.net import DualGraphTransformer
 
 
-ds = SkeletonDataset(root='dataset',
+ds = SkeletonDataset(root='dataset/ntu_60',
                      name='ntu')
 loader = DataLoader(ds, batch_size=4)
 b = next(iter(loader))
