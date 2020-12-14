@@ -24,8 +24,9 @@ class DualGraphTransformer(nn.Module, ABC):
         self.spatial_factor = nn.Parameter(torch.ones(num_layers)) * 0.5
         self.sequential = sequential
         self.num_layers = num_layers
-        self.num_joints = num_joints
-        self.num_classes = classes
+        # self.num_joints = num_joints
+        # self.num_classes = classes
+        self.dropout = drop_rate
         self.trainable_factor = trainable_factor
         channels = [in_channels] + [hidden_channels] * (num_layers - 1) + [out_channels]
         self.spatial_layers = nn.ModuleList([
@@ -63,18 +64,20 @@ class DualGraphTransformer(nn.Module, ABC):
             for i in range(self.num_layers):
                 t = rearrange(fn.relu(self.spatial_layers[i](t, adj)),
                               'b n c -> n b c')
-                t = rearrange(fn.relu(fn.layer_norm(self.temporal_layers[i](t),
-                                                    t.shape[1:]) + t),
+                t = rearrange(fn.relu(fn.layer_norm(fn.dropout(self.temporal_layers[i](t),
+                                                               self.dropout),
+                                                    t.shape[1:]) + t),  # residual and add_norm
                               'n b c -> b n c')
         else:  # parallel architecture
             for i in range(self.num_layers):
                 s = t
                 t = self.temporal_lls[i](rearrange(t, 'b n c -> n b c'))
                 s = fn.relu(self.spatial_layers[i](s, adj))
-                t = fn.relu(fn.layer_norm(self.temporal_layers[i](t),
-                                          t.shape[1:]) + t)
+                t = fn.relu(fn.layer_norm(fn.dropout(self.temporal_layers[i](t),
+                                                     self.dropout),
+                                          t.shape[1:]) + t)  # residual and add_norm
                 if self.trainable_factor:
-                    factor = fn.sigmoid(self.spatial_factor).to(t.device)
+                    factor = torch.sigmoid(self.spatial_factor).to(t.device)
                     t = factor[i] * s + (1. - factor[i]) * rearrange(t, 'n b c -> b n c')
                 else:
                     t = (s + rearrange(t, 'n b c -> b n c')) * 0.5
