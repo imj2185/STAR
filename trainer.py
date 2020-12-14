@@ -39,6 +39,7 @@ class GCNTrainer(object):
 
         best_acc = 0
         i_acc = 0
+        bi = torch.FloatTensor([k for k in range(128)])
         self.model.train(True)
 
         for epoch in range(n_epochs):
@@ -49,8 +50,8 @@ class GCNTrainer(object):
             for i, batch in tqdm(enumerate(train_loader), total=len(train_loader), desc="Train Epoch {}".format(epoch)):
                 batch = batch.to(self.device)
                 self.optimizer.zero_grad()
-                output = self.model(batch.x, adj=self.adj)
-                target = (self.train_labels[i]-1).gather(0, batch.batch)
+                output = self.model(batch.x, adj=self.adj, bi=batch.batch)
+                target = self.train_labels[i:(i+1)*128]-1
                 # one_hot = fn.one_hot(target.long(), num_classes = 60)
 
                 # loss = fn.cross_entropy(output, one_hot)
@@ -68,8 +69,8 @@ class GCNTrainer(object):
                 self.optimizer.step()
 
                 log_str = 'epoch %d, step %d: train_loss %.3f; train_acc %.3f' % (epoch + 1, i + 1, loss, acc)
-                if (i + 1) % 1 == 0:
-                    print(log_str)
+                #if (i + 1) % 1 == 0:
+                #    print(log_str)
             i_acc += i
 
             #evaluation
@@ -115,11 +116,11 @@ class GCNTrainer(object):
         for i, batch in enumerate(self.val_loader, 0):
 
             batch = batch.to(self.device)
-            output = self.model(batch.x, adj=self.adj)
-            target = (self.val_labels[i]-1).gather(0, batch.batch).to(self.device).long()
+            output = self.model(batch.x, adj=self.adj, bi=batch.batch)
+            target = self.val_labels[i:(i+1)*128]-1
 
             pred = torch.max(output, 1)[1]
-            all_loss += self.loss_fn(output, target).cpu().data.numpy()
+            all_loss += self.loss_fn(output, target.long()).cpu().data.numpy()
             results = pred == target
 
             for i in range(results.size()[0]):
@@ -151,18 +152,18 @@ if __name__ == '__main__':
     args = make_args()
 
     log_dir = '/home/project/gcn/APBGCN/log'
-    train_dataset = SkeletonDataset(root="/home/project/gcn/APBGCN", name='ntu_cs_train_test', use_motion_vector=False,
-                                    benchmark='cs', sample='train')
-    valid_dataset = SkeletonDataset(root="/home/project/gcn/APBGCN", name='ntu_cs_val_test', use_motion_vector=False,
-                                    benchmark='cs', sample='val')
+    train_dataset = SkeletonDataset(root="/home/project/gcn/APBGCN", name='ntu_60_cv_train', use_motion_vector=False,
+                                    benchmark='cv', sample='train')
+    valid_dataset = SkeletonDataset(root="/home/project/gcn/APBGCN", name='ntu_60_cv_val', use_motion_vector=False,
+                                    benchmark='cv', sample='val')
 
     train_loader = DataLoader(train_dataset.data, batch_size=args.batch_size)
     valid_loader = DataLoader(valid_dataset.data, batch_size=args.batch_size)
 
-    model = DualGraphTransformer(in_channels=3, hidden_channels=16, out_channels=16, num_layers=4, num_heads=8, sequential=True)
+    model = DualGraphTransformer(in_channels=3, hidden_channels=8, out_channels=8, num_layers=3, num_heads=4, classes=60, sequential=True)
     # optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=(0.9, 0.98))
 
-    noam_opt = get_std_opt(model, args)
+    noam_opt = get_std_opt(model, args, 150)
 
     trainer = GCNTrainer(model, train_loader, train_dataset.labels, valid_loader, valid_dataset.labels,
                          train_dataset.skeleton_, noam_opt.optimizer, nn.CrossEntropyLoss(), log_dir)
