@@ -3,7 +3,7 @@ from abc import ABC
 import torch
 import torch.nn as nn
 import torch.nn.functional as fn
-from .layers import HGAConv
+from .layers import HGAConv, GlobalContextAttention
 from third_party.performer import SelfAttention
 from einops import rearrange
 
@@ -24,6 +24,8 @@ class DualGraphTransformer(nn.Module, ABC):
         self.spatial_factor = nn.Parameter(torch.ones(num_layers)) * 0.5
         self.sequential = sequential
         self.num_layers = num_layers
+        self.num_joints = num_joints
+        self.num_classes = classes
         self.trainable_factor = trainable_factor
         channels = [in_channels] + [hidden_channels] * (num_layers - 1) + [out_channels]
         self.spatial_layers = nn.ModuleList([
@@ -45,10 +47,18 @@ class DualGraphTransformer(nn.Module, ABC):
                           dropout=drop_rate,
                           causal=True) for i in range(num_layers)])
 
-        self.bottle_neck = nn.Linear(in_features=out_channels, out_features=out_channels)
-        self.final_layer = nn.Linear(in_features=out_channels * num_joints, out_features=classes)
+        self.context_attention = GlobalContextAttention(in_channels=out_channels)
+        self.final_layer = nn.Linear(in_features=out_channels * num_joints,
+                                     out_features=classes)
 
-    def forward(self, t, adj):  # t: tensor, adj: dataset.skeleton_
+    def forward(self, t, adj, bi):  # t: tensor, adj: dataset.skeleton_
+        """
+
+        :param t: tensor
+        :param adj: adjacency matrix (sparse)
+        :param bi: batch index
+        :return: tensor
+        """
         if self.sequential:     # sequential architecture
             for i in range(self.num_layers):
                 t = rearrange(fn.relu(self.spatial_layers[i](t, adj)),
@@ -68,7 +78,11 @@ class DualGraphTransformer(nn.Module, ABC):
                     t = factor[i] * s + (1. - factor[i]) * rearrange(t, 'n b c -> b n c')
                 else:
                     t = (s + rearrange(t, 'n b c -> b n c')) * 0.5
-        t = rearrange(self.bottle_neck(t), 'b n c -> b (n c)')
-        t = self.final_layer(t)
+
+        t = rearrange(self.context_attention(rearrange(t,
+                                                       'b n c -> n b c'),
+                                             batch_index=bi),
+                      'n bi c -> bi (n c)')  # bi is the shrunk along the batch index
+        t = self.final_layer(fn.relu(t))
         # return fn.sigmoid(t)  # dimension (b, n, oc)
         return t

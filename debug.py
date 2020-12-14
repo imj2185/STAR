@@ -28,5 +28,5 @@ lt = DualGraphTransformer(in_channels=7,
                           out_channels=16,
                           sequential=False,
                           num_layers=3)
-t = lt(b.x, ds.skeleton_)
+t = lt(b.x, ds.skeleton_, b.batch)
 print(t.shape)
