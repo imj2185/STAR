@@ -8,6 +8,7 @@ import torch.nn.functional as fn
 from einops import rearrange, reduce
 from torch import Tensor
 from torch.nn import Parameter, Linear
+from torch_scatter import scatter_mean
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.nn.inits import glorot, zeros
 from torch_geometric.utils import remove_self_loops, add_self_loops, softmax
@@ -276,11 +277,24 @@ class HGAConv(MessagePassing):
 
 
 class GlobalContextAttention(nn.Module):
-    def __init__(self):
+    def __init__(self, in_channels):
         super(GlobalContextAttention, self).__init__()
+        self.in_channels = in_channels
+        self.weights = nn.Parameter(torch.FloatTensor(in_channels, in_channels))
+        nn.init.xavier_normal_(self.weights)
 
-    def forward(self):
-        return
+    def forward(self, x, batch_index):
+        """
+
+        :param x: tensor(joints, frames, channels)
+        :param batch_index: batch index
+        :return: reduced tensor
+        """
+        # Global context
+        gc = torch.matmul(scatter_mean(x, batch_index, dim=1), self.weights)
+        gc = torch.tanh(gc)[:, batch_index, :]  # extended according to batch index
+        gc_ = torch.sigmoid(torch.sum(torch.mul(x, gc), dim=-1, keepdim=True))
+        return scatter_mean(gc_ * x, index=batch_index, dim=1)
 
 # class DotProductAttention(nn.Module, ABC):
 #     def __init__(self, dropout, **kwargs):
