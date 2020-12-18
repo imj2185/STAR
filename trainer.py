@@ -157,8 +157,8 @@ if __name__ == '__main__':
     valid_dataset = SkeletonDataset(root="/home/project/gcn/APBGCN", name='ntu_60_cv_val', use_motion_vector=False,
                                     benchmark='cv', sample='val')
 
-    train_loader = DataLoader(train_dataset.data, batch_size=args.batch_size)
-    valid_loader = DataLoader(valid_dataset.data, batch_size=args.batch_size)
+    train_loader = DataLoader(train_dataset.data, batch_size=args.batch_size, shuffle=True)
+    valid_loader = DataLoader(valid_dataset.data, batch_size=args.batch_size, shuffle=True)
 
     model = DualGraphTransformer(in_channels=3, hidden_channels=8, out_channels=8, num_layers=3, num_heads=4, classes=60, sequential=True)
     # optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=(0.9, 0.98))
