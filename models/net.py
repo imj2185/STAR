@@ -54,8 +54,7 @@ class DualGraphTransformer(nn.Module, ABC):
 
     def forward(self, t, adj, bi):  # t: tensor, adj: dataset.skeleton_
         """
-
-        :param t: tensor
+        :param t: tensor(f, n, c)
         :param adj: adjacency matrix (sparse)
         :param bi: batch index
         :return: tensor
@@ -63,15 +62,15 @@ class DualGraphTransformer(nn.Module, ABC):
         if self.sequential:     # sequential architecture
             for i in range(self.num_layers):
                 t = rearrange(fn.relu(self.spatial_layers[i](t, adj)),
-                              'b n c -> n b c')
+                              'f n c -> n f c')
                 t = rearrange(fn.relu(fn.layer_norm(fn.dropout(self.temporal_layers[i](t),
                                                                self.dropout),
                                                     t.shape[1:]) + t),  # residual and add_norm
-                              'n b c -> b n c')
+                              'n f c -> f n c')
         else:  # parallel architecture
             for i in range(self.num_layers):
                 s = t
-                t = self.temporal_lls[i](rearrange(t, 'b n c -> n b c'))
+                t = self.temporal_lls[i](rearrange(t, 'f n c -> n f c'))
                 s = fn.relu(self.spatial_layers[i](s, adj))
                 t = fn.relu(fn.layer_norm(fn.dropout(self.temporal_layers[i](t),
                                                      self.dropout),
@@ -80,12 +79,11 @@ class DualGraphTransformer(nn.Module, ABC):
                     factor = torch.sigmoid(self.spatial_factor).to(t.device)
                     t = factor[i] * s + (1. - factor[i]) * rearrange(t, 'n b c -> b n c')
                 else:
-                    t = (s + rearrange(t, 'n b c -> b n c')) * 0.5
+                    t = (s + rearrange(t, 'n f c -> f n c')) * 0.5
 
-        t = rearrange(self.context_attention(rearrange(t,
-                                                       'b n c -> n b c'),
+        t = rearrange(self.context_attention(rearrange(t, 'f n c -> n f c'),
                                              batch_index=bi),
-                      'n bi c -> bi (n c)')  # bi is the shrunk along the batch index
+                      'n fi c -> fi (n c)')  # bi is the shrunk along the batch index
         t = self.final_layer(fn.relu(t))
         # return fn.sigmoid(t)  # dimension (b, n, oc)
         return t
