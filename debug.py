@@ -30,3 +30,5 @@ lt = DualGraphTransformer(in_channels=7,
                           num_layers=3)
 t = lt(b.x, ds.skeleton_, b.batch)
 print(t.shape)
+print(t == b.x)
+print(lt.context_attention.weights)
