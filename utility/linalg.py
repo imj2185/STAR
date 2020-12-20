@@ -139,3 +139,8 @@ if __name__ == "__main__":
     from data.dataset import skeleton_parts
 
     sk_adj = skeleton_parts()
+
+
+def make_attn_mask(seq_len, bi):
+    return None
+
