@@ -5,13 +5,17 @@ from typing import Union, Tuple, Any
 import torch
 import torch.nn as nn
 import torch.nn.functional as fn
-from einops import rearrange, reduce
+from einops import rearrange, reduce, repeat
+from fast_transformers.masking import FullMask, LengthMask
 from torch import Tensor
-from torch.nn import Parameter, Linear
+from torch.nn import Parameter, Linear, Dropout, LayerNorm
 from torch_scatter import scatter_mean
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.nn.inits import glorot, zeros
 from torch_geometric.utils import remove_self_loops, add_self_loops, softmax
+from utility.linalg import make_attn_mask
+from fast_transformers.attention.linear_attention import LinearAttention
+from fast_transformers.attention.full_attention import FullAttention
 
 from utility.linalg import batched_spmm, batched_transpose
 
@@ -295,6 +299,51 @@ class GlobalContextAttention(nn.Module):
         gc = torch.tanh(gc)[:, batch_index, :]  # extended according to batch index
         gc_ = torch.sigmoid(torch.sum(torch.mul(x, gc), dim=-1, keepdim=True))
         return scatter_mean(gc_ * x, index=batch_index, dim=1)
+
+
+class TemporalSelfAttention(nn.Module):
+    def __init__(self, in_channels, hid_channels, heads=8,
+                 activation="relu", is_linear=True, dropout=0.1):
+        super(TemporalSelfAttention, self).__init__()
+        self.in_channels = in_channels
+        self.hid_channels = hid_channels or 4 * in_channels
+        self.heads = heads
+        self.is_linear = is_linear
+
+        if is_linear:
+            self.attention = LinearAttention(in_channels)
+        else:
+            self.attention = FullAttention(attention_dropout=dropout)
+        self.lin_q = Linear(in_channels, hid_channels)
+        self.lin_v = Linear(hid_channels, in_channels)
+        self.norm_q = LayerNorm(in_channels)
+        self.norm_v = LayerNorm(in_channels)
+        self.dropout = Dropout(dropout)
+        self.activation = fn.relu if activation == "relu" else fn.gelu
+
+    def forward(self, x, bi=None):
+        """
+
+        :param x:  tensor(frames, num_joints, channels)
+        :param bi:
+        :return:
+        """
+        f, n, c = x.shape
+        attn_mask = make_attn_mask(f, bi) if self.is_linear else FullMask(f, device=x.device)
+        length_mask = LengthMask(x.new_full((n,), f, dtype=torch.int64))
+
+        x = rearrange(x, 'f n c -> n f c')
+
+        t = repeat(x, 'n f c -> n f h c', h=self.heads)  # .to(x.device)
+        # Run self attention and add it to the input (residual)
+        if self.is_linear:
+            t = self.attention(t, t, t)
+        else:
+            t = self.attention(t, t, t)
+        t += reduce(self.dropout(t), 'n f h c -> n f c', 'mean')
+
+        return
+
 
 # class DotProductAttention(nn.Module, ABC):
 #     def __init__(self, dropout, **kwargs):
