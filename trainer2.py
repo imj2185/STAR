@@ -13,14 +13,15 @@ from data.dataset import SkeletonDataset
 from models.net import DualGraphTransformer
 from optimizer import get_std_opt
 
+
 class GCNTrainer(object):
     def __init__(self, model, train_loader, val_loader, adj, optimizer, loss_fn, log_dir):
 
         self.model = model
         self.train_loader = train_loader
-        #self.train_labels = train_labels
+        # self.train_labels = train_labels
         self.val_loader = val_loader
-        #self.val_labels = val_labels
+        # self.val_labels = val_labels
         self.loss_fn = loss_fn
         self.log_dir = log_dir
         self.adj = adj
@@ -30,8 +31,8 @@ class GCNTrainer(object):
 
         self.model = self.model.to(self.device)
         self.adj = self.adj.to(self.device)
-        #self.train_labels = self.train_labels.to(self.device)
-        #self.val_labels = self.val_labels.to(self.device)
+        # self.train_labels = self.train_labels.to(self.device)
+        # self.val_labels = self.val_labels.to(self.device)
         if self.log_dir is not None:
             self.writer = SummaryWriter(log_dir)
 
@@ -50,7 +51,7 @@ class GCNTrainer(object):
                 batch = batch.to(self.device)
                 self.optimizer.zero_grad()
                 output = self.model(batch.x, adj=self.adj)
-                #target = batch.y.gather(0, batch.batch)
+                # target = batch.y.gather(0, batch.batch)
                 target = batch.y[batch.batch]
                 # one_hot = fn.one_hot(target.long(), num_classes = 60)
 
@@ -86,8 +87,8 @@ class GCNTrainer(object):
                 best_acc = val_overall_acc
                 # self.model.save(self.log_dir, epoch)
                 torch.save(self.model.state_dict(),
-                           os.path.join(self.log_dir, 
-                           "best_model.pth"))
+                           os.path.join(self.log_dir,
+                                        "best_model.pth"))
 
             # adjust learning rate manually
             if epoch > 0 and (epoch + 1) % 10 == 0:
@@ -123,7 +124,6 @@ class GCNTrainer(object):
             all_loss += self.loss_fn(output, target).cpu().data.numpy()
             results = pred == target
 
-            
             for i in range(results.size()[0]):
                 if not bool(results[i].cpu().data.numpy()):
                     wrong_class[target.cpu().data.numpy().astype('int')[i]] += 1
@@ -137,7 +137,7 @@ class GCNTrainer(object):
         # val_mean_class_acc = np.mean((samples_class - wrong_class) / samples_class)
         acc = all_correct_points.float() / all_points
         val_overall_acc = acc.cpu().data.numpy()
-        #val_overall_acc = acc.to(self.device)
+        # val_overall_acc = acc.to(self.device)
         loss = all_loss / len(self.val_loader)
 
         # print ('val mean class acc. : ', val_mean_class_acc)
@@ -153,24 +153,31 @@ class GCNTrainer(object):
 if __name__ == '__main__':
     args = make_args()
 
-    #log_dir = '/home/mdl/tqs5537/TAPBGCN/log/ntu_60/cs_without_MV_8'
+    # log_dir = '/home/mdl/tqs5537/TAPBGCN/log/ntu_60/cs_without_MV_8'
     log_dir = args.log_dir
-    #train_dataset = SkeletonDataset(root="/home/mdl/tqs5537/TAPBGCN/ntu_60", name='ntu_cs_train_test_without_MV', use_motion_vector=False,
+    # train_dataset = SkeletonDataset(root="/home/mdl/tqs5537/TAPBGCN/ntu_60", name='ntu_cs_train_test_without_MV', use_motion_vector=False,
     #                                benchmark='cs', sample='train')
-    #valid_dataset = SkeletonDataset(root="/home/mdl/tqs5537/TAPBGCN/ntu_60", name='ntu_cs_val_test_without_MV', use_motion_vector=False,
+    # valid_dataset = SkeletonDataset(root="/home/mdl/tqs5537/TAPBGCN/ntu_60", name='ntu_cs_val_test_without_MV', use_motion_vector=False,
     #                                benchmark='cs', sample='val')
-    
-    train_dataset = SkeletonDataset(root="/home/project/gcn/kinetic/kinetics-skeleton/kinetics_train", name='kinetics_train_test_without_MV', use_motion_vector=False,
+
+    train_dataset = SkeletonDataset(root="/home/project/gcn/kinetic/kinetics-skeleton/kinetics_train",
+                                    name='kinetics_train_test_without_MV', use_motion_vector=False,
                                     sample='train')
-    valid_dataset = SkeletonDataset(root="/home/project/gcn/kinetic/kinetics-skeleton/kinetics_val", name='kinetics_val_test_without_MV', use_motion_vector=False,
+    valid_dataset = SkeletonDataset(root="/home/project/gcn/kinetic/kinetics-skeleton/kinetics_val",
+                                    name='kinetics_val_test_without_MV', use_motion_vector=False,
                                     sample='val')
-    
-    
+
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size)
     valid_loader = DataLoader(valid_dataset, batch_size=args.batch_size)
 
-    model = DualGraphTransformer(in_channels=3, hidden_channels=16, out_channels=16, num_layers=3, num_heads=4, sequential=True)
-    
+    model = DualGraphTransformer(in_channels=3,
+                                 hidden_channels=16,
+                                 out_channels=16,
+                                 num_layers=3,
+                                 num_heads=4,
+                                 linear_temporal=True,
+                                 sequential=False)
+
     # optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=(0.9, 0.98))
 
     noam_opt = get_std_opt(model, args)
@@ -178,7 +185,6 @@ if __name__ == '__main__':
     trainer = GCNTrainer(model, train_loader, valid_loader,
                          train_dataset.skeleton_, noam_opt.optimizer, nn.CrossEntropyLoss(), log_dir)
     trainer.train(args.epoch_num)
-    
 
     '''
 

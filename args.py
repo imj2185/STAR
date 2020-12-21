@@ -21,6 +21,8 @@ def make_args():
                         help='whether pre-transform feature')
 
     # model
+    parser.add_argument('--linear_temporal', dest='linear_temporal', type=bool, default=True,
+                        help='set to linear temporal Transformer model')
     parser.add_argument('--drop_rate', dest='drop_rate', type=float, default=0.3,
                         help='whether dropout rate, default 0.5')
     parser.add_argument('--load_model', dest='load_model', default=False, type=bool,

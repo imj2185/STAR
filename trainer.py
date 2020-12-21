@@ -159,7 +159,13 @@ if __name__ == '__main__':
     train_loader = DataLoader(train_dataset.data, batch_size=args.batch_size, shuffle=True)
     valid_loader = DataLoader(valid_dataset.data, batch_size=args.batch_size, shuffle=True)
 
-    model = DualGraphTransformer(in_channels=3, hidden_channels=16, out_channels=16, num_layers=4, num_heads=8, sequential=True)
+    model = DualGraphTransformer(in_channels=3,
+                                 hidden_channels=16,
+                                 out_channels=16,
+                                 num_layers=4,
+                                 num_heads=8,
+                                 linear_temporal=True,
+                                 sequential=False)
     # optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=(0.9, 0.98))
 
     noam_opt = get_std_opt(model, args)

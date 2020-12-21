@@ -323,7 +323,7 @@ class TemporalSelfAttention(nn.Module):
 
     def forward(self, x, bi=None):
         """
-
+        reference: Fast Transformer [code: https://tinyurl.com/yber224s]
         :param x:  tensor(frames, num_joints, channels)
         :param bi:
         :return:
@@ -332,17 +332,19 @@ class TemporalSelfAttention(nn.Module):
         attn_mask = make_attn_mask(f, bi) if self.is_linear else FullMask(f, device=x.device)
         length_mask = LengthMask(x.new_full((n,), f, dtype=torch.int64))
 
-        x = rearrange(x, 'f n c -> n f c')
-
-        t = repeat(x, 'n f c -> n f h c', h=self.heads)  # .to(x.device)
+        x = repeat(rearrange(x, 'f n c -> n f c'),
+                   'n f c -> n f h c', h=self.heads)  # .to(x.device)
         # Run self attention and add it to the input (residual)
         if self.is_linear:
-            t = self.attention(t, t, t)
+            x = self.attention(x, x, x, attn_mask, length_mask, length_mask)
         else:
-            t = self.attention(t, t, t)
-        t += reduce(self.dropout(t), 'n f h c -> n f c', 'mean')
-
-        return
+            x = self.attention(x, x, x, attn_mask, length_mask, length_mask)
+        x += self.dropout(reduce(x, 'n f h c -> n f c', 'mean'))
+        # Run the fully connected part of the layer
+        t = x = self.norm_q(x)
+        t = self.dropout(self.activation(self.lin_q(t)))
+        t = self.dropout(self.lin_v(t))
+        return rearrange(self.norm_v(x + t), 'n f c -> f n c')
 
 
 # class DotProductAttention(nn.Module, ABC):
