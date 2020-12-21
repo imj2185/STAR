@@ -74,6 +74,7 @@ class DualGraphTransformer(nn.Module, ABC):
         else:  # parallel architecture
             for i in range(self.num_layers):
                 s = t
+                t = fn.relu(self.temporal_lls[i](t))
                 t = fn.relu(self.temporal_layers[i](t, bi))
                 s = fn.relu(self.spatial_layers[i](s, adj))
                 if self.trainable_factor:
@@ -83,9 +84,9 @@ class DualGraphTransformer(nn.Module, ABC):
                     t = (s + t) * 0.5
 
         t = rearrange(self.context_attention(rearrange(t,
-                                                       'b n c -> n b c'),
+                                                       'f n c -> n f c'),
                                              batch_index=bi),
-                      'n bi c -> bi (n c)')  # bi is the shrunk along the batch index
+                      'n f c -> f (n c)')  # bi is the shrunk along the batch index
         t = self.final_layer(fn.relu(t))
         # return fn.sigmoid(t)  # dimension (b, n, oc)
         return t
