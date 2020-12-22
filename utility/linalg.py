@@ -4,6 +4,7 @@ from torch_geometric.utils.num_nodes import maybe_num_nodes
 from torch_sparse import spmm, transpose, spspmm
 import torch.functional as fn
 from einops import rearrange, repeat
+from fast_transformers.masking import BaseMask, FullMask
 
 
 def power_adj(adj, dim, p):
@@ -135,12 +136,28 @@ def to_band_sparse(x, lower=True):
     return indices, b[:, 0: indices.shape[-1]]
 
 
+class BatchedMask(BaseMask):
+    @property
+    def bool_matrix(self):
+        idx = self.bi + 1
+        _idx = idx.unsqueeze(dim=-1)
+        idx_ = idx.unsqueeze(dim=-2)
+        msk = _idx * idx_
+        return (msk / (_idx ** 2)) == (msk / (idx_ ** 2))
+
+    def __init__(self, bi=None):
+        super(BatchedMask, self).__init__()
+        self.bi = bi
+
+
+def make_attn_mask(seq_len, bi):
+    msk = FullMask()
+
+    return None
+
+
 if __name__ == "__main__":
     from data.dataset import skeleton_parts
 
     sk_adj = skeleton_parts()
-
-
-def make_attn_mask(seq_len, bi):
-    return None
 

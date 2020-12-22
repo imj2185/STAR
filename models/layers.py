@@ -17,7 +17,7 @@ from utility.linalg import make_attn_mask
 from fast_transformers.attention.linear_attention import LinearAttention
 from fast_transformers.attention.full_attention import FullAttention
 
-from utility.linalg import batched_spmm, batched_transpose
+from utility.linalg import batched_spmm, batched_transpose, BatchedMask
 
 
 def clones(module, k):
@@ -329,7 +329,7 @@ class TemporalSelfAttention(nn.Module):
         :return:
         """
         f, n, c = x.shape
-        attn_mask = make_attn_mask(f, bi) if self.is_linear else FullMask(f, device=x.device)
+        attn_mask = BatchedMask(bi) if self.is_linear else FullMask(f, device=x.device)
         length_mask = LengthMask(x.new_full((n,), f, dtype=torch.int64))
 
         x = repeat(rearrange(x, 'f n c -> n f c'),
