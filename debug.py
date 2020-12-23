@@ -38,7 +38,7 @@ total = 0
 correct = 0
 for bi, b in enumerate([next(iter(loader))] * 100):
     lt.train()
-    t, y = lt(b.x, ds.skeleton_, b.batch), b.y
+    t, y = lt(b.x, ds.skeleton_, b.batch), (b.y - 1)
     loss = loss_fn(t, y)
     optimizer.zero_grad()
     loss.backward()
