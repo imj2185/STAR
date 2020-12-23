@@ -22,7 +22,7 @@ loader = DataLoader(ds, batch_size=4)
 #                    heads=h,
 #                    causal=True)
 
-lt = DualGraphTransformer(in_channels=7,
+lt = DualGraphTransformer(in_channels=3,
                           hidden_channels=16,
                           out_channels=16,
                           sequential=False,
