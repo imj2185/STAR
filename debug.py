@@ -42,6 +42,8 @@ for bi, b in enumerate([next(iter(loader))] * 10):
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
+    for p in lt.parameters():
+        print(p.grad.data.sum())
 
 print(t.shape)
 print(t == b.x)
