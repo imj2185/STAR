@@ -1,3 +1,4 @@
+import torch
 from torch.nn import CrossEntropyLoss
 from torch.optim import Adam
 from torch_geometric.data import DataLoader
@@ -33,7 +34,9 @@ optimizer = Adam(lt.parameters(),
                  betas=(0.9, 0.98))
 running_loss = 0.0
 show_parameter = False
-for bi, b in enumerate([next(iter(loader))] * 50):
+total = 0
+correct = 0
+for bi, b in enumerate([next(iter(loader))] * 100):
     lt.train()
     t, y = lt(b.x, ds.skeleton_, b.batch), b.y
     loss = loss_fn(t, y)
@@ -51,5 +54,11 @@ for bi, b in enumerate([next(iter(loader))] * 50):
         print('[%5d] loss: %.3f' %
               (bi + 1, running_loss / 10))
         running_loss = 0.0
+        lt.eval()
+        with torch.no_grad():
+            _, predicted = torch.max(t.data, 1)
+            total += y.size(0)
+            correct += (predicted == y).sum().item()
+        print('accuracy: %d %%' % (100 * correct / total))
 
 print(lt.context_attention.weights)
