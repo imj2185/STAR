@@ -41,9 +41,11 @@ for bi, b in enumerate([next(iter(loader))] * 10):
     loss = loss_fn(t, y)
     optimizer.zero_grad()
     loss.backward()
-    optimizer.step()
+    # check out whether parameter is updated?
     for p in lt.parameters():
         print(p.grad.data.sum())
+
+    optimizer.step()
 
 print(t.shape)
 print(t == b.x)
