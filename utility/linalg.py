@@ -30,8 +30,8 @@ def batched_spmm(nzt, adj, x, m=None, n=None):
     # preparation of data
     # x_ = torch.cat(heads * [x])  # duplicate x for heads times
     # nzt_ = nzt.view(-1)
-    x_ = repeat(x, 't n c -> t (h n) c', h=heads)
-    nzt_ = rearrange(nzt, 't e h -> t (h e)')
+    x_ = repeat(x, '... n c -> ... (h n) c', h=heads)
+    nzt_ = rearrange(nzt, '... e h -> ... (h e)')
     if isinstance(adj, Tensor):
         m = maybe_num_nodes(adj[0], m)
         n = max(num_nodes, maybe_num_nodes(adj[1], n))
