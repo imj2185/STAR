@@ -1,13 +1,9 @@
-import torch
-from data.dataset2 import SkeletonDataset
-from torch_geometric.data import DataLoader
-from models.layers import HGAConv
-from third_party.performer import SelfAttention
-from einops import rearrange
-from models.net import DualGraphTransformer
 from torch.nn import CrossEntropyLoss
 from torch.optim import Adam
+from torch_geometric.data import DataLoader
 
+from data.dataset2 import SkeletonDataset
+from models.net import DualGraphTransformer
 
 ds = SkeletonDataset(root='dataset/ntu_60',
                      name='ntu')
@@ -35,18 +31,25 @@ optimizer = Adam(lt.parameters(),
                  lr=1e-3,
                  weight_decay=1e-2,
                  betas=(0.9, 0.98))
-for bi, b in enumerate([next(iter(loader))] * 10):
+running_loss = 0.0
+show_parameter = False
+for bi, b in enumerate([next(iter(loader))] * 50):
     lt.train()
     t, y = lt(b.x, ds.skeleton_, b.batch), b.y
     loss = loss_fn(t, y)
     optimizer.zero_grad()
     loss.backward()
     # check out whether parameter is updated?
-    for p in lt.parameters():
-        print(p.grad.data.sum())
+    if show_parameter:
+        for p in lt.parameters():
+            print(p.grad.data.sum())
 
     optimizer.step()
 
-print(t.shape)
-print(t == b.x)
+    running_loss += loss.item()
+    if bi % 10 == 9:
+        print('[%5d] loss: %.3f' %
+              (bi + 1, running_loss / 10))
+        running_loss = 0.0
+
 print(lt.context_attention.weights)
