@@ -6,16 +6,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as fn
 from einops import rearrange, reduce, repeat
+from fast_transformers.attention.full_attention import FullAttention
+from fast_transformers.attention.linear_attention import LinearAttention
 from fast_transformers.masking import FullMask, LengthMask
 from torch import Tensor
 from torch.nn import Parameter, Linear, Dropout, LayerNorm
-from torch_scatter import scatter_mean
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.nn.inits import glorot, zeros
 from torch_geometric.utils import remove_self_loops, add_self_loops, softmax
-from utility.linalg import make_attn_mask
-from fast_transformers.attention.linear_attention import LinearAttention
-from fast_transformers.attention.full_attention import FullAttention
+from torch_scatter import scatter_mean
 
 from utility.linalg import batched_spmm, batched_transpose, BatchedMask
 
@@ -97,7 +96,7 @@ class HGAConv(MessagePassing):
             a_r: Tensor           [num_nodes, heads]
         """
         if isinstance(adj, Tensor):
-            if len(a_l.shape) == 2: # [num_edges, heads]
+            if len(a_l.shape) == 2:  # [num_edges, heads]
                 return a_l[adj[1], :] + a_r[adj[0], :]
             else:  # [batch, num_edges, heads]
                 a_l_ = rearrange(a_l, 'b n h -> n (b h)')
@@ -108,6 +107,78 @@ class HGAConv(MessagePassing):
         for i in range(len(adj)):
             a[i] = a_l[adj[i][1], i] + a_r[adj[i][0], i]
         return a  # (heads, [num_edges, 1])
+
+    def _attention(self, adj, score):  # score: [num_edges, heads]
+        alpha = fn.leaky_relu(score, self.negative_slope)
+        if len(alpha.shape) == 2:
+            alpha = softmax(alpha, adj[1])
+        else:
+            c = alpha.shape[-1]
+            al = softmax(rearrange(alpha, 'b n c -> n (b c)'), adj[1])
+            alpha = rearrange(al, 'n (b c) -> b n c', c=c)
+        self._alpha = alpha
+        return fn.dropout(alpha, p=self.dropout, training=self.training)
+
+    def message_and_aggregate(self,
+                              adj,
+                              x,
+                              score):
+        """
+        Args:
+            adj:   Tensor or list(Tensor)
+            x:     Union(Tensor, PairTensor) for bipartite graph
+            score: Tensor or list(Tensor)
+        """
+        # for bipartite graph, x_l -> out_ and x_r -> out_l (interleaved)
+        x_l, x_r, out_, out_l = None, None, None, None
+        n, m = 0, 0
+        if isinstance(x, Tensor):
+            x_l = x
+            n = m = x_l.shape[-2]
+        else:
+            x_l, x_r = x[0], x[1]
+            (m, c2) = x_r.size()
+            n = x_l.size(0)
+            out_l = torch.zeros((m, c2, self.heads))
+
+        if isinstance(adj, Tensor):
+            if isinstance(score, Tensor):
+                alpha = self._attention(adj, score)  # [num_edges, heads]
+            else:
+                alpha = self._attention(adj, score[0])  # [num_edges, heads]
+                alpha_ = self._attention(torch.stack(
+                    (adj[1], adj[0])), score[1])  # [num_edges, heads]
+
+        else:  # adj is list of Tensor
+            alpha = []
+            for i in range(self.heads):
+                alpha.append(self._attention(adj[i], score[i]))
+
+        out_ = batched_spmm(alpha, adj, x_l, m, n)
+        if x_r is None:
+            return out_
+            # return out_.permute(1, 0, 2)
+        else:
+            adj, alpha_ = batched_transpose(adj, alpha_)
+            out_l = batched_spmm(alpha_, adj, x_r, n, m)
+            return out_l, out_
+            # return out_l.permute(1, 0, 2), out_.permute(1, 0, 2)
+
+    def propagate(self, adj, size=None, **kwargs):
+        # propagate_type: (x: OptPairTensor, alpha: PairTensor)
+        size = self.__check_input__(adj, size)
+
+        x = kwargs.get('x', Pr.empty)  # OptPairTensor
+        alpha = kwargs.get('alpha', Pr.empty)  # PairTensor
+        score = self.edge_score(adj=adj, a_l=alpha[0], a_r=alpha[1])
+        if not isinstance(x, Tensor):
+            alpha_ = kwargs.get('alpha_', Pr.empty)
+            score_ = self.edge_score(adj=adj, a_l=alpha_[1], a_r=alpha_[0])
+            score = (score, score_)
+
+        out = self.message_and_aggregate(adj, x=x, score=score)
+
+        return self.update(out)
 
     def forward(self, x, adj, size=None, return_attention_weights=None):
         """
@@ -202,78 +273,6 @@ class HGAConv(MessagePassing):
         else:
             return out
 
-    def propagate(self, adj, size=None, **kwargs):
-        # propagate_type: (x: OptPairTensor, alpha: PairTensor)
-        size = self.__check_input__(adj, size)
-
-        x = kwargs.get('x', Pr.empty)  # OptPairTensor
-        alpha = kwargs.get('alpha', Pr.empty)  # PairTensor
-        score = self.edge_score(adj=adj, a_l=alpha[0], a_r=alpha[1])
-        if not isinstance(x, Tensor):
-            alpha_ = kwargs.get('alpha_', Pr.empty)
-            score_ = self.edge_score(adj=adj, a_l=alpha_[1], a_r=alpha_[0])
-            score = (score, score_)
-
-        out = self.message_and_aggregate(adj, x=x, score=score)
-
-        return self.update(out)
-
-    def _attention(self, adj, score):  # score: [num_edges, heads]
-        alpha = fn.leaky_relu(score, self.negative_slope)
-        if len(alpha.shape) == 2:
-            alpha = softmax(alpha, adj[1])
-        else:
-            c = alpha.shape[-1]
-            al = softmax(rearrange(alpha, 'b n c -> n (b c)'), adj[1])
-            alpha = rearrange(al, 'n (b c) -> b n c', c=c)
-        self._alpha = alpha
-        return fn.dropout(alpha, p=self.dropout, training=self.training)
-
-    def message_and_aggregate(self,
-                              adj,
-                              x,
-                              score):
-        """
-        Args:
-            adj:   Tensor or list(Tensor)
-            x:     Union(Tensor, PairTensor) for bipartite graph
-            score: Tensor or list(Tensor)
-        """
-        # for bipartite graph, x_l -> out_ and x_r -> out_l (interleaved)
-        x_l, x_r, out_, out_l = None, None, None, None
-        n, m = 0, 0
-        if isinstance(x, Tensor):
-            x_l = x
-            n = m = x_l.shape[-2]
-        else:
-            x_l, x_r = x[0], x[1]
-            (m, c2) = x_r.size()
-            n = x_l.size(0)
-            out_l = torch.zeros((m, c2, self.heads))
-
-        if isinstance(adj, Tensor):
-            if isinstance(score, Tensor):
-                alpha = self._attention(adj, score)  # [num_edges, heads]
-            else:
-                alpha = self._attention(adj, score[0])  # [num_edges, heads]
-                alpha_ = self._attention(torch.stack(
-                    (adj[1], adj[0])), score[1])  # [num_edges, heads]
-
-        else:  # adj is list of Tensor
-            alpha = []
-            for i in range(self.heads):
-                alpha.append(self._attention(adj[i], score[i]))
-
-        out_ = batched_spmm(alpha, adj, x_l, m, n)
-        if x_r is None:
-            return out_
-            # return out_.permute(1, 0, 2)
-        else:
-            adj, alpha_ = batched_transpose(adj, alpha_)
-            out_l = batched_spmm(alpha_, adj, x_r, n, m)
-            return out_l, out_
-            # return out_l.permute(1, 0, 2), out_.permute(1, 0, 2)
-
     def __repr__(self):
         return '{}({}, {}, heads={})'.format(self.__class__.__name__,
                                              self.in_channels,
@@ -329,23 +328,18 @@ class TemporalSelfAttention(nn.Module):
         :return:
         """
         f, n, c = x.shape
-        attn_mask = BatchedMask(bi) if self.is_linear else FullMask(f, device=x.device)
+        attn_mask = FullMask(f, device=x.device) if self.is_linear else BatchedMask(bi)
         length_mask = LengthMask(x.new_full((n,), f, dtype=torch.int64))
-
-        x = repeat(rearrange(x, 'f n c -> n f c'),
-                   'n f c -> n f h c', h=self.heads)  # .to(x.device)
+        x = rearrange(x, 'f n c -> n f c')
+        t = repeat(x, 'n f c -> n f h c', h=self.heads)  # .to(x.device)
         # Run self attention and add it to the input (residual)
-        if self.is_linear:
-            x = self.attention(x, x, x, attn_mask, length_mask, length_mask)
-        else:
-            x = self.attention(x, x, x, attn_mask, length_mask, length_mask)
-        x += self.dropout(reduce(x, 'n f h c -> n f c', 'mean'))
+        t = self.attention(t, t, t, attn_mask, length_mask, length_mask)
+        x += self.dropout(reduce(t, 'n f h c -> n f c', 'mean'))
         # Run the fully connected part of the layer
-        t = x = self.norm_q(x)
-        t = self.dropout(self.activation(self.lin_q(t)))
-        t = self.dropout(self.lin_v(t))
-        return rearrange(self.norm_v(x + t), 'n f c -> f n c')
-
+        y = x = self.norm_q(x)
+        y = self.dropout(self.activation(self.lin_q(y)))
+        y = self.dropout(self.lin_v(y))
+        return rearrange(self.norm_v(x + y), 'n f c -> f n c')
 
 # class DotProductAttention(nn.Module, ABC):
 #     def __init__(self, dropout, **kwargs):

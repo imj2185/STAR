@@ -76,14 +76,15 @@ def process_skeleton(path,
                      num_joints,
                      dataset_name='ntu',
                      num_features=3,
-                     root=None,
+                     root='.',
                      benchmark='cv',
                      sample='train',
                      use_motion_vector=True):
+    uid = 0
     t = osp.split(path)[-1][-12:-9] if ('ntu' in dataset_name) else 0  # 'ntu' label
     frames = []
     num_persons = 0
-    path = osp.join(root, 'raw', path)
+    # path = osp.join(root, 'raw', path)
     if 'ntu' in dataset_name:
         if _file_available(path, root, benchmark, sample):
             return None, None
