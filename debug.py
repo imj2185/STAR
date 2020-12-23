@@ -5,10 +5,12 @@ from torch_geometric.data import DataLoader
 
 from data.dataset2 import SkeletonDataset
 from models.net import DualGraphTransformer
+from tqdm import tqdm
 
 ds = SkeletonDataset(root='dataset/ntu_60',
                      name='ntu')
-loader = DataLoader(ds, batch_size=4)
+loader = DataLoader(ds, batch_size=8)
+c = ds[0].x.shape[-1]
 # b = next(iter(loader))
 # ly = HGAConv(in_channels=7,
 #              out_channels=16,
@@ -22,7 +24,7 @@ loader = DataLoader(ds, batch_size=4)
 #                    heads=h,
 #                    causal=True)
 
-lt = DualGraphTransformer(in_channels=3,
+lt = DualGraphTransformer(in_channels=c,
                           hidden_channels=16,
                           out_channels=16,
                           sequential=False,
@@ -36,7 +38,10 @@ running_loss = 0.0
 show_parameter = False
 total = 0
 correct = 0
-for bi, b in enumerate([next(iter(loader))] * 100):
+print('start training')
+pbar = tqdm(enumerate([next(iter(loader))] * 200))
+for bi, b in pbar:
+    pbar.set_description("processing %d" % (bi + 1))
     lt.train()
     t, y = lt(b.x, ds.skeleton_, b.batch), (b.y - 1)
     loss = loss_fn(t, y)
@@ -48,7 +53,6 @@ for bi, b in enumerate([next(iter(loader))] * 100):
             print(p.grad.data.sum())
 
     optimizer.step()
-
     running_loss += loss.item()
     if bi % 10 == 9:
         print('[%5d] loss: %.3f' %
@@ -59,6 +63,6 @@ for bi, b in enumerate([next(iter(loader))] * 100):
             _, predicted = torch.max(t.data, 1)
             total += y.size(0)
             correct += (predicted == y).sum().item()
-        print('accuracy: %d %%' % (100 * correct / total))
+        print('\n\t accuracy: %d %%' % (100 * correct / total))
 
 print(lt.context_attention.weights)
