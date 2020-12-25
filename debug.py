@@ -41,6 +41,7 @@ correct = 0
 print('start training')
 pbar = tqdm(enumerate([next(iter(loader))] * 200))
 for bi, b in pbar:
+    torch.autograd.set_detect_anomaly(True)
     pbar.set_description("processing %d" % (bi + 1))
     lt.train()
     t, y = lt(b.x, ds.skeleton_, b.batch), (b.y - 1)
@@ -65,4 +66,4 @@ for bi, b in pbar:
             correct += (predicted == y).sum().item()
         print('\n\t accuracy: %d %%' % (100 * correct / total))
 
-print(lt.context_attention.weights)
+# print(lt.context_attention.weights)
