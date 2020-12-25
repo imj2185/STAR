@@ -1,7 +1,8 @@
 import torch
 from torch import Tensor
 from torch_geometric.utils.num_nodes import maybe_num_nodes
-from torch_sparse import spmm, transpose, spspmm
+from torch_sparse import transpose, spspmm  # , spmm
+from torch_scatter import scatter_add
 import torch.functional as fn
 from einops import rearrange, repeat
 from fast_transformers.masking import BaseMask, FullMask
@@ -14,6 +15,22 @@ def power_adj(adj, dim, p):
         for i in range(p - 2):
             ic, vc = spspmm(ic, vc, adj, val, dim, dim, dim)
     return ic
+
+
+def _spmm(indices, nz, m, n, d):
+    """
+    :argument
+        indices (:class: `LongTensor`): tensor of indices of sparse matrix.
+        nz (:class: `Tensor`): tensor of nonzero of sparse matrix.
+        m (int): The first dimension of corresponding dense matrix.
+        n (int): The second dimension of corresponding dense matrix.
+        d (:class:`Tensor`): tensor of dense matrix
+    """
+    assert n == d.shape[-2]
+    rows, cols = indices
+    d = d if d.dim() > 1 else d.unsqueeze(-1)
+    out = d[..., cols, :] * nz.unsqueeze(-1)
+    return scatter_add(out, rows, dim=-2, dim_size=m)
 
 
 def batched_spmm(nzt, adj, x, m=None, n=None):
@@ -44,13 +61,14 @@ def batched_spmm(nzt, adj, x, m=None, n=None):
         n = max([maybe_num_nodes(adj_[1], n) for adj_ in adj])
         offset = torch.tensor([[m], [n]])
         adj_ = torch.cat([adj[i] + offset * i for i in range(heads)], dim=1)
-    if len(x.shape) == 2:
-        out = spmm(adj_, nzt_, heads * m, heads * n, x_)
-        return out.view(-1, m, channels)  # [heads, m, channels]
-    else:
-        _size = x_.shape[0]
-        out = torch.stack([spmm(adj_, nzt_[i], heads * m, heads * n, x_[i]) for i in range(_size)])
-        return out  # [batch, heads * num_nodes, channels]
+    # if len(x.shape) == 2:
+    #     out = spmm(adj_, nzt_, heads * m, heads * n, x_)
+    #     return out.view(-1, m, channels)  # [heads, m, channels]
+    # else:
+    #     _size = x_.shape[0]
+    #     out = torch.stack([spmm(adj_, nzt_[i], heads * m, heads * n, x_[i]) for i in range(_size)])
+    #     return out  # [batch, heads * num_nodes, channels]
+    return _spmm(adj_, nzt_, heads * m, heads * n, x_)
 
 
 def batched_transpose(adj, value, m=None, n=None):
@@ -161,3 +179,9 @@ if __name__ == "__main__":
 
     sk_adj = skeleton_parts()
 
+    x = torch.ones(3, 5, 3)
+    x[0] *= 2
+    x[1] *= 3
+    for i in range(m):
+        x[..., i, :] *= i
+    adj = torch.tensor([[0, 1, 1, 1, 2, 3, 4, 4], [1, 0, 2, 4, 1, 4, 1, 3]])
