@@ -18,7 +18,9 @@ def power_adj(adj, dim, p):
 
 
 def _spmm(indices, nz, m, n, d):
-    """
+    """Sparse matrix multiplication, it supports tensor
+    with dimension size more than 2, and the code is inspired by:
+    "PyTorch Sparse"[https://tinyurl.com/ycn2nkdr]
     :argument
         indices (:class: `LongTensor`): tensor of indices of sparse matrix.
         nz (:class: `Tensor`): tensor of nonzero of sparse matrix.
