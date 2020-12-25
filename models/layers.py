@@ -295,7 +295,7 @@ class GlobalContextAttention(nn.Module):
         """
         # Global context
         gc = torch.matmul(scatter_mean(x, batch_index, dim=1), self.weights)
-        gc = torch.tanh(gc)[:, batch_index, :]  # extended according to batch index
+        gc = torch.tanh(gc)[..., batch_index, :]  # extended according to batch index
         gc_ = torch.sigmoid(torch.sum(torch.mul(x, gc), dim=-1, keepdim=True))
         return scatter_mean(gc_ * x, index=batch_index, dim=1)
 
