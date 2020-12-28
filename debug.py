@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 ds = SkeletonDataset(root='dataset/ntu_60',
                      name='ntu')
-loader = DataLoader(ds, batch_size=8)
+loader = DataLoader(ds, batch_size=8, shuffle=True)
 c = ds[0].x.shape[-1]
 # b = next(iter(loader))
 # ly = HGAConv(in_channels=7,
@@ -40,30 +40,30 @@ total = 0
 correct = 0
 print('start training')
 pbar = tqdm(enumerate([next(iter(loader))] * 200))
-for bi, b in pbar:
-    torch.autograd.set_detect_anomaly(True)
-    pbar.set_description("processing %d" % (bi + 1))
-    lt.train()
-    t, y = lt(b.x, ds.skeleton_, b.batch), (b.y - 1)
-    loss = loss_fn(t, y)
-    optimizer.zero_grad()
-    loss.backward()
-    # check out whether parameter is updated?
-    if show_parameter:
-        for p in lt.parameters():
-            print(p.grad.data.sum())
+with torch.autograd.set_detect_anomaly(True):
+    for bi, b in pbar:
+        pbar.set_description("processing %d" % (bi + 1))
+        lt.train()
+        t, y = lt(b.x, ds.skeleton_, b.batch), (b.y - 1)
+        loss = loss_fn(t, y)
+        optimizer.zero_grad()
+        loss.backward()
+        # check out whether parameter is updated?
+        if show_parameter:
+            for p in lt.parameters():
+                print(p.grad.data.sum())
 
-    optimizer.step()
-    running_loss += loss.item()
-    if bi % 10 == 9:
-        print('[%5d] loss: %.3f' %
-              (bi + 1, running_loss / 10))
-        running_loss = 0.0
-        lt.eval()
-        with torch.no_grad():
-            _, predicted = torch.max(t.data, 1)
-            total += y.size(0)
-            correct += (predicted == y).sum().item()
-        print('\n\t accuracy: %d %%' % (100 * correct / total))
+        optimizer.step()
+        running_loss += loss.item()
+        if bi % 10 == 9:
+            print('[%5d] loss: %.3f' %
+                  (bi + 1, running_loss / 10))
+            running_loss = 0.0
+            lt.eval()
+            with torch.no_grad():
+                _, predicted = torch.max(t.data, 1)
+                total += y.size(0)
+                correct += (predicted == y).sum().item()
+            print('\n\t accuracy: %d %%' % (100 * correct / total))
 
 # print(lt.context_attention.weights)
