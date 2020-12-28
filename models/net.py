@@ -31,6 +31,10 @@ class DualGraphTransformer(nn.Module, ABC):
         self.dropout = drop_rate
         self.trainable_factor = trainable_factor
         channels = [in_channels] + [hidden_channels] * (num_layers - 1) + [out_channels]
+        self.spatial_norms = nn.ModuleList([
+            # nn.BatchNorm1d(channels[i + 1]) for i in range(num_layers)
+            nn.LayerNorm(channels[i + 1]) for i in range(num_layers)
+        ])
         self.spatial_layers = nn.ModuleList([
             HGAConv(in_channels=channels[i],
                     heads=num_heads,
@@ -76,7 +80,7 @@ class DualGraphTransformer(nn.Module, ABC):
                 s = t
                 t = fn.relu(self.temporal_lls[i](t))
                 t = fn.relu(self.temporal_layers[i](t, bi))
-                s = fn.relu(self.spatial_layers[i](s, adj))
+                s = self.spatial_norms[i](fn.relu(self.spatial_layers[i](s, adj)))
                 if self.trainable_factor:
                     factor = torch.sigmoid(self.spatial_factor).to(t.device)
                     t = factor[i] * s + (1. - factor[i]) * t

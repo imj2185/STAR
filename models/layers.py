@@ -332,7 +332,7 @@ class TemporalSelfAttention(nn.Module):
         length_mask = LengthMask(x.new_full((n,), f, dtype=torch.int64))
         x = rearrange(x, 'f n c -> n f c')
         # t = repeat(x, 'n f c -> n f h c', h=self.heads)  # .to(x.device)
-        t = torch.stack([x] * self.heads, dim=-2)
+        t = torch.stack([x.clone()] * self.heads, dim=-2)
         # Run self attention and add it to the input (residual)
         t = self.attention(t, t, t, attn_mask, length_mask, length_mask)
         x += self.dropout(reduce(t, 'n f h c -> n f c', 'mean'))
