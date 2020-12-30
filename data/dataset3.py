@@ -16,7 +16,7 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 
 def gen_bone_data(torch_data, paris, benchmark):
     T, N = torch_data.shape[0], torch_data.shape[1] 
-    bone_data = torch.zeros((T, N, 3),  dtype=torch.float64)
+    bone_data = torch.zeros((T, N, 3),  dtype=torch.float32)
     for v1, v2 in paris[benchmark]:
         if benchmark != 'kinetics':
             v1 -= 1
@@ -95,28 +95,28 @@ def pre_normalization(data, zaxis=[0, 1], xaxis=[8, 4]):
     #print('parallel the bone between hip(jpt 0) and spine(jpt 1) of the first person to the z axis')
     joint_bottom = data[0, zaxis[0]]
     joint_top = data[0, zaxis[1]]
-    axis = torch.cross(joint_top-joint_bottom, torch.tensor([0, 0, 1], dtype=torch.double))
-    angle = torch_angle_between(joint_top - joint_bottom, torch.tensor([0, 0, 1], dtype=torch.double))
+    axis = torch.cross(joint_top-joint_bottom, torch.tensor([0, 0, 1], dtype=torch.float))
+    angle = torch_angle_between(joint_top - joint_bottom, torch.tensor([0, 0, 1], dtype=torch.float))
     matrix_z = torch_rotation_matrix(axis, angle)
 
     for i_f, frame in enumerate(data):
         for i_j, joint in enumerate(frame):
             try:
-                data[i_f, i_j] = torch.matmul(matrix_z.double(), joint)
+                data[i_f, i_j] = torch.matmul(matrix_z.float(), joint)
             except RuntimeError:
                 print("double")
 
     #print('parallel the bone between right shoulder(jpt 8) and left shoulder(jpt 4) of the first person to the x axis')
     joint_rshoulder = data[0, xaxis[0]]
     joint_lshoulder = data[0, xaxis[1]]
-    axis = torch.cross(joint_rshoulder - joint_lshoulder, torch.tensor([1, 0, 0], dtype=torch.double))
-    angle = torch_angle_between(joint_rshoulder - joint_lshoulder, torch.tensor([0, 0, 1], dtype=torch.double))
+    axis = torch.cross(joint_rshoulder - joint_lshoulder, torch.tensor([1, 0, 0], dtype=torch.float))
+    angle = torch_angle_between(joint_rshoulder - joint_lshoulder, torch.tensor([0, 0, 1], dtype=torch.float))
     matrix_x = torch_rotation_matrix(axis, angle)
 
     for i_f, frame in enumerate(data):
         for i_j, joint in enumerate(frame):
             try:
-                data[i_f, i_j] = torch.matmul(matrix_x.double(), joint)
+                data[i_f, i_j] = torch.matmul(matrix_x.float(), joint)
             except RuntimeError:
                 print("double")
 
@@ -286,7 +286,7 @@ class SkeletonDataset(Dataset, ABC):
         action_class = int(filename[filename.find('A') + 1:filename.find('A') + 4])
         seq_info = read_skeleton_filter(file)
         # Create data tensor of shape: (# persons (M), # frames (T), # nodes (V), # channels (C))
-        data = np.zeros((max_body, seq_info['numFrame'], self.num_joints, 3))
+        data = np.zeros((max_body, seq_info['numFrame'], self.num_joints, 3), dtype=np.float32)
         for n, f in enumerate(seq_info['frameInfo']):
             #print("frame: ", n)
             for m, b in enumerate(f['bodyInfo']):
