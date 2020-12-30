@@ -14,6 +14,18 @@ import numpy as np
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 
+def gen_bone_data(torch_data, paris, benchmark):
+    T, N = torch_data.shape[0], torch_data.shape[1] 
+    bone_data = torch.zeros((T, N, 3),  dtype=torch.float64)
+    for v1, v2 in paris[benchmark]:
+        if benchmark != 'kinetics':
+            v1 -= 1
+            v2 -= 1
+        bone_data[:, v1, :] = torch_data[:, v1, :] - torch_data[:, v2, :]
+    
+    torch_data = torch.cat((torch_data, bone_data), 2)
+    return torch_data
+        
 def torch_unit_vector(vector):
     """ Returns the unit vector of the vector.  """
     return vector / torch.linalg.norm(vector)
@@ -108,7 +120,6 @@ def pre_normalization(data, zaxis=[0, 1], xaxis=[8, 4]):
             except RuntimeError:
                 print("double")
 
-    
     return data
 
 def read_skeleton_filter(file):
@@ -221,6 +232,28 @@ class SkeletonDataset(Dataset, ABC):
                      100, 103]
         # For Cross-View benchmark "xview"
         self.training_setup = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 16, 28, 30, 32]
+        self.paris = {
+            'xview': (
+                (1, 2), (2, 21), (3, 21), (4, 3), (5, 21),
+                (6, 5), (7, 6), (8, 7), (9, 21), (10, 9),
+                (11, 10), (12, 11), (13, 1), (14, 13), (15, 14),
+                (16, 15), (17, 1), (18, 17), (19, 18), (20, 19),
+                (22, 23), (21, 21), (23, 8), (24, 25), (25, 12)
+            ),
+            'xsub': (
+                (1, 2), (2, 21), (3, 21), (4, 3), (5, 21),
+                (6, 5), (7, 6), (8, 7), (9, 21), (10, 9),
+                (11, 10), (12, 11), (13, 1), (14, 13), (15, 14),
+                (16, 15), (17, 1), (18, 17), (19, 18), (20, 19),
+                (22, 23), (21, 21), (23, 8), (24, 25), (25, 12)
+            ),
+
+            'kinetics': (
+                (0, 0), (1, 0), (2, 1), (3, 2), (4, 3), (5, 1),
+                (6, 5), (7, 6), (8, 2), (9, 8), (10, 9), (11, 5),
+                (12, 11), (13, 12), (14, 0), (15, 0), (16, 14), (17, 15)
+            )
+        }
         self.max_body_true = 2
 
         print('processed the adjacency matrices of skeleton')
@@ -228,8 +261,8 @@ class SkeletonDataset(Dataset, ABC):
         self.missing_skeleton_path = '/home/dusko/Documents/projects/APBGCN/samples_with_missing_skeletons.txt'
         super(SkeletonDataset, self).__init__(root, transform, pre_transform)
         if 'ntu' in self.name:
-            path = osp.join(self.processed_dir, '{}.pt'.format(self.name))
-            self.data, self.labels = torch.load(path)
+            path = osp.join(self.processed_dir, self.processed_file_names)
+            self.data = torch.load(path)
 
     @property
     def processed_file_names(self):
@@ -271,6 +304,7 @@ class SkeletonDataset(Dataset, ABC):
         torch_data = rearrange(torch_data, 'm f n c -> (m f) n c') # <- always even so you can get person idx
 
         torch_data = pre_normalization(torch_data)
+        torch_data = gen_bone_data(torch_data, self.paris, self.benchmark)
         sparse_data = Data(x=torch_data, y = action_class - 1)
         return sparse_data
 
@@ -323,8 +357,8 @@ class SkeletonDataset(Dataset, ABC):
         for (data) in progress_bar:
             sparse_data_list.append(data)
 
-        torch.save(sparse_data_list, '{}_{}_{}.pt'.format(self.benchmark, self.sample, self.name))
-
+        torch.save(sparse_data_list, osp.join(self.processed_dir,
+                            self.processed_file_names))
     def len(self):
         if 'kinetics' in self.name:
             return len(self.processed_file_names)
@@ -351,10 +385,12 @@ def test():
                         type=str, help='Dataset')
     args = parser.parse_args()
     ds = SkeletonDataset(root=args.root,
-                         name=args.dataset)
+                         name=args.dataset,
+                         benchmark='xsub',
+                         sample='val')
     loader = DataLoader(ds[0: 8], batch_size=4)
     for b in loader:
-        print(b.batch)
+        print(b.x.shape)
 
 
 if __name__ == "__main__":
