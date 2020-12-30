@@ -4,31 +4,33 @@ from abc import ABC
 from functools import partial
 from multiprocessing import Pool
 
-import torch
-from torch_geometric.data import Dataset, Data
-from tqdm import tqdm
-
-from torch_sparse import transpose, spspmm
-from einops import rearrange
 import numpy as np
+import torch
+from einops import rearrange
+from torch_geometric.data import Dataset, Data
+from torch_sparse import spspmm
+from tqdm import tqdm
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 
+
 def gen_bone_data(torch_data, paris, benchmark):
-    T, N = torch_data.shape[0], torch_data.shape[1] 
-    bone_data = torch.zeros((T, N, 3),  dtype=torch.float32)
+    T, N = torch_data.shape[0], torch_data.shape[1]
+    bone_data = torch.zeros((T, N, 3), dtype=torch.float32)
     for v1, v2 in paris[benchmark]:
         if benchmark != 'kinetics':
             v1 -= 1
             v2 -= 1
         bone_data[:, v1, :] = torch_data[:, v1, :] - torch_data[:, v2, :]
-    
+
     torch_data = torch.cat((torch_data, bone_data), 2)
     return torch_data
-        
+
+
 def torch_unit_vector(vector):
     """ Returns the unit vector of the vector.  """
     return vector / torch.linalg.norm(vector)
+
 
 def torch_rotation_matrix(axis, theta):
     """
@@ -37,24 +39,25 @@ def torch_rotation_matrix(axis, theta):
     """
     if torch.abs(axis).sum() < 1e-6 or torch.abs(theta) < 1e-6:
         return torch.eye(3)
-    #axis = axis.tolist()
+    # axis = axis.tolist()
     axis = axis / torch.sqrt(torch.dot(axis, axis))
     a = torch.cos(theta / 2.0)
     b, c, d = -axis * torch.sin(theta / 2.0)
     aa, bb, cc, dd = a * a, b * b, c * c, d * d
     bc, ad, ac, ab, bd, cd = b * c, a * d, a * c, a * b, b * d, c * d
     return torch.tensor([[aa + bb - cc - dd, 2 * (bc + ad), 2 * (bd - ac)],
-                    [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
-                    [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
+                         [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
+                         [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
+
 
 def torch_angle_between(v1, v2):
-    """ Returns the angle in radians between vectors 'v1' and 'v2'::
-            >>> angle_between((1, 0, 0), (0, 1, 0))
-            1.5707963267948966
-            >>> angle_between((1, 0, 0), (1, 0, 0))
-            0.0
-            >>> angle_between((1, 0, 0), (-1, 0, 0))
-            3.141592653589793
+    """ Returns the angle in radians between vectors 'v1' and 'v2':
+        >>> angle_between((1, 0, 0), (0, 1, 0))
+        1.5707963267948966
+        >>> angle_between((1, 0, 0), (1, 0, 0))
+        0.0
+        >>> angle_between((1, 0, 0), (-1, 0, 0))
+        3.141592653589793
     """
     if torch.abs(v1).sum() < 1e-6 or torch.abs(v2).sum() < 1e-6:
         return 0
@@ -62,11 +65,30 @@ def torch_angle_between(v1, v2):
     v2_u = torch_unit_vector(v2)
     return torch.arccos(torch.clip(torch.dot(v1_u, v2_u), -1.0, 1.0))
 
-def pre_normalization(data, zaxis=[0, 1], xaxis=[8, 4]):
 
+def rotate_joints(data, joint_i, joint_j):
+    axis = torch.cross(joint_i - joint_j, torch.tensor([0, 0, 1], dtype=torch.float))
+    angle = torch_angle_between(joint_i - joint_j,
+                                torch.tensor([0, 0, 1],
+                                             dtype=torch.float))
+    rotate_mat = torch_rotation_matrix(axis, angle)
+
+    for i_f, frame in enumerate(data):
+        for i_j, joint in enumerate(frame):
+            try:
+                data[i_f, i_j] = torch.matmul(rotate_mat.float(), joint)
+            except RuntimeError:
+                print("double")
+
+
+def pre_normalization(data, z_axis=None, x_axis=None):
     # `index` of frames that have non-zero nodes
+    if x_axis is None:
+        x_axis = [8, 4]
+    if z_axis is None:
+        z_axis = [0, 1]
     debug_data = data.clone()
-    index = (data.sum(-1).sum(-1) != 0) 
+    index = (data.sum(-1).sum(-1) != 0)
 
     if data.sum() == 0:
         print('empty video without skeleton information')
@@ -75,7 +97,7 @@ def pre_normalization(data, zaxis=[0, 1], xaxis=[8, 4]):
     v1_frame = index[:(len(index) // 2)].sum().item()
     v2_frame = index[(len(index) // 2):].sum().item()
 
-    #print('sub the center joint #1 (spine joint in ntu and neck joint in kinetics)')
+    # print('sub the center joint #1 (spine joint in ntu and neck joint in kinetics)')
     # Use the first person's body center (`1:2` along the nodes dimension)
     main_body_center = data[:v1_frame, 1:2, :].clone()
     # For all `person`, compute the `mask` which is the non-zero channel dimension
@@ -87,51 +109,30 @@ def pre_normalization(data, zaxis=[0, 1], xaxis=[8, 4]):
     elif v1_frame < v2_frame:
         reps = int(np.ceil(v2_frame / v1_frame))
         pad = torch.cat([main_body_center for _ in range(reps)])[:v2_frame]
-        data[v1_frame:] = (data[v1_frame:] - pad) * mask[v1_frame:] 
+        data[v1_frame:] = (data[v1_frame:] - pad) * mask[v1_frame:]
     else:
         data[v1_frame:] = (data[v1_frame:] - main_body_center) * mask[v1_frame:]
 
+    # print('parallel the bone between hip(jpt 0) and spine(jpt 1) of the first person to the z axis')
+    joint_bottom = data[0, z_axis[0]]
+    joint_top = data[0, z_axis[1]]
+    rotate_joints(data, joint_top, joint_bottom)
 
-    #print('parallel the bone between hip(jpt 0) and spine(jpt 1) of the first person to the z axis')
-    joint_bottom = data[0, zaxis[0]]
-    joint_top = data[0, zaxis[1]]
-    axis = torch.cross(joint_top-joint_bottom, torch.tensor([0, 0, 1], dtype=torch.float))
-    angle = torch_angle_between(joint_top - joint_bottom, torch.tensor([0, 0, 1], dtype=torch.float))
-    matrix_z = torch_rotation_matrix(axis, angle)
-
-    for i_f, frame in enumerate(data):
-        for i_j, joint in enumerate(frame):
-            try:
-                data[i_f, i_j] = torch.matmul(matrix_z.float(), joint)
-            except RuntimeError:
-                print("double")
-
-    #print('parallel the bone between right shoulder(jpt 8) and left shoulder(jpt 4) of the first person to the x axis')
-    joint_rshoulder = data[0, xaxis[0]]
-    joint_lshoulder = data[0, xaxis[1]]
-    axis = torch.cross(joint_rshoulder - joint_lshoulder, torch.tensor([1, 0, 0], dtype=torch.float))
-    angle = torch_angle_between(joint_rshoulder - joint_lshoulder, torch.tensor([0, 0, 1], dtype=torch.float))
-    matrix_x = torch_rotation_matrix(axis, angle)
-
-    for i_f, frame in enumerate(data):
-        for i_j, joint in enumerate(frame):
-            try:
-                data[i_f, i_j] = torch.matmul(matrix_x.float(), joint)
-            except RuntimeError:
-                print("double")
+    # print('parallel the bone between right shoulder(jpt 8) and
+    # left shoulder(jpt 4) of the first person to the x axis')
+    joint_r_shoulder = data[0, x_axis[0]]
+    joint_l_shoulder = data[0, x_axis[1]]
+    rotate_joints(data, joint_r_shoulder, joint_l_shoulder)
 
     return data
 
+
 def read_skeleton_filter(file):
     with open(file, 'r') as f:
-        skeleton_sequence = {}
-        skeleton_sequence['numFrame'] = int(f.readline())
-        skeleton_sequence['frameInfo'] = []
+        skeleton_sequence = {'numFrame': int(f.readline()), 'frameInfo': []}
         # num_body = 0
         for t in range(skeleton_sequence['numFrame']):
-            frame_info = {}
-            frame_info['numBody'] = int(f.readline())
-            frame_info['bodyInfo'] = []
+            frame_info = {'numBody': int(f.readline()), 'bodyInfo': []}
 
             for m in range(frame_info['numBody']):
                 body_info = {}
@@ -162,6 +163,7 @@ def read_skeleton_filter(file):
 
     return skeleton_sequence
 
+
 def get_nonzero_std(s):
     # `s` has shape (T, V, C)
     # Select valid frames where sum of all nodes is nonzero
@@ -173,8 +175,10 @@ def get_nonzero_std(s):
         s = 0
     return s
 
+
 def num_processes():
     return os.cpu_count() - 4
+
 
 def skeleton_parts(num_joints=25, dataset='ntu'):
     if 'ntu' in dataset:
@@ -202,6 +206,7 @@ def skeleton_parts(num_joints=25, dataset='ntu'):
                       power_adj(sk_adj, max(num_joints, max(sk_adj[1]) + 1), 2),
                       power_adj(sk_adj, max(num_joints, max(sk_adj[1]) + 1), 3)], dim=1)
 
+
 def power_adj(adj, dim, p):
     val = torch.ones(adj.shape[1])
     ic, vc = spspmm(adj, val, adj, val, dim, dim, dim)
@@ -209,6 +214,14 @@ def power_adj(adj, dim, p):
         for i in range(p - 2):
             ic, vc = spspmm(ic, vc, adj, val, dim, dim, dim)
     return ic
+
+
+def resolve_filename(name):
+    action_class = int(name[name.find('A') + 1:name.find('A') + 4])
+    subject_id = int(name[name.find('P') + 1:name.find('P') + 4])
+    camera_id = int(name[name.find('C') + 1:name.find('C') + 4])
+    setup_id = int(name[name.find('S') + 1:name.find('S') + 4])
+    return action_class, subject_id, camera_id, setup_id
 
 
 class SkeletonDataset(Dataset, ABC):
@@ -220,16 +233,18 @@ class SkeletonDataset(Dataset, ABC):
                  pre_transform=None,
                  benchmark='xsub',
                  sample='train'):
-        self.name = name # ntu ntu120 kinetics
+        self.name = name  # ntu ntu120 kinetics
         self.benchmark = benchmark
         self.sample = sample
 
         self.num_joints = 25 if 'ntu' in self.name else 18
         self.skeleton_ = skeleton_parts(num_joints=self.num_joints,
                                         dataset=self.name)
-        self.training_subjects = [1, 2, 4, 5, 8, 9, 13, 14, 15, 16, 17, 18, 19, 25, 27, 28, 31, 34, 35, 38, 45, 46, 47, 49, 50, 52,
-                     53, 54, 55, 56, 57, 58, 59, 70, 74, 78, 80, 81, 82, 83, 84, 85, 86, 89, 91, 92, 93, 94, 95, 97, 98,
-                     100, 103]
+        self.training_subjects = [1, 2, 4, 5, 8, 9, 13, 14, 15, 16, 17, 18, 19, 25, 27, 28, 31, 34, 35, 38, 45, 46, 47,
+                                  49, 50, 52,
+                                  53, 54, 55, 56, 57, 58, 59, 70, 74, 78, 80, 81, 82, 83, 84, 85, 86, 89, 91, 92, 93,
+                                  94, 95, 97, 98,
+                                  100, 103]
         # For Cross-View benchmark "xview"
         self.training_setup = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 16, 28, 30, 32]
         self.paris = {
@@ -258,7 +273,8 @@ class SkeletonDataset(Dataset, ABC):
 
         print('processed the adjacency matrices of skeleton')
         self.use_motion_vector = use_motion_vector
-        self.missing_skeleton_path = '/home/dusko/Documents/projects/APBGCN/samples_with_missing_skeletons.txt'
+        self.missing_skeleton_path = osp.join(os.getcwd(),
+                                              'samples_with_missing_skeletons.txt')
         super(SkeletonDataset, self).__init__(root, transform, pre_transform)
         if 'ntu' in self.name:
             path = osp.join(self.processed_dir, self.processed_file_names)
@@ -288,9 +304,9 @@ class SkeletonDataset(Dataset, ABC):
         # Create data tensor of shape: (# persons (M), # frames (T), # nodes (V), # channels (C))
         data = np.zeros((max_body, seq_info['numFrame'], self.num_joints, 3), dtype=np.float32)
         for n, f in enumerate(seq_info['frameInfo']):
-            #print("frame: ", n)
+            # print("frame: ", n)
             for m, b in enumerate(f['bodyInfo']):
-                #print("person: ", m)
+                # print("person: ", m)
                 for j, v in enumerate(b['jointInfo']):
                     if m < max_body and j < self.num_joints:
                         data[m, n, j, :] = [v['x'], v['y'], v['z']]
@@ -299,17 +315,17 @@ class SkeletonDataset(Dataset, ABC):
         energy = np.array([get_nonzero_std(x) for x in data])
         index = energy.argsort()[::-1][0:self.max_body_true]
         data = data[index]
-            
+
         torch_data = torch.from_numpy(data)
-        torch_data = rearrange(torch_data, 'm f n c -> (m f) n c') # <- always even so you can get person idx
+        torch_data = rearrange(torch_data, 'm f n c -> (m f) n c')  # <- always even so you can get person idx
 
         torch_data = pre_normalization(torch_data)
         torch_data = gen_bone_data(torch_data, self.paris, self.benchmark)
-        sparse_data = Data(x=torch_data, y = action_class - 1)
+        sparse_data = Data(x=torch_data, y=action_class - 1)
         return sparse_data
 
     def process(self):
-        if self.missing_skeleton_path != None:
+        if self.missing_skeleton_path is not None:
             with open(self.missing_skeleton_path, 'r') as f:
                 ignored_samples = [line.strip() + '.skeleton' for line in f.readlines()]
         else:
@@ -324,33 +340,31 @@ class SkeletonDataset(Dataset, ABC):
             if filename in ignored_samples:
                 print("Found a missing skeleton!")
                 continue
-            action_class = int(filename[filename.find('A') + 1:filename.find('A') + 4])
-            subject_id = int(filename[filename.find('P') + 1:filename.find('P') + 4])
-            camera_id = int(filename[filename.find('C') + 1:filename.find('C') + 4])
-            setup_id = int(filename[filename.find('S') + 1:filename.find('S') + 4])
+
+            action_class, subject_id, camera_id, setup_id = resolve_filename(filename)
 
             if self.benchmark == 'xview':
-                istraining = (setup_id in self.training_setup)
+                is_training = (setup_id in self.training_setup)
             elif self.benchmark == 'xsub':
-                istraining = (subject_id in self.training_subjects)
+                is_training = (subject_id in self.training_subjects)
             else:
                 raise ValueError('Invalid benchmark provided: {}'.format(self.benchmark))
 
             if self.sample == 'train':
-                issample = istraining
+                is_sample = is_training
             elif self.sample == 'val':
-                issample = not (istraining)
+                is_sample = not is_training
             else:
                 raise ValueError('Invalid data part provided: {}'.format(self.sample))
 
-            if issample:
+            if is_sample:
                 sample_name.append(file)
                 sample_label.append(action_class - 1)
 
         pool = Pool(processes=num_processes())
         partial_func = partial(self.read_xyz,
-                            max_body=4)
-                            
+                               max_body=4)
+
         progress_bar = tqdm(pool.imap(func=partial_func, iterable=sample_name),
                             total=len(sample_name))
 
@@ -358,7 +372,8 @@ class SkeletonDataset(Dataset, ABC):
             sparse_data_list.append(data)
 
         torch.save(sparse_data_list, osp.join(self.processed_dir,
-                            self.processed_file_names))
+                                              self.processed_file_names))
+
     def len(self):
         if 'kinetics' in self.name:
             return len(self.processed_file_names)
@@ -379,7 +394,8 @@ def test():
     from argparse import ArgumentParser
     from torch_geometric.data import DataLoader
     parser = ArgumentParser()
-    parser.add_argument('--root', dest='root', default='/home/dusko/Documents/projects/APBGCN',
+    parser.add_argument('--root', dest='root',
+                        default=osp.join(os.getcwd(), 'dataset', 'ntu_60'),
                         type=str, help='Dataset')
     parser.add_argument('--dataset', dest='dataset', default='ntu_60',
                         type=str, help='Dataset')

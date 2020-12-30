@@ -1,14 +1,31 @@
+from argparse import ArgumentParser
+
 import torch
 from torch.nn import CrossEntropyLoss
 from torch.optim import Adam
 from torch_geometric.data import DataLoader
 
-from data.dataset2 import SkeletonDataset
+from data.dataset3 import SkeletonDataset
 from models.net import DualGraphTransformer
 from tqdm import tqdm
 
-ds = SkeletonDataset(root='dataset/ntu_60',
-                     name='ntu')
+import os.path as osp
+import os
+
+
+parser = ArgumentParser()
+parser.add_argument('--root', dest='root',
+                    default=osp.join(os.getcwd(), 'dataset', 'ntu_60'),
+                    type=str, help='Dataset')
+parser.add_argument('--dataset', dest='dataset', default='ntu_60',
+                    type=str, help='Dataset')
+args = parser.parse_args()
+
+ds = SkeletonDataset(root=args.root,
+                     name=args.dataset,
+                     benchmark='xsub',
+                     sample='val')
+
 loader = DataLoader(ds, batch_size=8, shuffle=True)
 c = ds[0].x.shape[-1]
 # b = next(iter(loader))
