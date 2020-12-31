@@ -13,10 +13,10 @@ from torch import Tensor
 from torch.nn import Parameter, Linear, Dropout, LayerNorm
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.nn.inits import glorot, zeros
-from torch_geometric.utils import remove_self_loops, add_self_loops, softmax
+from torch_geometric.utils import remove_self_loops, add_self_loops  # , softmax
 from torch_scatter import scatter_mean
 
-from utility.linalg import batched_spmm, batched_transpose, BatchedMask
+from utility.linalg import batched_spmm, batched_transpose, BatchedMask, softmax
 
 
 def clones(module, k):
@@ -110,12 +110,13 @@ class HGAConv(MessagePassing):
 
     def _attention(self, adj, score):  # score: [num_edges, heads]
         alpha = fn.leaky_relu(score, self.negative_slope)
-        if len(alpha.shape) == 2:
-            alpha = softmax(alpha, adj[1])
-        else:
-            c = alpha.shape[-1]
-            al = softmax(rearrange(alpha, 'b n c -> n (b c)'), adj[1])
-            alpha = rearrange(al, 'n (b c) -> b n c', c=c)
+        # if len(alpha.shape) == 2:
+        #     alpha = softmax(alpha, adj[1])
+        # else:
+        #     c = alpha.shape[-1]
+        #     al = softmax(rearrange(alpha, 'b n c -> n (b c)'), adj[1])
+        #     alpha = rearrange(al, 'n (b c) -> b n c', c=c)
+        alpha = softmax(alpha, index=adj[1])  # , num_nodes=alpha.shape[-2])
         self._alpha = alpha
         return fn.dropout(alpha, p=self.dropout, training=self.training)
 

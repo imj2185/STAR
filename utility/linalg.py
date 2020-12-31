@@ -1,20 +1,54 @@
+from typing import Optional
 import torch
 from torch import Tensor
 from torch_geometric.utils.num_nodes import maybe_num_nodes
 from torch_sparse import transpose, spspmm  # , spmm
-from torch_scatter import scatter_add
+from torch_scatter import scatter_add, scatter
 import torch.functional as fn
 from einops import rearrange, repeat
 from fast_transformers.masking import BaseMask, FullMask
 
 
 def power_adj(adj, dim, p):
-    val = torch.ones(adj.shape[1])
-    ic, vc = spspmm(adj, val, adj, val, dim, dim, dim)
+    nnz = torch.ones(adj.shape[1])
+    ic, vc = spspmm(adj, nnz, adj, nnz, dim, dim, dim)
     if p > 2:
-        for i in range(p - 2):
-            ic, vc = spspmm(ic, vc, adj, val, dim, dim, dim)
+        for _ in range(p - 2):
+            ic, vc = spspmm(ic, vc, adj, nnz, dim, dim, dim)
     return ic
+
+
+def softmax(src: Tensor,
+            index: Optional[Tensor],
+            ptr: Optional[Tensor] = None,
+            num_nodes: Optional[int] = None) -> Tensor:
+    r"""Computes a sparsely evaluated softmax.
+    Given a value tensor :attr:`src`, this function first groups the values
+    along the first dimension based on the indices specified in :attr:`index`,
+    and then proceeds to compute the softmax individually for each group.
+
+    Args:
+        src (Tensor): The source tensor.
+        index (LongTensor): The indices of elements for applying the softmax.
+        ptr (LongTensor, optional): If given, computes the softmax based on
+            sorted inputs in CSR representation. (default: :obj:`None`)
+        num_nodes (int, optional): The number of nodes, *i.e.*
+            :obj:`max_val + 1` of :attr:`index`. (default: :obj:`None`)
+
+    :rtype: :class:`Tensor`
+    """
+    out = src
+    if src.numel() > 0:
+        out = out - src.max()
+    out = out.exp()
+
+    if index is not None:
+        n = maybe_num_nodes(index, num_nodes)
+        out_sum = scatter(out, index, dim=-2, dim_size=n, reduce='sum')[..., index, :]
+    else:
+        raise NotImplementedError
+
+    return out / (out_sum + 1e-16)
 
 
 def _spmm(indices, nz, m, n, d):

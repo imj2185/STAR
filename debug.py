@@ -11,6 +11,7 @@ from tqdm import tqdm
 
 import os.path as osp
 import os
+from torchviz import make_dot
 
 
 parser = ArgumentParser()
@@ -46,6 +47,11 @@ lt = DualGraphTransformer(in_channels=c,
                           out_channels=16,
                           sequential=False,
                           num_layers=3)
+
+b = next(iter(loader))
+
+make_dot(lt(b.x, ds.skeleton_, b.batch), params=dict(lt.named_parameters()))
+
 loss_fn = CrossEntropyLoss()
 optimizer = Adam(lt.parameters(),
                  lr=1e-3,
@@ -55,13 +61,14 @@ running_loss = 0.0
 show_parameter = False
 total = 0
 correct = 0
+
 print('start training')
 pbar = tqdm(enumerate([next(iter(loader))] * 200))
 with torch.autograd.set_detect_anomaly(True):
     for bi, b in pbar:
         pbar.set_description("processing %d" % (bi + 1))
         lt.train()
-        t, y = lt(b.x, ds.skeleton_, b.batch), (b.y - 1)
+        t, y = lt(b.x, ds.skeleton_, b.batch), b.y
         loss = loss_fn(t, y)
         optimizer.zero_grad()
         loss.backward()
