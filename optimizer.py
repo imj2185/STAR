@@ -33,8 +33,8 @@ class NoamOpt(object):
 
 
 def get_std_opt(model, args):
-    channels = [int(n) for n in args.encoder_channels.split(',')]
-    return NoamOpt(channels[2],  # TODO num_nodes is not fixed
+    #channels = [int(n) for n in args.encoder_channels.split(',')]
+    return NoamOpt(args.model_dim,  # TODO num_nodes is not fixed
                    args.opt_train_factor,
                    args.warmup_steps,
                    opt.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.98), eps=1e-9,
