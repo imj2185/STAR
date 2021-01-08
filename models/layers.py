@@ -312,18 +312,19 @@ class PositionalEncoding(nn.Module):
             sequence
         :param seq_len (int): the length of token sequence
         :param model_dim (int): the dimension of the token (feature channel length)
-        :param device (torch.device): 
+        :param device (torch.device):
         """
         super(PositionalEncoding, self).__init__()
         self.sequence_length = seq_len
         self.model_dim = model_dim
         self.device = device
 
-    def forward(self) -> Tensor:
+    def forward(self, x) -> Tensor:
         pos = torch.arange(self.sequence_length, dtype=torch.float, device=self.device).reshape(1, -1, 1)
         dim = torch.arange(self.model_dim, dtype=torch.float, device=self.device).reshape(1, 1, -1)
         phase = (pos / 1e4) ** (dim // self.model_dim)
-        return torch.where(dim.long() % 2 == 0, torch.sin(phase), torch.cos(phase))
+        assert x.shape[-2] == self.sequence_length and x.shape[-1] == self.model_dim
+        return x + torch.where(dim.long() % 2 == 0, torch.sin(phase), torch.cos(phase))
 
 
 class TemporalSelfAttention(nn.Module):
