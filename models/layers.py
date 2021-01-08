@@ -306,6 +306,14 @@ class PositionalEncoding(nn.Module):
                  seq_len: int,
                  model_dim: int,
                  device: torch.device = torch.device("cuda:0")):
+        """ Positional Encoding
+            This kind of encoding uses the trigonometric functions to
+            incorporate the relative position information into the input
+            sequence
+        :param seq_len (int): the length of token sequence
+        :param model_dim (int): the dimension of the token (feature channel length)
+        :param device (torch.device): 
+        """
         super(PositionalEncoding, self).__init__()
         self.sequence_length = seq_len
         self.model_dim = model_dim
