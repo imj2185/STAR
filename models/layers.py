@@ -301,6 +301,23 @@ class GlobalContextAttention(nn.Module):
         return scatter_mean(gc_ * x, index=batch_index, dim=1)
 
 
+class PositionalEncoding(nn.Module):
+    def __init__(self,
+                 seq_len: int,
+                 model_dim: int,
+                 device: torch.device = torch.device("cuda:0")):
+        super(PositionalEncoding, self).__init__()
+        self.sequence_length = seq_len
+        self.model_dim = model_dim
+        self.device = device
+
+    def forward(self) -> Tensor:
+        pos = torch.arange(self.sequence_length, dtype=torch.float, device=self.device).reshape(1, -1, 1)
+        dim = torch.arange(self.model_dim, dtype=torch.float, device=self.device).reshape(1, 1, -1)
+        phase = (pos / 1e4) ** (dim // self.model_dim)
+        return torch.where(dim.long() % 2 == 0, torch.sin(phase), torch.cos(phase))
+
+
 class TemporalSelfAttention(nn.Module):
     def __init__(self, in_channels, hid_channels, heads=8,
                  activation="relu", is_linear=True, dropout=0.1):
