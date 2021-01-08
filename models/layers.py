@@ -120,10 +120,7 @@ class HGAConv(MessagePassing):
         self._alpha = alpha
         return fn.dropout(alpha, p=self.dropout, training=self.training)
 
-    def message_and_aggregate(self,
-                              adj,
-                              x,
-                              score):
+    def message_and_aggregate(self, adj, x, score):
         """
         Args:
             adj:   Tensor or list(Tensor)
@@ -303,24 +300,22 @@ class GlobalContextAttention(nn.Module):
 
 class PositionalEncoding(nn.Module):
     def __init__(self,
-                 seq_len: int,
                  model_dim: int,
                  device: torch.device = torch.device("cuda:0")):
         """ Positional Encoding
             This kind of encoding uses the trigonometric functions to
             incorporate the relative position information into the input
             sequence
-        :param seq_len (int): the length of token sequence
         :param model_dim (int): the dimension of the token (feature channel length)
         :param device (torch.device):
         """
         super(PositionalEncoding, self).__init__()
-        self.sequence_length = seq_len
         self.model_dim = model_dim
         self.device = device
 
     def forward(self, x) -> Tensor:
-        pos = torch.arange(self.sequence_length, dtype=torch.float, device=self.device).reshape(1, -1, 1)
+        sequence_length = x.shape[-2]
+        pos = torch.arange(sequence_length, dtype=torch.float, device=self.device).reshape(1, -1, 1)
         dim = torch.arange(self.model_dim, dtype=torch.float, device=self.device).reshape(1, 1, -1)
         phase = (pos / 1e4) ** (dim // self.model_dim)
         assert x.shape[-2] == self.sequence_length and x.shape[-1] == self.model_dim
