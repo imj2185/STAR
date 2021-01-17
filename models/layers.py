@@ -5,12 +5,12 @@ from typing import Union, Tuple, Any
 import torch
 import torch.nn as nn
 import torch.nn.functional as fn
-from einops import rearrange, reduce, repeat
+from einops import rearrange, reduce
 from fast_transformers.attention.full_attention import FullAttention
 from fast_transformers.attention.linear_attention import LinearAttention
 from fast_transformers.masking import FullMask, LengthMask
 from torch import Tensor
-from torch.nn import Parameter, Linear, Dropout, LayerNorm
+from torch.nn import Parameter, Linear, Dropout
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.nn.inits import glorot, zeros
 from torch_geometric.utils import remove_self_loops, add_self_loops  # , softmax
@@ -302,30 +302,35 @@ class GlobalContextAttention(nn.Module):
 
 class PositionalEncoding(nn.Module):
     def __init__(self,
-                 model_dim: int,
-                 device: torch.device = torch.device("cuda:0")):
+                 model_dim: int):
         """ Positional Encoding
             This kind of encoding uses the trigonometric functions to
             incorporate the relative position information into the input
             sequence
         :param model_dim (int): the dimension of the token (feature channel length)
-        :param device (torch.device):
         """
         super(PositionalEncoding, self).__init__()
         self.model_dim = model_dim
-        self.device = device
 
     def forward(self, x) -> Tensor:
         sequence_length = x.shape[-2]
-        pos = torch.arange(sequence_length, dtype=torch.float, device=self.device).reshape(1, -1, 1)
-        dim = torch.arange(self.model_dim, dtype=torch.float, device=self.device).reshape(1, 1, -1)
+        pos = torch.arange(sequence_length, dtype=torch.float, device=x.device).reshape(1, -1, 1)
+        dim = torch.arange(self.model_dim, dtype=torch.float, device=x.device).reshape(1, 1, -1)
         phase = (pos / 1e4) ** (dim // self.model_dim)
         assert x.shape[-2] == sequence_length and x.shape[-1] == self.model_dim
         return x + torch.where(dim.long() % 2 == 0, torch.sin(phase), torch.cos(phase))
 
+
 class TemporalSelfAttention(nn.Module):
-    def __init__(self, in_channels, hid_channels, out_channels, heads=8,
-                 activation="relu", is_linear=True, dropout=0.1):
+    def __init__(self,
+                 in_channels,
+                 hid_channels,
+                 out_channels,
+                 heads=8,
+                 use_pos_encode=False,
+                 activation="relu",
+                 is_linear=True,
+                 dropout=0.1):
         super(TemporalSelfAttention, self).__init__()
         self.in_channels = in_channels
         self.hid_channels = hid_channels or 4 * in_channels
@@ -333,6 +338,7 @@ class TemporalSelfAttention(nn.Module):
         self.heads = heads
         self.is_linear = is_linear
 
+        self.pos_encode = PositionalEncoding(model_dim=in_channels) if use_pos_encode else None
         if is_linear:
             self.attention = LinearAttention(in_channels)
         else:
@@ -341,11 +347,6 @@ class TemporalSelfAttention(nn.Module):
         self.lin_q = Linear(in_channels, hid_channels)
         self.lin_k = Linear(in_channels, hid_channels)
         self.lin_v = Linear(in_channels, hid_channels)
-        #self.fc = Linear(hid_channels, out_channels)
-
-        #self.norm_q = LayerNorm(in_channels)
-        #self.norm_v = LayerNorm(in_channels)
-
         self.dropout = Dropout(dropout)
         self.activation = fn.relu if activation == "relu" else fn.gelu
 
@@ -358,6 +359,9 @@ class TemporalSelfAttention(nn.Module):
         """
         f, n, c = x.shape
 
+        x = rearrange(x, 'f n c -> n f c')
+        if self.pos_encode is not None:
+            x = self.pos_encode(x)
         q, k, v = x, x, x
 
         query = self.lin_q(q)
@@ -367,12 +371,7 @@ class TemporalSelfAttention(nn.Module):
         attn_mask = FullMask(f, device=x.device) if self.is_linear else BatchedMask(bi)
         length_mask = LengthMask(x.new_full((n,), f, dtype=torch.int64))
 
-        query = rearrange(query, 'f n c -> n f c')
-        key = rearrange(key, 'f n c -> n f c')
-        value = rearrange(value, 'f n c -> n f c')
-
-        # t = repeat(x, 'n f c -> n f h c', h=self.heads)  # .to(x.device)
-        #t = torch.stack([x.clone()] * self.heads, dim=-2)
+        # Split heads
         query = rearrange(query, 'n f (h c) -> n f h c', h=self.heads)
         key = rearrange(key, 'n f (h c) -> n f h c', h=self.heads)
         value = rearrange(value, 'n f (h c) -> n f h c', h=self.heads)
@@ -382,6 +381,7 @@ class TemporalSelfAttention(nn.Module):
         t = rearrange(t, 'f n h c -> n f (h c)')
         return t
 
+
 class AddNorm(nn.Module):
     def __init__(self, normalized_shape, dropout, **kwargs):
         super(AddNorm, self).__init__(**kwargs)
@@ -390,6 +390,7 @@ class AddNorm(nn.Module):
 
     def forward(self, x, y):
         return self.ln(self.dropout(y) + x)
+
 
 class MLP(nn.Module):
     def __init__(self,
@@ -404,7 +405,7 @@ class MLP(nn.Module):
         self.num_layers = num_layers
         channels = [in_channels] + \
                    [hid_channels] * (num_layers - 1) + \
-                   [out_channels] # [64, 64, 64]
+                   [out_channels]  # [64, 64, 64]
 
         self.layers = nn.ModuleList([
             nn.Linear(in_features=channels[i],
@@ -417,14 +418,15 @@ class MLP(nn.Module):
             x = fn.relu(self.layers[i](x))
         return self.layers[-1](x)
 
+
 class TransformerEncoder(nn.Module):
-    def __init__(self, 
+    def __init__(self,
                  in_channels=6,
                  out_channels=64,
                  hid_channels=64,
                  heads=8,
-                 activation="relu", 
-                 is_linear=False, 
+                 activation="relu",
+                 is_linear=False,
                  dropout=0.1):
         super(TransformerEncoder, self).__init__()
         self.in_channels = in_channels
@@ -433,19 +435,17 @@ class TransformerEncoder(nn.Module):
         self.heads = heads
         self.is_linear = is_linear
         self.dropout = dropout
-        #self.posencode = PositionalEncoding(self.in_channels)
-        self.multihead = TemporalSelfAttention(self.in_channels, self.hid_channels, self.out_channels, self.heads, self.is_linear)
-        self.addnorm1 = AddNorm(self.out_channels, self.dropout)
-        self.addnorm2 = AddNorm(self.out_channels, self.dropout)
+        self.multi_head_attn = TemporalSelfAttention(in_channels=self.in_channels,
+                                                     hid_channels=self.hid_channels,
+                                                     out_channels=self.out_channels,
+                                                     heads=self.heads,
+                                                     is_linear=self.is_linear)
+        self.add_norm_att = AddNorm(self.out_channels, self.dropout)
+        self.add_norm_mlp = AddNorm(self.out_channels, self.dropout)
         self.mlp = MLP(self.out_channels, self.out_channels, self.hid_channels)
 
     def forward(self, x, bi=None):
-        #x = self.posencode(x)
-        x = self.addnorm1(x, self.multihead(x, bi))
-        x = self.addnorm2(x, self.mlp(x))
+        x = self.add_norm_att(x, self.multi_head_attn(x, bi))
+        x = self.add_norm_mlp(x, self.mlp(x))
         x = rearrange(x, 'n f c -> f n c')
         return x
-
-
-
-

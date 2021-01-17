@@ -6,7 +6,7 @@ import torch.nn.functional as fn
 # from third_party.performer import SelfAttention
 from einops import rearrange
 
-from .layers import HGAConv, GlobalContextAttention, TemporalSelfAttention
+from .layers import HGAConv, GlobalContextAttention, TemporalSelfAttention, PositionalEncoding
 
 
 class DualGraphTransformer(nn.Module, ABC):
@@ -53,6 +53,7 @@ class DualGraphTransformer(nn.Module, ABC):
                                   hid_channels=channels_[i + 1],
                                   is_linear=linear_temporal,
                                   heads=num_heads,
+                                  use_pos_encode=(i == 0),
                                   dropout=drop_rate) for i in range(num_layers)])
 
         self.context_attention = GlobalContextAttention(in_channels=out_channels)
