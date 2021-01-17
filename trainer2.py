@@ -155,10 +155,12 @@ if __name__ == '__main__':
 
     # log_dir = '/home/mdl/tqs5537/TAPBGCN/log/ntu_60/cs_without_MV_8'
     log_dir = args.log_dir
-    # train_dataset = SkeletonDataset(root="/home/mdl/tqs5537/TAPBGCN/ntu_60", name='ntu_cs_train_test_without_MV', use_motion_vector=False,
-    #                                benchmark='cs', sample='train')
-    # valid_dataset = SkeletonDataset(root="/home/mdl/tqs5537/TAPBGCN/ntu_60", name='ntu_cs_val_test_without_MV', use_motion_vector=False,
-    #                                benchmark='cs', sample='val')
+    # train_dataset = SkeletonDataset(root="/home/mdl/tqs5537/TAPBGCN/ntu_60",
+    #                                 name='ntu_cs_train_test_without_MV', use_motion_vector=False,
+    #                                 benchmark='cs', sample='train')
+    # valid_dataset = SkeletonDataset(root="/home/mdl/tqs5537/TAPBGCN/ntu_60",
+    #                                 name='ntu_cs_val_test_without_MV', use_motion_vector=False,
+    #                                 benchmark='cs', sample='val')
 
     train_dataset = SkeletonDataset(root="/home/project/gcn/kinetic/kinetics-skeleton/kinetics_train",
                                     name='kinetics_train_test_without_MV', use_motion_vector=False,

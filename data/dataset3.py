@@ -299,7 +299,7 @@ class SkeletonDataset(Dataset, ABC):
 
     def read_xyz(self, file, max_body=4):  # 取了前两个body
         filename = osp.split(file)[-1]
-        action_class = int(filename[filename.find('A') + 1:filename.find('A') + 4])
+        action_class = int(filename[filename.find('A') + 1: filename.find('A') + 4])
         seq_info = read_skeleton_filter(file)
         # Create data tensor of shape: (# persons (M), # frames (T), # nodes (V), # channels (C))
         data = np.zeros((max_body, seq_info['numFrame'], self.num_joints, 3), dtype=np.float32)

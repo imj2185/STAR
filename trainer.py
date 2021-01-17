@@ -50,7 +50,7 @@ class GCNTrainer(object):
                 batch = batch.to(self.device)
                 self.optimizer.zero_grad()
                 output = self.model(batch.x, adj=self.adj, bi=batch.batch)
-                target = batch.y - 1
+                target = batch.y  # - 1
                 # one_hot = fn.one_hot(target.long(), num_classes = 60)
 
                 # loss = fn.cross_entropy(output, one_hot)
