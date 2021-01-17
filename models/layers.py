@@ -120,7 +120,10 @@ class HGAConv(MessagePassing):
         self._alpha = alpha
         return fn.dropout(alpha, p=self.dropout, training=self.training)
 
-    def message_and_aggregate(self, adj, x, score):
+    def message_and_aggregate(self,
+                              adj,
+                              x,
+                              score):
         """
         Args:
             adj:   Tensor or list(Tensor)
@@ -286,7 +289,6 @@ class GlobalContextAttention(nn.Module):
 
     def forward(self, x, batch_index):
         """
-
         :param x: tensor(joints, frames, channels)
         :param batch_index: batch index
         :return: reduced tensor
@@ -318,16 +320,16 @@ class PositionalEncoding(nn.Module):
         pos = torch.arange(sequence_length, dtype=torch.float, device=self.device).reshape(1, -1, 1)
         dim = torch.arange(self.model_dim, dtype=torch.float, device=self.device).reshape(1, 1, -1)
         phase = (pos / 1e4) ** (dim // self.model_dim)
-        assert x.shape[-2] == self.sequence_length and x.shape[-1] == self.model_dim
+        assert x.shape[-2] == sequence_length and x.shape[-1] == self.model_dim
         return x + torch.where(dim.long() % 2 == 0, torch.sin(phase), torch.cos(phase))
 
-
 class TemporalSelfAttention(nn.Module):
-    def __init__(self, in_channels, hid_channels, heads=8,
+    def __init__(self, in_channels, hid_channels, out_channels, heads=8,
                  activation="relu", is_linear=True, dropout=0.1):
         super(TemporalSelfAttention, self).__init__()
         self.in_channels = in_channels
         self.hid_channels = hid_channels or 4 * in_channels
+        self.out_channels = out_channels
         self.heads = heads
         self.is_linear = is_linear
 
@@ -335,10 +337,15 @@ class TemporalSelfAttention(nn.Module):
             self.attention = LinearAttention(in_channels)
         else:
             self.attention = FullAttention(attention_dropout=dropout)
+
         self.lin_q = Linear(in_channels, hid_channels)
-        self.lin_v = Linear(hid_channels, in_channels)
-        self.norm_q = LayerNorm(in_channels)
-        self.norm_v = LayerNorm(in_channels)
+        self.lin_k = Linear(in_channels, hid_channels)
+        self.lin_v = Linear(in_channels, hid_channels)
+        #self.fc = Linear(hid_channels, out_channels)
+
+        #self.norm_q = LayerNorm(in_channels)
+        #self.norm_v = LayerNorm(in_channels)
+
         self.dropout = Dropout(dropout)
         self.activation = fn.relu if activation == "relu" else fn.gelu
 
@@ -350,146 +357,95 @@ class TemporalSelfAttention(nn.Module):
         :return:
         """
         f, n, c = x.shape
+
+        q, k, v = x, x, x
+
+        query = self.lin_q(q)
+        key = self.lin_k(k)
+        value = self.lin_v(v)
+
         attn_mask = FullMask(f, device=x.device) if self.is_linear else BatchedMask(bi)
         length_mask = LengthMask(x.new_full((n,), f, dtype=torch.int64))
-        x = rearrange(x, 'f n c -> n f c')
-        # t = repeat(x, 'n f c -> n f h c', h=self.heads)  # .to(x.device)
-        t = torch.stack([x.clone()] * self.heads, dim=-2)
-        # Run self attention and add it to the input (residual)
-        t = self.attention(t, t, t, attn_mask, length_mask, length_mask)
-        x += self.dropout(reduce(t, 'n f h c -> n f c', 'mean'))
-        # Run the fully connected part of the layer
-        y = x = self.norm_q(x)
-        y = self.dropout(self.activation(self.lin_q(y)))
-        y = self.dropout(self.lin_v(y))
-        return rearrange(self.norm_v(x + y), 'n f c -> f n c')
 
-# class DotProductAttention(nn.Module, ABC):
-#     def __init__(self, dropout, **kwargs):
-#         super(DotProductAttention, self).__init__(**kwargs)
-#         self.dropout = nn.Dropout(dropout)
-#
-#     # `query`: (`batch_size`, #queries, `d`)
-#     # `key`: (`batch_size`, #kv_pairs, `d`)
-#     # `value`: (`batch_size`, #kv_pairs, `dim_v`)
-#     # `valid_len`: either (`batch_size`, ) or (`batch_size`, xx)
-#     def forward(self, query, key, value, valid_len=None):
-#         d = query.shape[-1]
-#         # Set transpose_b=True to swap the last two dimensions of key
-#         scores = torch.bmm(query, key.transpose(1, 2)) / math.sqrt(d)
-#         attention_weights = self.dropout(masked_softmax(scores, valid_len))
-#         return torch.bmm(attention_weights, value)
-#
-#
-# class MultiHeadAttention(nn.Module, ABC):
-#     def __init__(self,
-#                  key_size,
-#                  query_size,
-#                  value_size,
-#                  num_hidden,
-#                  num_heads,
-#                  dropout,
-#                  bias=False,
-#                  **kwargs):
-#         super(MultiHeadAttention, self).__init__(**kwargs)
-#         self.num_heads = num_heads
-#         self.attention = DotProductAttention(dropout)
-#         self.wq = nn.Linear(query_size, num_hidden, bias=bias)
-#         self.wk = nn.Linear(key_size, num_hidden, bias=bias)
-#         self.wv = nn.Linear(value_size, num_hidden, bias=bias)
-#         self.wo = nn.Linear(num_hidden, num_hidden, bias=bias)
-#
-#     def forward(self, query, key, value, valid_len):
-#         # For self-attention, `query`, `key`, and `value` shape:
-#         # (`batch_size`, `seq_len`, `dim`), where `seq_len` is the length of
-#         # input sequence. `valid_len` shape is either (`batch_size`, ) or
-#         # (`batch_size`, `seq_len`).
-#
-#         # Project and transpose `query`, `key`, and `value` from
-#         # (`batch_size`, `seq_len`, `num_hidden`) to
-#         # (`batch_size` * `num_heads`, `seq_len`, `num_hidden` / `num_heads`)
-#         query = transpose_(self.wq(query), self.num_heads)
-#         key = transpose_(self.wk(key), self.num_heads)
-#         value = transpose_(self.wv(value), self.num_heads)
-#
-#         if valid_len is not None:
-#             valid_len = torch.repeat_interleave(valid_len, repeats=self.num_heads, dim=0)
-#
-#         # For self-attention, `output` shape:
-#         # (`batch_size` * `num_heads`, `seq_len`, `num_hidden` / `num_heads`)
-#         output = self.attention(query, key, value, valid_len)
-#
-#         # `output_concat` shape: (`batch_size`, `seq_len`, `num_hidden`)
-#         output_concat = transpose_(output, self.num_heads, reverse=True)
-#         return self.wo(output_concat)
-#
-#
-# class SynthesizedAttention(nn.Module, ABC):
-#     def __init__(self, in_channels, dim_attention, out_channels,
-#                  num_heads=3, num_layers=2,
-#                  bias=True, banded=False, factorized=False,
-#                  dropout=0.5):
-#         """
-#         Args:
-#             bias: bool
-#             banded: bool
-#             factorized: bool
-#             in_channels: int
-#             dim_attention: int
-#             out_channels: int
-#             num_heads: int
-#             num_layers: int
-#         """
-#         super(SynthesizedAttention, self).__init__()
-#         self.banded = banded
-#         self.dropout = dropout
-#         self.num_heads = num_heads
-#         self.factorized = factorized
-#         self.dim_attention = dim_attention
-#         self.synthesizers, self.synthesizers_ = None, None
-#
-#         dim_att = get_factorized_dim(dim_attention) if factorized else dim_attention
-#         channels = [in_channels] * num_layers + [dim_att]
-#         self.synthesizers = nn.ModuleList([
-#             nn.Linear(in_features=channels[i],
-#                       out_features=channels[i + 1],
-#                       bias=bias) for i in range(num_layers)
-#         ])
-#         channels = [in_channels] * num_layers + [int(dim_attention / dim_att)]
-#         self.synthesizers_ = nn.ModuleList([
-#             nn.Linear(in_features=channels[i],
-#                       out_features=channels[i + 1],
-#                       bias=bias) for i in range(num_layers)
-#         ]) if self.factorized else None
-#         self.wv = nn.Linear(in_features=in_channels,
-#                             out_features=out_channels,
-#                             bias=bias)
-#
-#     def forward(self, x):
-#         m, _ = x.shape[-2:]
-#         v = fn.relu(self.wv(x))
-#         y = x if self.factorized else None
-#         for i in range(len(self.synthesizers)):
-#             x = fn.relu(self.synthesizers[i](x))
-#             if self.factorized:
-#                 y = fn.relu(self.synthesizers_[i](y))
-#         if self.factorized:
-#             l_s, r_s = x.shape[-1], y.shape[-1]
-#             x = x.repeat(1, 1, r_s)
-#             y = y.repeat(1, 1, l_s)
-#             x = x * y
-#         if self.banded:
-#             indices, values = to_band_sparse(x)
-#             values = softmax(values, index=indices)
-#             return spmm(indices, values, m, m, v)
-#         return torch.bmm(fn.softmax(x, dim=-1), v)
-#
-#
-# class AddNorm(nn.Module, ABC):
-#     def __init__(self, normalized_shape, dropout, **kwargs):
-#         super(AddNorm, self).__init__(**kwargs)
-#         self.dropout = nn.Dropout(dropout)
-#         self.ln = nn.LayerNorm(normalized_shape)
-#
-#     def forward(self, x, y):
-#         return self.ln(self.dropout(y) + x)
+        query = rearrange(query, 'f n c -> n f c')
+        key = rearrange(key, 'f n c -> n f c')
+        value = rearrange(value, 'f n c -> n f c')
+
+        # t = repeat(x, 'n f c -> n f h c', h=self.heads)  # .to(x.device)
+        #t = torch.stack([x.clone()] * self.heads, dim=-2)
+        query = rearrange(query, 'n f (h c) -> n f h c', h=self.heads)
+        key = rearrange(key, 'n f (h c) -> n f h c', h=self.heads)
+        value = rearrange(value, 'n f (h c) -> n f h c', h=self.heads)
+
+        # Run self attention and add it to the input (residual)
+        t = self.attention(query, key, value, attn_mask, length_mask, length_mask)
+        t = rearrange(t, 'f n h c -> n f (h c)')
+        return t
+
+class AddNorm(nn.Module):
+    def __init__(self, normalized_shape, dropout, **kwargs):
+        super(AddNorm, self).__init__(**kwargs)
+        self.dropout = nn.Dropout(dropout)
+        self.ln = nn.LayerNorm(normalized_shape)
+
+    def forward(self, x, y):
+        return self.ln(self.dropout(y) + x)
+
+class MLP(nn.Module):
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 hid_channels,
+                 num_layers=2,
+                 bias=True):
+        super(MLP, self).__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.num_layers = num_layers
+        channels = [in_channels] + \
+                   [hid_channels] * (num_layers - 1) + \
+                   [out_channels] # [64, 64, 64]
+
+        self.layers = nn.ModuleList([
+            nn.Linear(in_features=channels[i],
+                      out_features=channels[i + 1],
+                      bias=bias) for i in range(num_layers)
+        ])  # weight initialization is done in Linear()
+
+    def forward(self, x):
+        for i in range(self.num_layers - 1):
+            x = fn.relu(self.layers[i](x))
+        return self.layers[-1](x)
+
+class TransformerEncoder(nn.Module):
+    def __init__(self, 
+                 in_channels=6,
+                 out_channels=64,
+                 hid_channels=64,
+                 heads=8,
+                 activation="relu", 
+                 is_linear=False, 
+                 dropout=0.1):
+        super(TransformerEncoder, self).__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.hid_channels = hid_channels
+        self.heads = heads
+        self.is_linear = is_linear
+        self.dropout = dropout
+        #self.posencode = PositionalEncoding(self.in_channels)
+        self.multihead = TemporalSelfAttention(self.in_channels, self.hid_channels, self.out_channels, self.heads, self.is_linear)
+        self.addnorm1 = AddNorm(self.out_channels, self.dropout)
+        self.addnorm2 = AddNorm(self.out_channels, self.dropout)
+        self.mlp = MLP(self.out_channels, self.out_channels, self.hid_channels)
+
+    def forward(self, x, bi=None):
+        #x = self.posencode(x)
+        x = self.addnorm1(x, self.multihead(x, bi))
+        x = self.addnorm2(x, self.mlp(x))
+        x = rearrange(x, 'n f c -> f n c')
+        return x
+
+
+
+
