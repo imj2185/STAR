@@ -51,7 +51,7 @@ def softmax(src: Tensor,
     return out / (out_sum + 1e-16)
 
 
-def _spmm(indices, nz, m, n, d):
+def spmm_(indices, nz, m, n, d):
     """Sparse matrix multiplication, it supports tensor
     with dimension size more than 2, and the code is inspired by:
     "PyTorch Sparse"[https://tinyurl.com/ycn2nkdr]
@@ -104,7 +104,7 @@ def batched_spmm(nzt, adj, x, m=None, n=None):
     #     _size = x_.shape[0]
     #     out = torch.stack([spmm(adj_, nzt_[i], heads * m, heads * n, x_[i]) for i in range(_size)])
     #     return out  # [batch, heads * num_nodes, channels]
-    return _spmm(adj_, nzt_, heads * m, heads * n, x_)
+    return spmm_(adj_, nzt_, heads * m, heads * n, x_)
 
 
 def batched_transpose(adj, value, m=None, n=None):
