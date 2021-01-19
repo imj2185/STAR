@@ -296,7 +296,6 @@ class SparseAttention(nn.Module):
         :param heads (int):
         :param in_channels (int):
         :param out_channels (int):
-        :param additive_masking (bool): whether to use additive masking
         :param softmax_temp (torch.Tensor): The temperature to use for the softmax attention.
                       (default: 1/sqrt(d_keys) where d_keys is computed at
                       runtime)
@@ -323,36 +322,32 @@ class SparseAttention(nn.Module):
         x = x.transpose(2, 1)                   # (batch, n_heads, length, depth)
         return x
 
-    def forward(self, queries, keys, values, adj):  # , query_lengths, key_lengths):
+    def forward(self, queries, keys, values, adj):
         """Implements the multi-head softmax attention.
         Arguments
         ---------
             queries: (N, L, E) The tensor containing the queries
             keys: (N, S, E) The tensor containing the keys
             values: (N, S, D) The tensor containing the values
-            adj: An implementation of BaseMask that encodes where each
-                       query can attend to
-            # query_lengths: An implementation of BaseMask that encodes how
-            #                many queries each sequence in the batch consists of
-            # key_lengths: An implementation of BaseMask that encodes how
-            #              many queries each sequence in the batch consists of
+            adj: An implementation of BaseMask that encodes where each query can attend to
+        
         """
-        # Extract some shapes and compute the temperature
         lq, lk, lv = self.ln_q(queries), self.ln_k(keys), self.ln_v(values)
+
+        # Extract some shapes and compute the temperature
         q, k, v = self.split_head(lq), self.split_head(lk), self.split_head(lv)
         n, h, l, e = q.shape  # batch, n_heads, length, depth
         _, _, s, d = v.shape
+
         softmax_temp = self.softmax_temp or 1. / math.sqrt(e)
 
-        # Compute the un-normalized sparse attention and apply the masks
+        # Compute the un-normalized sparse attention according to adjacency matrix indices
         qk = torch.sum(q[..., adj[0], :] * k[..., adj[1], :], dim=-1)  # .to(queries.device),
-
-        # qk = qk + key_lengths.additive_matrix[:, None, None]
 
         # Compute the attention and the weighted average
         a = self.dropout(softmax(softmax_temp * qk, adj[0]))  # adj[0] is index columns with same row
-        v = spmm_(adj, qk, l, d, v)   # sparse matmul, adj as indices and qk as nonzero
-        v = torch.reshape(v.transpose(2, 1), (n, s, h * d))
+        v = spmm_(adj, qk, l, d, v)                 # sparse matmul, adj as indices and qk as nonzero
+        v = torch.reshape(v.transpose(2, 1), (n, s, h * d))   # concatenate the multi-heads attention
         # Make sure that what we return is contiguous
         return self.fc(v.contiguous())
 
