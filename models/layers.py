@@ -14,10 +14,10 @@ from torch import Tensor
 from torch.nn import Parameter, Linear, Dropout
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.nn.inits import glorot, zeros
-from torch_geometric.utils import remove_self_loops, add_self_loops, softmax, spmm_
+from torch_geometric.utils import remove_self_loops, add_self_loops
 from torch_scatter import scatter_mean
 
-from utility.linalg import batched_spmm, batched_transpose, BatchedMask, softmax
+from utility.linalg import batched_spmm, batched_transpose, BatchedMask, softmax, spmm_
 
 
 def clones(module, k):
