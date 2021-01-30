@@ -305,11 +305,11 @@ class SparseAttention(nn.Module):
         self.in_channels = in_channels
         self.mdl_channels = mdl_channels
         self.softmax_temp = softmax_temp
-        self.dropout = Dropout(attention_dropout)
+        self.dropout = attention_dropout
         self.ln_q = Linear(in_channels, mdl_channels)
         self.ln_k = Linear(in_channels, mdl_channels)
         self.ln_v = Linear(in_channels, mdl_channels)
-        self.fc = Linear(mdl_channels, mdl_channels)
+        self.ln_o = Linear(mdl_channels, mdl_channels)
 
     def split_head(self, x):
         # x: (batch, time_in, embed_dim)
@@ -319,15 +319,16 @@ class SparseAttention(nn.Module):
         x = x.transpose(2, 1)                   # (batch, n_heads, length, depth)
         return x
 
-    def forward(self, queries, keys, values, adj):
+    def forward(self, queries, keys, values, adj, edge_pos_enc):
         """Implements the multi-head softmax attention.
         Arguments
         ---------
-            queries: (N, L, E) The tensor containing the queries
-            keys: (N, S, E) The tensor containing the keys
-            values: (N, S, D) The tensor containing the values
-            adj: An implementation of BaseMask that encodes where each query can attend to
-        
+            :param queries: (N, L, E) The tensor containing the queries
+            :param keys: (N, S, E) The tensor containing the keys
+            :param values: (N, S, D) The tensor containing the values
+            :param adj: An implementation of BaseMask that encodes where each query can attend to
+            :param edge_pos_enc:
+
         """
         lq, lk, lv = self.ln_q(queries), self.ln_k(keys), self.ln_v(values)
 
@@ -341,12 +342,13 @@ class SparseAttention(nn.Module):
         # Compute the un-normalized sparse attention according to adjacency matrix indices
         qk = torch.sum(q[..., adj[0], :] * k[..., adj[1], :], dim=-1)  # .to(queries.device),
 
-        # Compute the attention and the weighted average
-        a = self.dropout(softmax_(softmax_temp * qk, adj[0]))  # adj[0] is index columns with same row
-        v = spmm_(adj, qk, l, d, v)                 # sparse matmul, adj as indices and qk as nonzero
+        # Compute the attention and the weighted average, adj[0] is cols idx in the same row
+        alpha = fn.dropout(softmax_(softmax_temp * (qk + edge_pos_enc), adj[0]),
+                           training=self.training)
+        v = spmm_(adj, alpha, l, d, v)   # sparse matmul, adj as indices and qk as nonzero
         v = torch.reshape(v.transpose(2, 1), (n, s, h * d))   # concatenate the multi-heads attention
         # Make sure that what we return is contiguous
-        return self.fc(v.contiguous())
+        return self.ln_o(v.contiguous())
 
 
 class GlobalContextAttention(nn.Module):
