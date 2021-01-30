@@ -18,10 +18,10 @@ def power_adj(adj, dim, p):
     return ic
 
 
-def softmax(src: Tensor,
-            index: Optional[Tensor],
-            ptr: Optional[Tensor] = None,
-            num_nodes: Optional[int] = None) -> Tensor:
+def softmax_(src: Tensor,
+             index: Optional[Tensor],
+             ptr: Optional[Tensor] = None,
+             num_nodes: Optional[int] = None) -> Tensor:
     r"""Computes a sparsely evaluated softmax.
     Given a value tensor :attr:`src`, this function first groups the values
     along the first dimension based on the indices specified in :attr:`index`,

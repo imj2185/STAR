@@ -17,7 +17,7 @@ from torch_geometric.nn.inits import glorot, zeros
 from torch_geometric.utils import remove_self_loops, add_self_loops
 from torch_scatter import scatter_mean
 
-from utility.linalg import batched_spmm, batched_transpose, BatchedMask, softmax, spmm_
+from utility.linalg import batched_spmm, batched_transpose, BatchedMask, softmax_, spmm_
 
 
 def clones(module, k):
@@ -117,14 +117,11 @@ class HGAConv(MessagePassing):
         #     c = alpha.shape[-1]
         #     al = softmax(rearrange(alpha, 'b n c -> n (b c)'), adj[1])
         #     alpha = rearrange(al, 'n (b c) -> b n c', c=c)
-        alpha = softmax(alpha, index=adj[1])  # , num_nodes=alpha.shape[-2])
+        alpha = softmax_(alpha, index=adj[1])  # , num_nodes=alpha.shape[-2])
         self._alpha = alpha
         return fn.dropout(alpha, p=self.dropout, training=self.training)
 
-    def message_and_aggregate(self,
-                              adj,
-                              x,
-                              score):
+    def message_and_aggregate(self, adj, x, score):
         """
         Args:
             adj:   Tensor or list(Tensor)
@@ -345,7 +342,7 @@ class SparseAttention(nn.Module):
         qk = torch.sum(q[..., adj[0], :] * k[..., adj[1], :], dim=-1)  # .to(queries.device),
 
         # Compute the attention and the weighted average
-        a = self.dropout(softmax(softmax_temp * qk, adj[0]))  # adj[0] is index columns with same row
+        a = self.dropout(softmax_(softmax_temp * qk, adj[0]))  # adj[0] is index columns with same row
         v = spmm_(adj, qk, l, d, v)                 # sparse matmul, adj as indices and qk as nonzero
         v = torch.reshape(v.transpose(2, 1), (n, s, h * d))   # concatenate the multi-heads attention
         # Make sure that what we return is contiguous

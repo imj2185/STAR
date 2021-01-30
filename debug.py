@@ -1,18 +1,16 @@
+import os
+import os.path as osp
 from argparse import ArgumentParser
 
 import torch
 from torch.nn import CrossEntropyLoss
 from torch.optim import Adam
 from torch_geometric.data import DataLoader
+from torchviz import make_dot
+from tqdm import tqdm
 
 from data.dataset3 import SkeletonDataset
 from models.net import DualGraphTransformer
-from tqdm import tqdm
-
-import os.path as osp
-import os
-from torchviz import make_dot
-
 
 parser = ArgumentParser()
 parser.add_argument('--root', dest='root',
