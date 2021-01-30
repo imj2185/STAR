@@ -323,11 +323,11 @@ class SparseAttention(nn.Module):
         """Implements the multi-head softmax attention.
         Arguments
         ---------
-            :param queries: (N, L, E) The tensor containing the queries
-            :param keys: (N, S, E) The tensor containing the keys
-            :param values: (N, S, D) The tensor containing the values
+            :param queries: torch.Tensor (N, L, E) The tensor containing the queries
+            :param keys: torch.Tensor (N, S, E) The tensor containing the keys
+            :param values: torch.Tensor (N, S, D) The tensor containing the values
             :param adj: An implementation of BaseMask that encodes where each query can attend to
-            :param edge_pos_enc:
+            :param edge_pos_enc: torch.Tensor,
 
         """
         lq, lk, lv = self.ln_q(queries), self.ln_k(keys), self.ln_v(values)
@@ -395,8 +395,7 @@ class PositionalEncoding(nn.Module):
 class TemporalSelfAttention(nn.Module):
     def __init__(self,
                  in_channels,
-                 hid_channels,
-                 out_channels,
+                 mdl_channels,
                  heads=8,
                  use_pos_encode=False,
                  activation="relu",
@@ -404,8 +403,7 @@ class TemporalSelfAttention(nn.Module):
                  dropout=0.1):
         super(TemporalSelfAttention, self).__init__()
         self.in_channels = in_channels
-        self.hid_channels = hid_channels or 4 * in_channels
-        self.out_channels = out_channels
+        self.out_channels = mdl_channels
         self.heads = heads
         self.is_linear = is_linear
 
@@ -415,9 +413,9 @@ class TemporalSelfAttention(nn.Module):
         else:
             self.attention = FullAttention(attention_dropout=dropout)
 
-        self.lin_q = Linear(in_channels, hid_channels)
-        self.lin_k = Linear(in_channels, hid_channels)
-        self.lin_v = Linear(in_channels, hid_channels)
+        self.lin_q = Linear(in_channels, mdl_channels)
+        self.lin_k = Linear(in_channels, mdl_channels)
+        self.lin_v = Linear(in_channels, mdl_channels)
         self.dropout = Dropout(dropout)
         self.activation = fn.relu if activation == "relu" else fn.gelu
 
@@ -493,27 +491,24 @@ class MLP(nn.Module):
 class TransformerEncoder(nn.Module):
     def __init__(self,
                  in_channels=6,
-                 out_channels=64,
-                 hid_channels=64,
+                 mdl_channels=64,
                  heads=8,
                  activation="relu",
                  is_linear=False,
                  dropout=0.1):
         super(TransformerEncoder, self).__init__()
         self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.hid_channels = hid_channels
+        self.mdl_channels = mdl_channels
         self.heads = heads
         self.is_linear = is_linear
         self.dropout = dropout
         self.multi_head_attn = TemporalSelfAttention(in_channels=self.in_channels,
-                                                     hid_channels=self.hid_channels,
-                                                     out_channels=self.out_channels,
+                                                     mdl_channels=self.mdl_channels,
                                                      heads=self.heads,
                                                      is_linear=self.is_linear)
-        self.add_norm_att = AddNorm(self.out_channels, self.dropout)
-        self.add_norm_mlp = AddNorm(self.out_channels, self.dropout)
-        self.mlp = MLP(self.out_channels, self.out_channels, self.hid_channels)
+        self.add_norm_att = AddNorm(self.mdl_channels, self.dropout)
+        self.add_norm_mlp = AddNorm(self.mdl_channels, self.dropout)
+        self.mlp = MLP(self.mdl_channels, self.mdl_channels, self.hid_channels)
 
     def forward(self, x, bi=None):
         x = self.add_norm_att(x, self.multi_head_attn(x, bi))
