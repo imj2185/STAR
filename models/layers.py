@@ -494,6 +494,7 @@ class TransformerEncoder(nn.Module):
                  mdl_channels=64,
                  heads=8,
                  activation="relu",
+                 # add bool parameter: spatial or not
                  is_linear=False,
                  dropout=0.1):
         super(TransformerEncoder, self).__init__()
@@ -502,6 +503,7 @@ class TransformerEncoder(nn.Module):
         self.heads = heads
         self.is_linear = is_linear
         self.dropout = dropout
+        # TODO
         self.multi_head_attn = TemporalSelfAttention(in_channels=self.in_channels,
                                                      mdl_channels=self.mdl_channels,
                                                      heads=self.heads,
