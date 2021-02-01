@@ -81,8 +81,6 @@ def batched_spmm(nzt, adj, x, m=None, n=None):
     num_edges, heads = nzt.shape[-2:]
     num_nodes, channels = x.shape[-2:]
     # preparation of data
-    # x_ = torch.cat(heads * [x])  # duplicate x for heads times
-    # nzt_ = nzt.view(-1)
     x_ = repeat(x, '... n c -> ... (h n) c', h=heads)
     nzt_ = rearrange(nzt, '... e h -> ... (h e)')
     if isinstance(adj, Tensor):
@@ -97,13 +95,6 @@ def batched_spmm(nzt, adj, x, m=None, n=None):
         n = max([maybe_num_nodes(adj_[1], n) for adj_ in adj])
         offset = torch.tensor([[m], [n]])
         adj_ = torch.cat([adj[i] + offset * i for i in range(heads)], dim=1)
-    # if len(x.shape) == 2:
-    #     out = spmm(adj_, nzt_, heads * m, heads * n, x_)
-    #     return out.view(-1, m, channels)  # [heads, m, channels]
-    # else:
-    #     _size = x_.shape[0]
-    #     out = torch.stack([spmm(adj_, nzt_[i], heads * m, heads * n, x_[i]) for i in range(_size)])
-    #     return out  # [batch, heads * num_nodes, channels]
     return spmm_(adj_, nzt_, heads * m, heads * n, x_)
 
 
@@ -206,8 +197,24 @@ class BatchedMask(BaseMask):
 
 def make_attn_mask(seq_len, bi):
     msk = FullMask()
-
     return None
+
+
+def bfs_enc(edges, root, device):
+    if not isinstance(edges, torch.Tensor):
+        edges = torch.tensor(edges)
+        if edges.shape[0] > edges.shape[1]:
+            edges = torch.transpose(edges, 1, 0)
+    num_nodes = max(edges[0]) + 1
+    hops2root = torch.ones(num_nodes).to(device)
+    ancestors = torch.ones(num_nodes, dtype=torch.long).to(device)
+    ancestors[root] = root
+    for j in range(edges.shape[1]):
+        ancestors[edges[1, j]] = edges[0, j]
+    while torch.sum(torch.eq(ancestors, 0)):
+        ancestors = ancestors[ancestors]
+        hops2root = torch.where(torch.eq(ancestors, root), ancestors, ancestors + 1)
+    return hops2root
 
 
 if __name__ == "__main__":
