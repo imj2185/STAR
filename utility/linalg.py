@@ -213,7 +213,7 @@ def bfs_enc(edges, root, device):
         ancestors[edges[1, j]] = edges[0, j]
     while torch.sum(torch.eq(ancestors, 0)) != num_nodes:
         ancestors = ancestors[ancestors]
-        hops2root = torch.where(torch.eq(ancestors, root), ancestors, ancestors + 1)
+        hops2root = torch.where(torch.eq(ancestors, root), hops2root, hops2root + 1)
     return hops2root
 
 
