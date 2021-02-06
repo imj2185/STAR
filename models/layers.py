@@ -510,7 +510,7 @@ class TransformerEncoder(nn.Module):
                                                      is_linear=self.is_linear)
         self.add_norm_att = AddNorm(self.mdl_channels, self.dropout)
         self.add_norm_mlp = AddNorm(self.mdl_channels, self.dropout)
-        self.mlp = MLP(self.mdl_channels, self.mdl_channels, self.hid_channels)
+        self.mlp = MLP(self.mdl_channels, self.mdl_channels, self.mdl_channels)
 
     def forward(self, x, bi=None):
         x = self.add_norm_att(x, self.multi_head_attn(x, bi))

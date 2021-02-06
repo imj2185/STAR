@@ -8,19 +8,18 @@ from tqdm import tqdm
 import os
 
 from args import make_args
-from data.dataset import SkeletonDataset
-from models.net import DualGraphTransformer
+from data.dataset3 import SkeletonDataset
+from models.net import DualGraphEncoder
 from optimizer import get_std_opt
 
 
+
 class GCNTrainer(object):
-    def __init__(self, model, train_loader, train_labels, val_loader, val_labels, adj, optimizer, loss_fn, log_dir):
+    def __init__(self, model, train_loader, val_loader, adj, optimizer, loss_fn, log_dir):
 
         self.model = model
         self.train_loader = train_loader
-        self.train_labels = train_labels
         self.val_loader = val_loader
-        self.val_labels = val_labels
         self.loss_fn = loss_fn
         self.log_dir = log_dir
         self.adj = adj
@@ -30,8 +29,6 @@ class GCNTrainer(object):
 
         self.model = self.model.to(self.device)
         self.adj = self.adj.to(self.device)
-        self.train_labels = self.train_labels.to(self.device)
-        self.val_labels = self.val_labels.to(self.device)
         if self.log_dir is not None:
             self.writer = SummaryWriter(log_dir)
 
@@ -151,17 +148,17 @@ if __name__ == '__main__':
     args = make_args()
 
     log_dir = '/home/dusko/Documents/projects/APBGCN/log'
-    train_dataset = SkeletonDataset(root="/home/dusko/Documents/projects/APBGCN", name='ntu60_cs_train_test', use_motion_vector=False,
-                                    benchmark='cs', sample='train')
-    valid_dataset = SkeletonDataset(root="/home/dusko/Documents/projects/APBGCN", name='ntu60_cs_val_test', use_motion_vector=False,
-                                    benchmark='cs', sample='val')
+    train_dataset = SkeletonDataset(root="/home/dusko/Documents/projects/APBGCN", name='ntu_60', use_motion_vector=False,
+                                    benchmark='xsub', sample='train')
+    valid_dataset = SkeletonDataset(root="/home/dusko/Documents/projects/APBGCN", name='ntu_60', use_motion_vector=False,
+                                    benchmark='xsub', sample='val')
 
     train_loader = DataLoader(train_dataset.data, batch_size=args.batch_size, shuffle=True)
     valid_loader = DataLoader(valid_dataset.data, batch_size=args.batch_size, shuffle=True)
 
-    model = DualGraphTransformer(in_channels=3,
-                                 hidden_channels=16,
-                                 out_channels=16,
+    model = DualGraphEncoder(in_channels=6,
+                                 hidden_channels=32,
+                                 out_channels=32,
                                  num_layers=4,
                                  num_heads=8,
                                  linear_temporal=True,
@@ -170,6 +167,6 @@ if __name__ == '__main__':
 
     noam_opt = get_std_opt(model, args)
 
-    trainer = GCNTrainer(model, train_loader, train_dataset.labels, valid_loader, valid_dataset.labels,
+    trainer = GCNTrainer(model, train_loader, valid_loader,
                          train_dataset.skeleton_, noam_opt.optimizer, nn.CrossEntropyLoss(), log_dir)
     trainer.train(args.epoch_num)

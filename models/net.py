@@ -5,11 +5,11 @@ import torch.nn as nn
 import torch.nn.functional as fn
 # from third_party.performer import SelfAttention
 from einops import rearrange
+from .attentions import EncoderLayer
+from .layers import HGAConv, GlobalContextAttention, TemporalSelfAttention, PositionalEncoding, TransformerEncoder
 
-from .layers import HGAConv, GlobalContextAttention, TemporalSelfAttention, PositionalEncoding
 
-
-class DualGraphTransformer(nn.Module, ABC):
+class DualGraphEncoder(nn.Module, ABC):
     def __init__(self,
                  in_channels,
                  hidden_channels,
@@ -22,7 +22,7 @@ class DualGraphTransformer(nn.Module, ABC):
                  sequential=True,
                  linear_temporal=True,
                  trainable_factor=False):
-        super(DualGraphTransformer, self).__init__()
+        super(DualGraphEncoder, self).__init__()
         self.spatial_factor = nn.Parameter(torch.ones(num_layers)) * 0.5
         self.sequential = sequential
         self.num_layers = num_layers
@@ -30,6 +30,7 @@ class DualGraphTransformer(nn.Module, ABC):
         # self.num_classes = classes
         self.dropout = drop_rate
         self.trainable_factor = trainable_factor
+        self.bn = nn.BatchNorm1d(in_channels * 25)
         channels = [in_channels] + [hidden_channels] * (num_layers - 1) + [out_channels]
         self.spatial_norms = nn.ModuleList([
             # nn.BatchNorm1d(channels[i + 1]) for i in range(num_layers)
@@ -49,11 +50,10 @@ class DualGraphTransformer(nn.Module, ABC):
         channels_ = channels[1:] + [out_channels]
         self.temporal_layers = nn.ModuleList([
             # necessary parameters are: dim
-            TemporalSelfAttention(in_channels=channels_[i],  # TODO ??? potential dimension problem
-                                  hid_channels=channels_[i + 1],
-                                  is_linear=linear_temporal,
+            EncoderLayer(in_channels=channels_[i],  # TODO ??? potential dimension problem
+                                  mdl_channels=channels_[i + 1],
                                   heads=num_heads,
-                                  use_pos_encode=(i == 0),
+                                  activation="relu",
                                   dropout=drop_rate) for i in range(num_layers)])
 
         self.context_attention = GlobalContextAttention(in_channels=out_channels)
@@ -77,16 +77,20 @@ class DualGraphTransformer(nn.Module, ABC):
                                                     t.shape[1:]) + t),  # residual and add_norm
                               'n b c -> b n c')
         else:  # parallel architecture
+            c = t.shape[-1]
+            t = self.bn(rearrange(t, 'b n c -> b (n c)'))
+            t = rearrange(t, 'b (n c) -> n b c', c=c)
             for i in range(self.num_layers):
-                s = t
+                #Batch X Frames, 25, 6
                 t = fn.relu(self.temporal_lls[i](t))
                 t = fn.relu(self.temporal_layers[i](t, bi))
-                s = self.spatial_norms[i](fn.relu(self.spatial_layers[i](s, adj)))
-                if self.trainable_factor:
-                    factor = torch.sigmoid(self.spatial_factor).to(t.device)
-                    t = factor[i] * s + (1. - factor[i]) * t
-                else:
-                    t = (s + t) * 0.5
+
+                #s = self.spatial_norms[i](fn.relu(self.spatial_layers[i](s, adj)))
+                #if self.trainable_factor:
+                #    factor = torch.sigmoid(self.spatial_factor).to(t.device)
+                #    t = factor[i] * s + (1. - factor[i]) * t
+                #else:
+                #    t = (s + t) * 0.5
 
         t = rearrange(self.context_attention(rearrange(t,
                                                        'f n c -> n f c'),
