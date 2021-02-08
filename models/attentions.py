@@ -1,29 +1,21 @@
-import copy
 import math
-from inspect import Parameter as Pr
-from typing import Union, Tuple, Any
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as fn
-from einops import rearrange, reduce
-from fast_transformers.attention.full_attention import FullAttention
-from fast_transformers.attention.linear_attention import LinearAttention
-from fast_transformers.masking import FullMask, LengthMask
+from einops import rearrange
 from torch import Tensor
-from torch.nn import Parameter, Linear, Dropout
-from torch_geometric.nn.conv import MessagePassing
-from torch_geometric.nn.inits import glorot, zeros
-from torch_geometric.utils import remove_self_loops, add_self_loops
-from torch_scatter import scatter_mean
+from torch.nn import Linear
 
-from utility.linalg import batched_spmm, batched_transpose, BatchedMask, softmax_, spmm_
+from utility.linalg import BatchedMask, softmax_, spmm_
+
 
 class SparseAttention(nn.Module):
     """Implement the sparse scaled dot product attention with softmax.
     Inspired by:
     https://tinyurl.com/yxq4ry64 and https://tinyurl.com/yy6l47p4
     """
+
     def __init__(self,
                  in_channels,
                  max_position_embeddings=128,
@@ -44,7 +36,7 @@ class SparseAttention(nn.Module):
         self.softmax_temp = softmax_temp
         self.dropout = attention_dropout
 
-        #self.ln_o = Linear(mdl_channels, mdl_channels)
+        # self.ln_o = Linear(mdl_channels, mdl_channels)
 
     def forward(self, queries, keys, values, adj):
         """Implements the multi-head softmax attention.
@@ -53,38 +45,36 @@ class SparseAttention(nn.Module):
             :param queries: torch.Tensor (N, L, E) The tensor containing the queries
             :param keys: torch.Tensor (N, S, E) The tensor containing the keys
             :param values: torch.Tensor (N, S, D) The tensor containing the values
-            :param adj: An implementation of BaseMask that encodes where each query can attend to
-            :param edge_pos_enc: torch.Tensor,
-
+            :param adj: the adjacency matrix plays role of mask that encodes where each query can attend to
         """
-        #lq, lk, lv = self.ln_q(queries), self.ln_k(keys), self.ln_v(values)
+        # lq, lk, lv = self.ln_q(queries), self.ln_k(keys), self.ln_v(values)
 
         # Extract some shapes and compute the temperature
-        #q, k, v = self.split_head(lq), self.split_head(lk), self.split_head(lv)
+        # q, k, v = self.split_head(lq), self.split_head(lk), self.split_head(lv)
 
         n, l, h, e = queries.shape  # batch, n_heads, length, depth
         _, _, s, d = values.shape
 
         softmax_temp = self.softmax_temp or 1. / math.sqrt(e)
 
-        #queries = rearrange(queries, 'n l h e -> n l (h e)')
-        #keys = rearrange(keys, 'n l h e -> n l (h e)')
+        # queries = rearrange(queries, 'n l h e -> n l (h e)')
+        # keys = rearrange(keys, 'n l h e -> n l (h e)')
         # Compute the un-normalized sparse attention according to adjacency matrix indices
         qk = torch.sum(queries[..., adj[0], :, :] * keys[..., adj[1], :, :], dim=-1)  # .to(queries.device),
-        
-        #qk = rearrange(qk, 'n h l e -> n h (l e)')
+
+        # qk = rearrange(qk, 'n h l e -> n h (l e)')
         # Compute the attention and the weighted average, adj[0] is cols idx in the same row
-        #alpha = fn.dropout(softmax_(softmax_temp * (qk + edge_pos_enc), adj[0]),
+        # alpha = fn.dropout(softmax_(softmax_temp * (qk + edge_pos_enc), adj[0]),
         #                   training=self.training)
-        alpha = fn.dropout(softmax_(softmax_temp * (qk), adj[0]),
+        alpha = fn.dropout(softmax_(softmax_temp * qk, adj[0]),
                            training=self.training)
-        v = spmm_(adj, alpha, l, s, values)   # sparse matmul, adj as indices and qk as nonzero
-        #v = torch.reshape(v, (n, l, h * d))   # concatenate the multi-heads attention
+        v = spmm_(adj, alpha, l, s, values)  # sparse matmul, adj as indices and qk as nonzero
+        # v = torch.reshape(v, (n, l, h * d))   # concatenate the multi-heads attention
         # Make sure that what we return is contiguous
         return v.contiguous()
-    
-class FullAttention(nn.Module):
 
+
+class FullAttention(nn.Module):
     """Implement the scaled dot product attention with softmax.
     Arguments
     ---------
@@ -106,7 +96,7 @@ class FullAttention(nn.Module):
         self.max_position_embeddings = max_position_embeddings
         self.embedding_weight = nn.Parameter(torch.randn(2 * max_position_embeddings + 1, in_channels))
         self.distance_embedding = nn.Embedding(
-            2 * max_position_embeddings + 1, in_channels, _weight=self.embedding_weight)    
+            2 * max_position_embeddings + 1, in_channels, _weight=self.embedding_weight)
 
     def forward(self, queries, keys, values, attn_mask):
         """Implements the multihead softmax attention.
@@ -123,37 +113,39 @@ class FullAttention(nn.Module):
                          many queries each sequence in the batch consists of
         """
         # Extract some shapes and compute the temperature
-        N, L, H, E = queries.shape
-        _, S, _, D = values.shape 
-        softmax_temp = self.softmax_temp or 1. / math.sqrt(E)
+        n, l, h, e = queries.shape
+        _, s, _, d = values.shape
+        softmax_temp = self.softmax_temp or 1. / math.sqrt(e)
 
         # Compute the unnormalized attention and apply the masks
-        QK = torch.einsum("nlhe,nshe->nhls", queries, keys)
+        qk = torch.einsum("nlhe, nshe -> nhls", queries, keys)
 
         position_ids_l = torch.arange(
-            L, dtype=torch.long, device=queries.device).view(-1, 1)
+            l, dtype=torch.long, device=queries.device).view(-1, 1)
         position_ids_r = torch.arange(
-            L, dtype=torch.long, device=queries.device).view(1, -1)
-        
-        distance = (position_ids_l - position_ids_r).clip(-self.max_position_embeddings, self.max_position_embeddings)
+            l, dtype=torch.long, device=queries.device).view(1, -1)
+
+        distance = (position_ids_l - position_ids_r).clip(-self.max_position_embeddings,
+                                                          self.max_position_embeddings)
         positional_embedding = self.distance_embedding(distance + self.max_position_embeddings)
 
         relative_position_scores_query = torch.einsum(
-            "blhd,lrd->bhlr", queries, positional_embedding)
+            "blhd, lrd -> bhlr", queries, positional_embedding)
         relative_position_scores_key = torch.einsum(
-            "brhd,lrd->bhlr", keys, positional_embedding)
-        QK = QK + relative_position_scores_query + relative_position_scores_key
+            "brhd, lrd -> bhlr", keys, positional_embedding)
+        qk = qk + relative_position_scores_query + relative_position_scores_key
 
         if not attn_mask.all_ones:
-            QK = QK + attn_mask.additive_matrix
-        #QK = QK + key_lengths.additive_matrix[:, None, None]
+            qk = qk + attn_mask.additive_matrix
+        # QK = QK + key_lengths.additive_matrix[:, None, None]
 
         # Compute the attention and the weighted average
-        A = self.dropout(torch.softmax(softmax_temp * QK, dim=-1))
-        V = torch.einsum("nhls,nshd->nlhd", A, values)
+        att = self.dropout(torch.softmax(softmax_temp * qk, dim=-1))
+        v = torch.einsum("nhls, nshd -> nlhd", att, values)
 
         # Make sure that what we return is contiguous
-        return V.contiguous()
+        return v.contiguous()
+
 
 class AddNorm(nn.Module):
     def __init__(self, normalized_shape, beta, dropout, **kwargs):
@@ -177,6 +169,7 @@ class AddNorm(nn.Module):
             return self.ln(b * x + (1 - b) * self.dropout(y))
 
         return self.ln(self.dropout(y) + x)
+
 
 class MLP(nn.Module):
     def __init__(self,
@@ -204,6 +197,7 @@ class MLP(nn.Module):
             x = fn.relu(self.layers[i](x))
         return self.layers[-1](x)
 
+
 class PositionalEncoding(nn.Module):
     def __init__(self,
                  model_dim: int):
@@ -224,8 +218,9 @@ class PositionalEncoding(nn.Module):
         assert x.shape[-2] == sequence_length and x.shape[-1] == self.model_dim
         return x + torch.where(dim.long() % 2 == 0, torch.sin(phase), torch.cos(phase))
 
+
 class FeedForward(nn.Module):
-    def __init__(self, in_channels, hidden_channels, dropout = 0.):
+    def __init__(self, in_channels, hidden_channels, dropout=0.):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(in_channels, hidden_channels),
@@ -243,14 +238,15 @@ class FeedForward(nn.Module):
 
     def forward(self, x):
         return self.net(x)
-        
+
+
 class EncoderLayer(nn.Module):
     def __init__(self,
                  in_channels=6,
                  mdl_channels=64,
                  heads=8,
-                 spatial = False,
-                 beta = True,
+                 spatial=False,
+                 beta=True,
                  dropout=0.1):
         super(EncoderLayer, self).__init__()
         self.in_channels = in_channels
@@ -260,22 +256,22 @@ class EncoderLayer(nn.Module):
         self.spatial = spatial
         self.beta = beta
 
-        #self.bn = nn.BatchNorm1d(in_channels * 25)
+        # self.bn = nn.BatchNorm1d(in_channels * 25)
 
         self.lin_q = Linear(in_channels, mdl_channels)
         self.lin_k = Linear(in_channels, mdl_channels)
         self.lin_v = Linear(in_channels, mdl_channels)
 
         if spatial:
-            self.multi_head_attn = SparseAttention(in_channels = mdl_channels // heads,
-                                                    max_position_embeddings=128,
-                                                    attention_dropout=dropout)
+            self.multi_head_attn = SparseAttention(in_channels=mdl_channels // heads,
+                                                   max_position_embeddings=128,
+                                                   attention_dropout=dropout)
 
         else:
-            self.multi_head_attn = FullAttention(in_channels = mdl_channels // heads,
-                                                    max_position_embeddings=128,
-                                                    attention_dropout=dropout)
-        
+            self.multi_head_attn = FullAttention(in_channels=mdl_channels // heads,
+                                                 max_position_embeddings=128,
+                                                 attention_dropout=dropout)
+
         self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout)
         self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout)
         self.ffn = FeedForward(self.mdl_channels, self.mdl_channels, self.dropout)
@@ -291,8 +287,8 @@ class EncoderLayer(nn.Module):
         self.ffn.reset_parameters()
 
     def forward(self, x, bi=None):
-        #x = self.bn()
-        #batch norm (x)
+        # x = self.bn()
+        # batch norm (x)
         f, n, c = x.shape
         q, k, v = x, x, x
 
@@ -303,7 +299,7 @@ class EncoderLayer(nn.Module):
             attn_mask = bi
         else:
             attn_mask = BatchedMask(bi) if not self.spatial else None
-        
+
         if self.spatial:
             query = rearrange(query, 'f n (h c) -> f n h c', h=self.heads)
             key = rearrange(key, 'f n(h c) -> f n h c', h=self.heads)
@@ -312,7 +308,7 @@ class EncoderLayer(nn.Module):
             query = rearrange(query, 'f n (h c) -> n f h c', h=self.heads)
             key = rearrange(key, 'f n (h c) -> n f h c', h=self.heads)
             value = rearrange(value, 'f n (h c) -> n f h c', h=self.heads)
-        
+
         t = self.multi_head_attn(query, key, value, attn_mask)
         if self.spatial:
             t = rearrange(t, 'f n h c -> f n (h c)', h=self.heads)
@@ -321,7 +317,6 @@ class EncoderLayer(nn.Module):
 
         x = self.add_norm_att(x, t)
         x = self.add_norm_ffn(x, self.ffn(x))
-        #x = rearrange(x, 'n f c -> f n c')
-        #batch norm(x)
+        # x = rearrange(x, 'n f c -> f n c')
+        # batch norm(x)
         return x
-

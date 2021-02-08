@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -5,8 +7,6 @@ import torch.nn.functional as fn
 from tensorboardX import SummaryWriter
 from torch_geometric.data import DataLoader
 from tqdm import tqdm
-import os
-import time
 
 from args import make_args
 from data.dataset import SkeletonDataset

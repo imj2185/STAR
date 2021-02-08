@@ -1,12 +1,13 @@
 from typing import Optional
+
 import torch
-from torch import Tensor
-from torch_geometric.utils.num_nodes import maybe_num_nodes
-from torch_sparse import transpose, spspmm  # , spmm
-from torch_scatter import scatter_add, scatter
 import torch.functional as fn
 from einops import rearrange, repeat
 from fast_transformers.masking import BaseMask, FullMask
+from torch import Tensor
+from torch_geometric.utils.num_nodes import maybe_num_nodes
+from torch_scatter import scatter_add, scatter
+from torch_sparse import transpose, spspmm  # , spmm
 
 
 def power_adj(adj, dim, p):

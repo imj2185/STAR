@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -5,13 +7,11 @@ import torch.nn.functional as fn
 from tensorboardX import SummaryWriter
 from torch_geometric.data import DataLoader
 from tqdm import tqdm
-import os
 
 from args import make_args
 from data.dataset3 import SkeletonDataset
 from models.net import DualGraphEncoder
 from optimizer import get_std_opt
-
 
 
 class GCNTrainer(object):
@@ -34,7 +34,7 @@ class GCNTrainer(object):
 
     def train(self, n_epochs):
 
-        best_acc = 0    
+        best_acc = 0
         i_acc = 0
 
         for epoch in range(n_epochs):
@@ -52,7 +52,7 @@ class GCNTrainer(object):
 
                 # loss = fn.cross_entropy(output, one_hot)l
                 loss = fn.cross_entropy(output, target.long())
-                #loss_value = loss.cpu().item()
+                # loss_value = loss.cpu().item()
                 loss.backward(retain_graph=True)
                 self.optimizer.step()
 
@@ -67,30 +67,30 @@ class GCNTrainer(object):
 
                 for name, param in self.model.named_parameters():
                     if param.requires_grad and param.grad is not None:
-                        self.writer.add_scalar('gradients/' + name, param.grad.norm(2).item(), i+1)
+                        self.writer.add_scalar('gradients/' + name, param.grad.norm(2).item(), i + 1)
 
-                #log_str = 'epoch %d, step %d: train_loss %.3f; train_acc %.3f' % (epoch + 1, i + 1, loss, acc)
-                #log_str = 'epoch %d, step %d: train_loss %.3f' % (epoch + 1, i + 1, loss)
-                #if (i + 1) % 1 == 0:
+                # log_str = 'epoch %d, step %d: train_loss %.3f; train_acc %.3f' % (epoch + 1, i + 1, loss, acc)
+                # log_str = 'epoch %d, step %d: train_loss %.3f' % (epoch + 1, i + 1, loss)
+                # if (i + 1) % 1 == 0:
                 #    print(log_str)
             i_acc += i
 
-            #evaluation
+            # evaluation
             with torch.no_grad():
-                #loss, val_overall_acc, val_mean_class_acc = self.update_validation_accuracy()
+                # loss, val_overall_acc, val_mean_class_acc = self.update_validation_accuracy()
                 loss, val_overall_acc = self.update_validation_accuracy()
-            #self.writer.add_scalar('val/val_mean_class_acc', val_mean_class_acc, epoch+1)
-            self.writer.add_scalar('val/val_overall_acc', val_overall_acc, epoch+1)
-            self.writer.add_scalar('val/val_loss', loss, epoch+1)
+            # self.writer.add_scalar('val/val_mean_class_acc', val_mean_class_acc, epoch+1)
+            self.writer.add_scalar('val/val_overall_acc', val_overall_acc, epoch + 1)
+            self.writer.add_scalar('val/val_loss', loss, epoch + 1)
 
             # save best model
             if val_overall_acc > best_acc:
                 best_acc = val_overall_acc
-                #self.model.save(self.log_dir, epoch)
-                torch.save(self.model.state_dict(), 
-                    os.path.join(self.log_dir, 
-                    "best_model.pth"))
- 
+                # self.model.save(self.log_dir, epoch)
+                torch.save(self.model.state_dict(),
+                           os.path.join(self.log_dir,
+                                        "best_model.pth"))
+
             # adjust learning rate manually
             if epoch > 0 and (epoch + 1) % 10 == 0:
                 for param_group in self.optimizer.param_groups:
@@ -154,21 +154,23 @@ if __name__ == '__main__':
     args = make_args()
 
     log_dir = '/home/dusko/Documents/projects/APBGCN/log'
-    train_dataset = SkeletonDataset(root="/home/dusko/Documents/projects/APBGCN", name='ntu_60', use_motion_vector=False,
+    train_dataset = SkeletonDataset(root="/home/dusko/Documents/projects/APBGCN", name='ntu_60',
+                                    use_motion_vector=False,
                                     benchmark='xsub', sample='train')
-    valid_dataset = SkeletonDataset(root="/home/dusko/Documents/projects/APBGCN", name='ntu_60', use_motion_vector=False,
+    valid_dataset = SkeletonDataset(root="/home/dusko/Documents/projects/APBGCN", name='ntu_60',
+                                    use_motion_vector=False,
                                     benchmark='xsub', sample='val')
 
     train_loader = DataLoader(train_dataset.data, batch_size=args.batch_size, shuffle=True)
     valid_loader = DataLoader(valid_dataset.data, batch_size=args.batch_size, shuffle=True)
 
     model = DualGraphEncoder(in_channels=6,
-                                 hidden_channels=32,
-                                 out_channels=32,
-                                 num_layers=4,
-                                 num_heads=8,
-                                 linear_temporal=True,
-                                 sequential=False)
+                             hidden_channels=32,
+                             out_channels=32,
+                             num_layers=4,
+                             num_heads=8,
+                             linear_temporal=True,
+                             sequential=False)
     # optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=(0.9, 0.98))
 
     noam_opt = get_std_opt(model, args)
