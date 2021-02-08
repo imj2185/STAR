@@ -65,8 +65,8 @@ def spmm_(indices, nz, m, n, d):
     assert n == d.shape[-2]
     rows, cols = indices
     d = d if d.dim() > 1 else d.unsqueeze(-1)
-    out = d[..., cols, :] * nz.unsqueeze(-1)
-    return scatter_add(out, rows, dim=-2, dim_size=m)
+    out = d[..., cols, :, :] * nz.unsqueeze(-1)
+    return scatter_add(out, rows, dim=-3, dim_size=m)
 
 
 def batched_spmm(nzt, adj, x, m=None, n=None):

@@ -25,9 +25,8 @@ class SparseAttention(nn.Module):
     https://tinyurl.com/yxq4ry64 and https://tinyurl.com/yy6l47p4
     """
     def __init__(self,
-                 heads,
                  in_channels,
-                 mdl_channels,
+                 max_position_embeddings=128,
                  softmax_temp=None,
                  attention_dropout=0.1):
         """
@@ -41,26 +40,13 @@ class SparseAttention(nn.Module):
                            (default: 0.1)
         """
         super(SparseAttention, self).__init__()
-        assert mdl_channels % heads == 0
-        self.heads = heads
         self.in_channels = in_channels
-        self.mdl_channels = mdl_channels
         self.softmax_temp = softmax_temp
         self.dropout = attention_dropout
-        self.ln_q = Linear(in_channels, mdl_channels)
-        self.ln_k = Linear(in_channels, mdl_channels)
-        self.ln_v = Linear(in_channels, mdl_channels)
-        self.ln_o = Linear(mdl_channels, mdl_channels)
 
-    def split_head(self, x):
-        # x: (batch, time_in, embed_dim)
-        b, l, c = x.shape
-        depth = c // self.heads
-        x = x.reshape(b, l, self.heads, depth)  # (batch, length, n_heads, depth)
-        x = x.transpose(2, 1)                   # (batch, n_heads, length, depth)
-        return x
+        #self.ln_o = Linear(mdl_channels, mdl_channels)
 
-    def forward(self, queries, keys, values, adj, edge_pos_enc):
+    def forward(self, queries, keys, values, adj):
         """Implements the multi-head softmax attention.
         Arguments
         ---------
@@ -71,25 +57,31 @@ class SparseAttention(nn.Module):
             :param edge_pos_enc: torch.Tensor,
 
         """
-        lq, lk, lv = self.ln_q(queries), self.ln_k(keys), self.ln_v(values)
+        #lq, lk, lv = self.ln_q(queries), self.ln_k(keys), self.ln_v(values)
 
         # Extract some shapes and compute the temperature
-        q, k, v = self.split_head(lq), self.split_head(lk), self.split_head(lv)
-        n, h, l, e = q.shape  # batch, n_heads, length, depth
-        _, _, s, d = v.shape
+        #q, k, v = self.split_head(lq), self.split_head(lk), self.split_head(lv)
+
+        n, l, h, e = queries.shape  # batch, n_heads, length, depth
+        _, _, s, d = values.shape
 
         softmax_temp = self.softmax_temp or 1. / math.sqrt(e)
 
+        #queries = rearrange(queries, 'n l h e -> n l (h e)')
+        #keys = rearrange(keys, 'n l h e -> n l (h e)')
         # Compute the un-normalized sparse attention according to adjacency matrix indices
-        qk = torch.sum(q[..., adj[0], :] * k[..., adj[1], :], dim=-1)  # .to(queries.device),
-
+        qk = torch.sum(queries[..., adj[0], :, :] * keys[..., adj[1], :, :], dim=-1)  # .to(queries.device),
+        
+        #qk = rearrange(qk, 'n h l e -> n h (l e)')
         # Compute the attention and the weighted average, adj[0] is cols idx in the same row
-        alpha = fn.dropout(softmax_(softmax_temp * (qk + edge_pos_enc), adj[0]),
+        #alpha = fn.dropout(softmax_(softmax_temp * (qk + edge_pos_enc), adj[0]),
+        #                   training=self.training)
+        alpha = fn.dropout(softmax_(softmax_temp * (qk), adj[0]),
                            training=self.training)
-        v = spmm_(adj, alpha, l, d, v)   # sparse matmul, adj as indices and qk as nonzero
-        v = torch.reshape(v.transpose(2, 1), (n, s, h * d))   # concatenate the multi-heads attention
+        v = spmm_(adj, alpha, l, s, values)   # sparse matmul, adj as indices and qk as nonzero
+        #v = torch.reshape(v, (n, l, h * d))   # concatenate the multi-heads attention
         # Make sure that what we return is contiguous
-        return self.ln_o(v.contiguous())
+        return v.contiguous()
     
 class FullAttention(nn.Module):
 
@@ -106,14 +98,15 @@ class FullAttention(nn.Module):
                           global dispatcher)
     """
 
-    def __init__(self, attention_head_size, max_position_embeddings=128,
+    def __init__(self, in_channels, max_position_embeddings=128,
                  softmax_temp=None, attention_dropout=0.1):
         super(FullAttention, self).__init__()
         self.softmax_temp = softmax_temp
         self.dropout = nn.Dropout(attention_dropout)
         self.max_position_embeddings = max_position_embeddings
+        self.embedding_weight = nn.Parameter(torch.randn(2 * max_position_embeddings + 1, in_channels))
         self.distance_embedding = nn.Embedding(
-            2 * max_position_embeddings + 1, attention_head_size)
+            2 * max_position_embeddings + 1, in_channels, _weight=self.embedding_weight)    
 
     def forward(self, queries, keys, values, attn_mask):
         """Implements the multihead softmax attention.
@@ -163,12 +156,26 @@ class FullAttention(nn.Module):
         return V.contiguous()
 
 class AddNorm(nn.Module):
-    def __init__(self, normalized_shape, dropout, **kwargs):
+    def __init__(self, normalized_shape, beta, dropout, **kwargs):
         super(AddNorm, self).__init__(**kwargs)
         self.dropout = nn.Dropout(dropout)
         self.ln = nn.LayerNorm(normalized_shape)
+        self.beta = beta
+        if self.beta:
+            self.lin_beta = Linear(3 * normalized_shape, 1, bias=False)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        self.ln.reset_parameters()
+        if self.beta:
+            self.lin_beta.reset_parameters()
 
     def forward(self, x, y):
+        if self.beta:
+            b = self.lin_beta(torch.cat([y, x, y - x], dim=-1))
+            b = b.sigmoid()
+            return self.ln(b * x + (1 - b) * self.dropout(y))
+
         return self.ln(self.dropout(y) + x)
 
 class MLP(nn.Module):
@@ -197,32 +204,91 @@ class MLP(nn.Module):
             x = fn.relu(self.layers[i](x))
         return self.layers[-1](x)
 
+class PositionalEncoding(nn.Module):
+    def __init__(self,
+                 model_dim: int):
+        """ Positional Encoding
+            This kind of encoding uses the trigonometric functions to
+            incorporate the relative position information into the input
+            sequence
+        :param model_dim (int): the dimension of the token (feature channel length)
+        """
+        super(PositionalEncoding, self).__init__()
+        self.model_dim = model_dim
+
+    def forward(self, x) -> Tensor:
+        sequence_length = x.shape[-2]
+        pos = torch.arange(sequence_length, dtype=torch.float, device=x.device).reshape(1, -1, 1)
+        dim = torch.arange(self.model_dim, dtype=torch.float, device=x.device).reshape(1, 1, -1)
+        phase = (pos / 1e4) ** (dim // self.model_dim)
+        assert x.shape[-2] == sequence_length and x.shape[-1] == self.model_dim
+        return x + torch.where(dim.long() % 2 == 0, torch.sin(phase), torch.cos(phase))
+
+class FeedForward(nn.Module):
+    def __init__(self, in_channels, hidden_channels, dropout = 0.):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(in_channels, hidden_channels),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_channels, in_channels),
+            nn.Dropout(dropout)
+        )
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        for layer in self.net:
+            if isinstance(layer, nn.Linear):
+                layer.reset_parameters()
+
+    def forward(self, x):
+        return self.net(x)
+        
 class EncoderLayer(nn.Module):
     def __init__(self,
                  in_channels=6,
                  mdl_channels=64,
                  heads=8,
-                 activation="relu",
-                 # add bool parameter: spatial or not
+                 spatial = False,
+                 beta = True,
                  dropout=0.1):
         super(EncoderLayer, self).__init__()
         self.in_channels = in_channels
         self.mdl_channels = mdl_channels
         self.heads = heads
         self.dropout = dropout
+        self.spatial = spatial
+        self.beta = beta
 
         #self.bn = nn.BatchNorm1d(in_channels * 25)
+
         self.lin_q = Linear(in_channels, mdl_channels)
         self.lin_k = Linear(in_channels, mdl_channels)
         self.lin_v = Linear(in_channels, mdl_channels)
-        self.spatial = False
-        self.multi_head_attn = FullAttention(attention_head_size = heads, 
-                                                max_position_embeddings=128,
-                                                softmax_temp=None, 
-                                                attention_dropout=dropout)
-        self.add_norm_att = AddNorm(self.mdl_channels, self.dropout)
-        self.add_norm_mlp = AddNorm(self.mdl_channels, self.dropout)
-        self.mlp = MLP(self.mdl_channels, self.mdl_channels, self.mdl_channels)
+
+        if spatial:
+            self.multi_head_attn = SparseAttention(in_channels = mdl_channels // heads,
+                                                    max_position_embeddings=128,
+                                                    attention_dropout=dropout)
+
+        else:
+            self.multi_head_attn = FullAttention(in_channels = mdl_channels // heads,
+                                                    max_position_embeddings=128,
+                                                    attention_dropout=dropout)
+        
+        self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout)
+        self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout)
+        self.ffn = FeedForward(self.mdl_channels, self.mdl_channels, self.dropout)
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        self.lin_k.reset_parameters()
+        self.lin_q.reset_parameters()
+        self.lin_v.reset_parameters()
+        self.add_norm_att.reset_parameters()
+        self.add_norm_ffn.reset_parameters()
+        self.ffn.reset_parameters()
 
     def forward(self, x, bi=None):
         #x = self.bn()
@@ -233,18 +299,29 @@ class EncoderLayer(nn.Module):
         query = self.lin_q(q)
         key = self.lin_k(k)
         value = self.lin_v(v)
-
-        attn_mask = BatchedMask(bi) if not self.spatial else None
-
-        query = rearrange(query, 'n f (h c) -> n f h c', h=self.heads)
-        key = rearrange(key, 'n f (h c) -> n f h c', h=self.heads)
-        value = rearrange(value, 'n f (h c) -> n f h c', h=self.heads)
-
+        if self.spatial:
+            attn_mask = bi
+        else:
+            attn_mask = BatchedMask(bi) if not self.spatial else None
+        
+        if self.spatial:
+            query = rearrange(query, 'f n (h c) -> f n h c', h=self.heads)
+            key = rearrange(key, 'f n(h c) -> f n h c', h=self.heads)
+            value = rearrange(value, 'f n (h c) -> f n h c', h=self.heads)
+        else:
+            query = rearrange(query, 'f n (h c) -> n f h c', h=self.heads)
+            key = rearrange(key, 'f n (h c) -> n f h c', h=self.heads)
+            value = rearrange(value, 'f n (h c) -> n f h c', h=self.heads)
+        
         t = self.multi_head_attn(query, key, value, attn_mask)
-        t = rearrange(t, 'n f h c -> n f (h c)', h=self.heads)
+        if self.spatial:
+            t = rearrange(t, 'f n h c -> f n (h c)', h=self.heads)
+        else:
+            t = rearrange(t, 'n f h c -> f n (h c)', h=self.heads)
+
         x = self.add_norm_att(x, t)
-        x = self.add_norm_mlp(x, self.mlp(x))
-        x = rearrange(x, 'n f c -> f n c')
+        x = self.add_norm_ffn(x, self.ffn(x))
+        #x = rearrange(x, 'n f c -> f n c')
         #batch norm(x)
         return x
 

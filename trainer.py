@@ -36,22 +36,26 @@ class GCNTrainer(object):
 
         best_acc = 0    
         i_acc = 0
-        self.model.train(True)
 
         for epoch in range(n_epochs):
+            self.model.train(True)
             # plot learning rate
             lr = self.optimizer.state_dict()['param_groups'][0]['lr']
             self.writer.add_scalar('params/lr', lr, epoch)
 
-            for i, batch in tqdm(enumerate(train_loader), total=len(train_loader), desc="Train Epoch {}".format(epoch)):
+            for i, batch in tqdm(enumerate(train_loader), total=len(train_loader), desc="Epoch {}".format(epoch)):
                 batch = batch.to(self.device)
                 self.optimizer.zero_grad()
                 output = self.model(batch.x, adj=self.adj, bi=batch.batch)
                 target = batch.y  # - 1
                 # one_hot = fn.one_hot(target.long(), num_classes = 60)
 
-                # loss = fn.cross_entropy(output, one_hot)
+                # loss = fn.cross_entropy(output, one_hot)l
                 loss = fn.cross_entropy(output, target.long())
+                #loss_value = loss.cpu().item()
+                loss.backward(retain_graph=True)
+                self.optimizer.step()
+
                 self.writer.add_scalar('train/train_loss', loss, i_acc + i + 1)
 
                 pred = torch.max(output, 1)[1]
@@ -61,12 +65,14 @@ class GCNTrainer(object):
                 acc = correct_points.float() / results.size()[0]
                 self.writer.add_scalar('train/train_overall_acc', acc, i_acc + i + 1)
 
-                loss.backward(retain_graph=True)
-                self.optimizer.step()
+                for name, param in self.model.named_parameters():
+                    if param.requires_grad and param.grad is not None:
+                        self.writer.add_scalar('gradients/' + name, param.grad.norm(2).item(), i+1)
 
-                log_str = 'epoch %d, step %d: train_loss %.3f; train_acc %.3f' % (epoch + 1, i + 1, loss, acc)
-                if (i + 1) % 1 == 0:
-                    print(log_str)
+                #log_str = 'epoch %d, step %d: train_loss %.3f; train_acc %.3f' % (epoch + 1, i + 1, loss, acc)
+                #log_str = 'epoch %d, step %d: train_loss %.3f' % (epoch + 1, i + 1, loss)
+                #if (i + 1) % 1 == 0:
+                #    print(log_str)
             i_acc += i
 
             #evaluation
@@ -113,7 +119,7 @@ class GCNTrainer(object):
 
             batch = batch.to(self.device)
             output = self.model(batch.x, adj=self.adj, bi=batch.batch)
-            target = batch.y - 1
+            target = batch.y
 
             pred = torch.max(output, 1)[1]
             all_loss += self.loss_fn(output, target).cpu().data.numpy()

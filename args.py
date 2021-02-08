@@ -29,14 +29,14 @@ def make_args():
                         help='whether load_model')
     parser.add_argument('--load_epoch', dest='load_epoch', default=0, type=int,
                         help='whether load_model')
-    parser.add_argument('--batch_size', dest='batch_size', default=32,
+    parser.add_argument('--batch_size', dest='batch_size', default=4,
                         type=int)  # implemented via accumulating gradient
     parser.add_argument('--num_layers', dest='num_layers', default=2, type=int)
     parser.add_argument('--activation', dest='activation', default='relu', type=str)
     # Training Setting up
     parser.add_argument('--lr', dest='lr', default=0.1, type=float)
     parser.add_argument('--weight_decay', dest='weight_decay', default=0.01, type=float)
-    parser.add_argument('--warmup_steps', dest='warmup_steps', default=4000, type=float)
+    parser.add_argument('--warmup_steps', dest='warmup_steps', default=100000, type=float)
     parser.add_argument('--opt_train_factor', dest='opt_train_factor', default=4, type=float)
     parser.add_argument('--epoch_num', dest='epoch_num', default=200, type=int)  # paper used: 2001
     parser.add_argument('--epoch_log', dest='epoch_log', default=50, type=int)  # test every
