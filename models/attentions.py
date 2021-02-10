@@ -60,7 +60,9 @@ class SparseAttention(nn.Module):
         # queries = rearrange(queries, 'n l h e -> n l (h e)')
         # keys = rearrange(keys, 'n l h e -> n l (h e)')
         # Compute the un-normalized sparse attention according to adjacency matrix indices
-        qk = torch.sum(queries[..., adj[0], :, :] * keys[..., adj[1], :, :], dim=-1)  # .to(queries.device),
+        # .to(queries.device),
+        qk = torch.sum(queries[..., adj[0], :, :] *
+                       keys[..., adj[1], :, :], dim=-1)
 
         # qk = rearrange(qk, 'n h l e -> n h (l e)')
         # Compute the attention and the weighted average, adj[0] is cols idx in the same row
@@ -68,7 +70,8 @@ class SparseAttention(nn.Module):
         #                   training=self.training)
         alpha = fn.dropout(softmax_(softmax_temp * qk, adj[0]),
                            training=self.training)
-        v = spmm_(adj, alpha, l, s, values)  # sparse matmul, adj as indices and qk as nonzero
+        # sparse matmul, adj as indices and qk as nonzero
+        v = spmm_(adj, alpha, l, s, values)
         # v = torch.reshape(v, (n, l, h * d))   # concatenate the multi-heads attention
         # Make sure that what we return is contiguous
         return v.contiguous()
@@ -94,7 +97,8 @@ class FullAttention(nn.Module):
         self.softmax_temp = softmax_temp
         self.dropout = nn.Dropout(attention_dropout)
         self.max_position_embeddings = max_position_embeddings
-        self.embedding_weight = nn.Parameter(torch.randn(2 * max_position_embeddings + 1, in_channels))
+        self.embedding_weight = nn.Parameter(torch.randn(
+            2 * max_position_embeddings + 1, in_channels))
         self.distance_embedding = nn.Embedding(
             2 * max_position_embeddings + 1, in_channels, _weight=self.embedding_weight)
 
@@ -127,7 +131,8 @@ class FullAttention(nn.Module):
 
         distance = (position_ids_l - position_ids_r).clip(-self.max_position_embeddings,
                                                           self.max_position_embeddings)
-        positional_embedding = self.distance_embedding(distance + self.max_position_embeddings)
+        positional_embedding = self.distance_embedding(
+            distance + self.max_position_embeddings)
 
         relative_position_scores_query = torch.einsum(
             "blhd, lrd -> bhlr", queries, positional_embedding)
@@ -212,8 +217,10 @@ class PositionalEncoding(nn.Module):
 
     def forward(self, x) -> Tensor:
         sequence_length = x.shape[-2]
-        pos = torch.arange(sequence_length, dtype=torch.float, device=x.device).reshape(1, -1, 1)
-        dim = torch.arange(self.model_dim, dtype=torch.float, device=x.device).reshape(1, 1, -1)
+        pos = torch.arange(sequence_length, dtype=torch.float,
+                           device=x.device).reshape(1, -1, 1)
+        dim = torch.arange(self.model_dim, dtype=torch.float,
+                           device=x.device).reshape(1, 1, -1)
         phase = (pos / 1e4) ** (dim // self.model_dim)
         assert x.shape[-2] == sequence_length and x.shape[-1] == self.model_dim
         return x + torch.where(dim.long() % 2 == 0, torch.sin(phase), torch.cos(phase))
@@ -240,6 +247,38 @@ class FeedForward(nn.Module):
         return self.net(x)
 
 
+class TemporalConv(nn.Module):
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 kernel_size,
+                 stride=1,
+                 activation = False,
+                 dropout=0,
+                 bias=True):
+        super(TemporalConv, self).__init__()
+        pad = int((kernel_size - 1) / 2)
+
+        self.conv = nn.Conv1d(
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            padding=pad,
+            stride=stride,
+            bias=bias)
+
+        self.bn = nn.BatchNorm1d(out_channels)
+        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(dropout, inplace=True)
+        self.activation = activation
+
+    def forward(self, x):
+        
+        x = self.dropout(x)
+        x = self.bn(self.conv(x))  # B * M, C, T, V
+        return self.relu(x) if self.activation else x
+
+
 class EncoderLayer(nn.Module):
     def __init__(self,
                  in_channels=6,
@@ -247,7 +286,10 @@ class EncoderLayer(nn.Module):
                  heads=8,
                  spatial=False,
                  beta=True,
-                 dropout=0.1):
+                 dropout=0.1,
+                 temp_conv_knl=9,
+                 temp_conv_stride=1,
+                 num_conv_layers=3):
         super(EncoderLayer, self).__init__()
         self.in_channels = in_channels
         self.mdl_channels = mdl_channels
@@ -255,8 +297,14 @@ class EncoderLayer(nn.Module):
         self.dropout = dropout
         self.spatial = spatial
         self.beta = beta
+        self.num_conv_layers = num_conv_layers
 
         # self.bn = nn.BatchNorm1d(in_channels * 25)
+        self.temp_conv = nn.ModuleList([TemporalConv(in_channels=mdl_channels,
+                                                     out_channels=mdl_channels,
+                                                     kernel_size=temp_conv_knl // 2 + 1 if i == (num_conv_layers - 1) else temp_conv_knl,
+                                                     stride=temp_conv_stride * 2 if i == (num_conv_layers - 1) else temp_conv_stride,
+                                                     activation = False if i == (num_conv_layers - 1) else True) for i in range(num_conv_layers)])
 
         self.lin_q = Linear(in_channels, mdl_channels)
         self.lin_k = Linear(in_channels, mdl_channels)
@@ -274,7 +322,8 @@ class EncoderLayer(nn.Module):
 
         self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout)
         self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout)
-        self.ffn = FeedForward(self.mdl_channels, self.mdl_channels, self.dropout)
+        self.ffn = FeedForward(
+            self.mdl_channels, self.mdl_channels, self.dropout)
 
         self.reset_parameters()
 
@@ -317,6 +366,12 @@ class EncoderLayer(nn.Module):
 
         x = self.add_norm_att(x, t)
         x = self.add_norm_ffn(x, self.ffn(x))
+
+        x = rearrange(x, 'f n c -> n c f')
+        for i in range(self.num_conv_layers):
+            x = self.temp_conv[i](x)
+
         # x = rearrange(x, 'n f c -> f n c')
         # batch norm(x)
+        x = rearrange(x, 'n c f -> f n c')
         return x

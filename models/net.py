@@ -93,7 +93,7 @@ class DualGraphEncoder(nn.Module, ABC):
             t = fn.relu(self.lls[i](t))
             # t = self.lls[i](t)
             # t = self.temporal_layers[i](t, bi)
-            t = self.spatial_layers[i](t, adj)
+            t = fn.relu(self.spatial_layers[i](t, adj))
             # t = fn.relu(self.temporal_layers[i](t, bi))
             # s = self.spatial_norms[i](fn.relu(self.spatial_layers[i](s, adj)))
             # if self.trainable_factor:
@@ -103,8 +103,9 @@ class DualGraphEncoder(nn.Module, ABC):
             #    t = (s + t) * 0.5
         # t = scatter_mean(rearrange(t, 'n f c -> f n c'), bi, dim=0)
         t = rearrange(t, 'f n c -> n f c')
-        t = rearrange(self.context_attention(t, batch_index=bi),
+        bi_ = bi[:bi.shape[0]:2**self.num_layers] 
+        t = rearrange(self.context_attention(t, batch_index=bi_),
                       'n f c -> f (n c)')  # bi is the shrunk along the batch index
-        t = self.mlp_head(t)
+        t = self.mlp_head(fn.relu(t))
         # return fn.sigmoid(t)  # dimension (b, n, oc)
         return t

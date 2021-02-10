@@ -36,7 +36,7 @@ def make_args():
     # Training Setting up
     parser.add_argument('--lr', dest='lr', default=0.1, type=float)
     parser.add_argument('--weight_decay', dest='weight_decay', default=0.01, type=float)
-    parser.add_argument('--warmup_steps', dest='warmup_steps', default=100000, type=float)
+    parser.add_argument('--warmup_steps', dest='warmup_steps', default=6e5, type=float)
     parser.add_argument('--opt_train_factor', dest='opt_train_factor', default=4, type=float)
     parser.add_argument('--epoch_num', dest='epoch_num', default=200, type=int)  # paper used: 2001
     parser.add_argument('--epoch_log', dest='epoch_log', default=50, type=int)  # test every
