@@ -33,7 +33,7 @@ class DualGraphEncoder(nn.Module, ABC):
         self.trainable_factor = trainable_factor
         self.bn = nn.BatchNorm1d(in_channels * 25)
         channels = [in_channels] + [hidden_channels] * (num_layers - 1) + [out_channels]
-
+        #channels = [hidden_channels * (i + 1)^2 for i in range(num_layers - 1)] 
         # self.spatial_norms = nn.ModuleList([
         # nn.BatchNorm1d(channels[i + 1]) for i in range(num_layers)
         #    nn.LayerNorm(channels[i + 1]) for i in range(num_layers)

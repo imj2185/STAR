@@ -240,13 +240,11 @@ class SkeletonDataset(Dataset, ABC):
         self.num_joints = 25 if 'ntu' in self.name else 18
         self.skeleton_ = skeleton_parts(num_joints=self.num_joints,
                                         dataset=self.name)
-        self.training_subjects = [1, 2, 4, 5, 8, 9, 13, 14, 15, 16, 17, 18, 19, 25, 27, 28, 31, 34, 35, 38, 45, 46, 47,
-                                  49, 50, 52,
-                                  53, 54, 55, 56, 57, 58, 59, 70, 74, 78, 80, 81, 82, 83, 84, 85, 86, 89, 91, 92, 93,
-                                  94, 95, 97, 98,
-                                  100, 103]
+        self.training_subjects = [1, 2, 4, 5, 8, 9, 13, 14, 15, 16, 17, 18, 19, 25, 27, 28, 31, 34, 35, 
+                                  38, 45, 46, 47, 49, 50, 52, 53, 54, 55, 56, 57, 58, 59, 70, 74, 78, 
+                                  80, 81, 82, 83, 84, 85, 86, 89, 91, 92, 93, 94, 95, 97, 98, 100, 103]
         # For Cross-View benchmark "xview"
-        self.training_setup = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 16, 28, 30, 32]
+        self.training_setup = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32]
         self.paris = {
             'xview': (
                 (1, 2), (2, 21), (3, 21), (4, 3), (5, 21),
@@ -254,7 +252,7 @@ class SkeletonDataset(Dataset, ABC):
                 (11, 10), (12, 11), (13, 1), (14, 13), (15, 14),
                 (16, 15), (17, 1), (18, 17), (19, 18), (20, 19),
                 (22, 23), (21, 21), (23, 8), (24, 25), (25, 12)
-            ),
+            ), # (21, 21)?
             'xsub': (
                 (1, 2), (2, 21), (3, 21), (4, 3), (5, 21),
                 (6, 5), (7, 6), (8, 7), (9, 21), (10, 9),
@@ -400,8 +398,8 @@ def test():
     parser.add_argument('--dataset', dest='dataset', default='ntu_60',
                         type=str, help='Dataset')
     args = parser.parse_args()
-    ds = SkeletonDataset(root=args.root,
-                         name=args.dataset,
+    ds = SkeletonDataset(root="/home/dusko/Documents/projects/APBGCN",
+                         name='ntu_60_test',
                          benchmark='xsub',
                          sample='val')
     loader = DataLoader(ds[0: 8], batch_size=4)
