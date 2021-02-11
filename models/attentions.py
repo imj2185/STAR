@@ -18,13 +18,12 @@ class SparseAttention(nn.Module):
 
     def __init__(self,
                  in_channels,
-                 max_position_embeddings=128,
                  softmax_temp=None,
+                 num_adj=3,
                  attention_dropout=0.1):
         """
         :param heads (int):
         :param in_channels (int):
-        :param out_channels (int):
         :param softmax_temp (torch.Tensor): The temperature to use for the softmax attention.
                       (default: 1/sqrt(d_keys) where d_keys is computed at
                       runtime)
@@ -35,7 +34,8 @@ class SparseAttention(nn.Module):
         self.in_channels = in_channels
         self.softmax_temp = softmax_temp
         self.dropout = attention_dropout
-
+        self.beta = nn.Parameter(torch.randn(num_adj))
+        self.weights = nn.Parameter(torch.randn(num_adj, in_channels, in_channels))
         # self.ln_o = Linear(mdl_channels, mdl_channels)
 
     def forward(self, queries, keys, values, adj):
@@ -57,27 +57,31 @@ class SparseAttention(nn.Module):
 
         softmax_temp = self.softmax_temp or 1. / math.sqrt(e)
 
-        # queries = rearrange(queries, 'n l h e -> n l (h e)')
-        # keys = rearrange(keys, 'n l h e -> n l (h e)')
         # Compute the un-normalized sparse attention according to adjacency matrix indices
-        # .to(queries.device),
-        qk = torch.sum(queries[..., adj[0], :, :] *
-                       keys[..., adj[1], :, :], dim=-1)
+        if isinstance(adj, torch.Tensor):
+            qk = torch.sum(queries[..., adj[0], :, :] *
+                           keys[..., adj[1], :, :], dim=-1)
+            adj_ = adj
+        else:
+            qk = 0.
+            for k in range(len(adj)):
+                qk += self.beta[k] * torch.sum(queries[..., adj[k][0], :, :] *
+                                               keys[..., adj[k][1], :, :], dim=-1)
+            adj_ = torch.cat(adj, dim=1)
+            _, idx = adj_[0].sort()
+            adj_ = adj_[:, idx]
 
-        # qk = rearrange(qk, 'n h l e -> n h (l e)')
         # Compute the attention and the weighted average, adj[0] is cols idx in the same row
-        # alpha = fn.dropout(softmax_(softmax_temp * (qk + edge_pos_enc), adj[0]),
-        #                   training=self.training)
         alpha = fn.dropout(softmax_(softmax_temp * qk, adj[0]),
                            training=self.training)
         # sparse matmul, adj as indices and qk as nonzero
-        v = spmm_(adj, alpha, l, s, values)
+        v = spmm_(adj_, alpha, l, s, values)
         # v = torch.reshape(v, (n, l, h * d))   # concatenate the multi-heads attention
         # Make sure that what we return is contiguous
         return v.contiguous()
 
 
-class FullAttention(nn.Module): #B * T X V X C
+class FullAttention(nn.Module):  # B * T X V X C
     """Implement the scaled dot product attention with softmax.
     Arguments
     ---------
