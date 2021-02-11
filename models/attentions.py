@@ -63,13 +63,13 @@ class SparseAttention(nn.Module):
                            keys[..., adj[1], :, :], dim=-1)
             adj_ = adj
         else:
-            qk = 0.
-            for k in range(len(adj)):
-                qk += self.beta[k] * torch.sum(queries[..., adj[k][0], :, :] *
-                                               keys[..., adj[k][1], :, :], dim=-1)
+            qk = torch.cat([self.beta[k] * torch.sum(
+                queries[..., adj[k][0], :, :] *
+                keys[..., adj[k][1], :, :], dim=-1) for k in range(len(adj))], dim=0)
             adj_ = torch.cat(adj, dim=1)
             _, idx = adj_[0].sort()
             adj_ = adj_[:, idx]
+            qk = qk[idx]
 
         # Compute the attention and the weighted average, adj[0] is cols idx in the same row
         alpha = fn.dropout(softmax_(softmax_temp * qk, adj[0]),
