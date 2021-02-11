@@ -201,24 +201,6 @@ def make_attn_mask(seq_len, bi):
     return None
 
 
-def bfs_enc(edges, root, device):
-    if not isinstance(edges, torch.Tensor):
-        edges = torch.tensor(edges)
-        if edges.shape[0] > edges.shape[1]:
-            edges = torch.transpose(edges, 1, 0)
-    num_nodes = max(edges[0]) + 1
-    hops2root = torch.ones(num_nodes).to(device)
-    ancestors = torch.ones(num_nodes, dtype=torch.long).to(device)
-    # for j in range(edges.shape[1]):
-    #     ancestors[edges[1, j]] = edges[0, j]
-    ancestors[edges[1]] = edges[0]
-    ancestors[root] = root
-    while torch.sum(torch.eq(ancestors, 0)) != num_nodes:
-        ancestors = ancestors[ancestors]
-        hops2root = torch.where(torch.eq(ancestors, root), hops2root, hops2root + 1)
-    return hops2root
-
-
 if __name__ == "__main__":
     from data.dataset import skeleton_parts
 
