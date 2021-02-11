@@ -71,7 +71,7 @@ def spmm_(indices, nz, m, n, dense, dim=-3):
     return scatter_add(out, rows, dim=dim, dim_size=m)
 
 
-def batched_spmm(nzt, adj, x, m=None, n=None):
+def batched_spmm(nzt, adj, x, m=None, n=None, dim=-2):
     """
     Args:
         nzt: Tensor [num_edges, heads]    -- non-zero tensor
@@ -79,25 +79,26 @@ def batched_spmm(nzt, adj, x, m=None, n=None):
         x:   Tensor [num_nodes, channels] -- feature matrix
         m:   int
         n:   int
+        dim: int
     """
     num_edges, heads = nzt.shape[-2:]
     num_nodes, channels = x.shape[-2:]
     # preparation of data
-    x_ = repeat(x, '... n c -> ... (h n) c', h=heads)
+    x_ = repeat(x, '... n c -> ... (h n) c', h=heads).to(x.device)
     nzt_ = rearrange(nzt, '... e h -> ... (h e)')
     if isinstance(adj, Tensor):
         m = maybe_num_nodes(adj[0], m)
         n = max(num_nodes, maybe_num_nodes(adj[1], n))
-        offset = torch.tensor([[m], [n]]).to(x_.device)
-        adj_ = torch.cat([adj + offset * i for i in range(heads)], dim=1)
+        offset = torch.tensor([[m], [n]]).to(x.device)
+        adj_ = torch.cat([adj + offset * k for k in range(heads)], dim=1)
     else:  # adj is list of adjacency matrices
         assert heads == len(
             adj), "the number of heads and the number of adjacency matrices are not matched"
         m = max([maybe_num_nodes(adj_[0], m) for adj_ in adj])
         n = max([maybe_num_nodes(adj_[1], n) for adj_ in adj])
-        offset = torch.tensor([[m], [n]])
-        adj_ = torch.cat([adj[i] + offset * i for i in range(heads)], dim=1)
-    return spmm_(adj_, nzt_, heads * m, heads * n, x_)
+        offset = torch.tensor([[m], [n]]).to(x.device)
+        adj_ = torch.cat([adj[k] + offset * k for k in range(heads)], dim=1)
+    return spmm_(adj_, nzt_, heads * m, heads * n, x_, dim=dim)
 
 
 def batched_transpose(adj, value, m=None, n=None):
