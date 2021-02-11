@@ -22,7 +22,8 @@ def power_adj(adj, dim, p):
 def softmax_(src: Tensor,
              index: Optional[Tensor],
              ptr: Optional[Tensor] = None,
-             num_nodes: Optional[int] = None) -> Tensor:
+             num_nodes: Optional[int] = None,
+             dim=-2) -> Tensor:
     r"""Computes a sparsely evaluated softmax.
     Given a value tensor :attr:`src`, this function first groups the values
     along the first dimension based on the indices specified in :attr:`index`,
@@ -45,14 +46,14 @@ def softmax_(src: Tensor,
 
     if index is not None:
         n = maybe_num_nodes(index, num_nodes)
-        out_sum = scatter(out, index, dim=-2, dim_size=n, reduce='sum')[..., index, :]
+        out_sum = scatter(out, index, dim=dim, dim_size=n, reduce='sum').index_select(dim, index)
     else:
         raise NotImplementedError
 
     return out / (out_sum + 1e-16)
 
 
-def spmm_(indices, nz, m, n, d):
+def spmm_(indices, nz, m, n, dense, dim=-3):
     """Sparse matrix multiplication, it supports tensor
     with dimension size more than 2, and the code is inspired by:
     "PyTorch Sparse"[https://tinyurl.com/ycn2nkdr]
@@ -63,11 +64,11 @@ def spmm_(indices, nz, m, n, d):
         n (int): The second dimension of corresponding dense matrix.
         d (:class:`Tensor`): tensor of dense matrix
     """
-    assert n == d.shape[-2]
+    assert n == dense.shape[dim]
     rows, cols = indices
-    d = d if d.dim() > 1 else d.unsqueeze(-1)
-    out = d[..., cols, :, :] * nz.unsqueeze(-1)
-    return scatter_add(out, rows, dim=-3, dim_size=m)
+    dense = dense if dense.dim() > 1 else dense.unsqueeze(-1)
+    out = dense.index_select(dim, cols) * nz.unsqueeze(-1)
+    return scatter_add(out, rows, dim=dim, dim_size=m)
 
 
 def batched_spmm(nzt, adj, x, m=None, n=None):
