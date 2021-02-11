@@ -77,7 +77,7 @@ class SparseAttention(nn.Module):
         return v.contiguous()
 
 
-class FullAttention(nn.Module):
+class FullAttention(nn.Module): #B * T X V X C
     """Implement the scaled dot product attention with softmax.
     Arguments
     ---------
@@ -303,7 +303,7 @@ class EncoderLayer(nn.Module):
         self.temp_conv = nn.ModuleList([TemporalConv(in_channels=mdl_channels,
                                                      out_channels=mdl_channels,
                                                      kernel_size=temp_conv_knl // 2 + 1 if i == (num_conv_layers - 1) else temp_conv_knl,
-                                                     stride=temp_conv_stride * 2 if i == (num_conv_layers - 1)) for i in range(num_conv_layers)])
+                                                     stride=temp_conv_stride * 2 if i == (num_conv_layers - 1) else temp_conv_stride) for i in range(num_conv_layers)])
 
         self.lin_q = Linear(in_channels, mdl_channels)
         self.lin_k = Linear(in_channels, mdl_channels)
