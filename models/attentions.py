@@ -20,6 +20,7 @@ class SparseAttention(nn.Module):
                  in_channels,
                  softmax_temp=None,
                  num_adj=3,
+                 max_position_embeddings=128,
                  attention_dropout=0.1):
         """
         :param heads (int):
@@ -75,7 +76,7 @@ class SparseAttention(nn.Module):
         alpha = fn.dropout(softmax_(softmax_temp * qk, adj[0]),
                            training=self.training)
         # sparse matmul, adj as indices and qk as nonzero
-        v = spmm_(adj_, alpha, l, s, values)
+        v = spmm_(adj_, alpha, l, l, values)
         # v = torch.reshape(v, (n, l, h * d))   # concatenate the multi-heads attention
         # Make sure that what we return is contiguous
         return v.contiguous()

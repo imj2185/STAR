@@ -7,7 +7,7 @@ import torch.nn.functional as fn
 from einops import rearrange
 
 from .attentions import EncoderLayer, PositionalEncoding
-from .layers import GlobalContextAttention, PositionalEncoding
+from .layers import GlobalContextAttention
 
 
 class DualGraphEncoder(nn.Module, ABC):

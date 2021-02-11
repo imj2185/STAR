@@ -53,7 +53,7 @@ class GCNTrainer(object):
                 # loss = fn.cross_entropy(output, one_hot)l
                 loss = fn.cross_entropy(output, target.long())
                 # loss_value = loss.cpu().item()
-                loss.backward(retain_graph=True)
+                loss.backward()
                 self.optimizer.step()
 
                 self.writer.add_scalar('train/train_loss', loss, i_acc + i + 1)
