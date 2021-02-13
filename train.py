@@ -12,6 +12,25 @@ from models.net import DualGraphEncoder
 from optimizer import get_std_opt
 from utility.helper import make_checkpoint, load_checkpoint
 
+from tensorboardX import SummaryWriter
+import matplotlib.pyplot as plt
+import numpy as np
+
+def plot_grad_flow(named_parameters):
+    ave_grads = []
+    layers = []
+    for n, p in named_parameters:
+        if(p.requires_grad) and ("bias" not in n):
+            layers.append(n)
+            ave_grads.append(p.grad.abs().mean().cpu().item())
+    plt.plot(ave_grads, alpha=0.3, color="b")
+    plt.hlines(0, 0, len(ave_grads)+1, linewidth=1, color="k" )
+    plt.xticks(range(0,len(ave_grads), 1), layers, rotation="vertical")
+    plt.xlim(xmin=0, xmax=len(ave_grads))
+    plt.xlabel("Layers")
+    plt.ylabel("average gradient")
+    plt.title("Gradient flow")
+    plt.grid(True)
 
 def run_epoch(data_loader,
               model,
@@ -20,7 +39,10 @@ def run_epoch(data_loader,
               dataset,
               device,
               is_train=True,
-              desc=None):
+              desc=None,
+              args=None,
+              writer=None,
+              epoch_num=0):
     """Standard Training and Logging Function
 
         :param data_loader:
@@ -38,19 +60,27 @@ def run_epoch(data_loader,
     correct = 0
     total_samples = 0
     start = time.time()
+    total_batch = len(dataset)//args.batch_size+1
     for i, batch in tqdm(enumerate(data_loader),
-                         total=len(dataset),
+                         total=total_batch,
                          desc=desc):
         batch = batch.to(device)
-        sample, label, bi = batch.x, batch.y, batch.batch
+        sample, label, bi = batch.x, batch.y, batch.batch.to(device)
 
         with torch.set_grad_enabled(is_train):
-            out = model(sample, adj=dataset.skeleton_, bi=bi)
+            out = model(sample, adj=dataset.skeleton_.to(device), bi=bi)
             loss = loss_compute(out, label.long())
-            # if training, backward
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            if is_train:
+                optimizer.zero_grad()
+                loss.backward()
+                plot_grad_flow(model.named_parameters())
+                optimizer.step()
+                
+                #plot_grad_flow(model.named_parameters(), writer, (i + 1) + total_batch * epoch_num)
+                #for name, param in model.named_parameters():
+                    #if param.requires_grad and param.grad is not None:
+                        #writer.add_scalar('gradients/' + name, param.grad.norm(2).item(), (i + 1) + total_batch * epoch_num)
+            
             # statistics
             running_loss += loss.item()
             pred = torch.max(out, 1)[1]
@@ -60,7 +90,7 @@ def run_epoch(data_loader,
     elapsed = time.time() - start
     accuracy = correct / total_samples * 100.
     print('------ loss: %.3f; accuracy: %.3f; average time: %.4f' %
-          (running_loss / len(dataset),
+          (running_loss / (len(dataset)//args.batch_size+1),
            accuracy,
            elapsed / len(dataset)))
 
@@ -70,14 +100,15 @@ def run_epoch(data_loader,
 def main():
     # torch.cuda.empty_cache()
     args = make_args()
+    writer = SummaryWriter(args.log_dir)
     device = torch.device('cuda:0') if args.use_gpu and torch.cuda.is_available() else torch.device('cpu')
     # device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     # download and save the dataset
-    train_ds = SkeletonDataset(args.root, name='ntu_60',
+    train_ds = SkeletonDataset(args.dataset_root, name='ntu_60',
                                use_motion_vector=False,
                                benchmark='xsub', sample='train')
-    valid_ds = SkeletonDataset(args.root, name='ntu_60',
+    valid_ds = SkeletonDataset(args.dataset_root, name='ntu_60',
                                use_motion_vector=False,
                                benchmark='xsub', sample='val')
 
@@ -109,24 +140,34 @@ def main():
         print("Load Model: ", last_epoch)
 
     loss_compute = nn.CrossEntropyLoss().to(device)
-
+    
+    
     for epoch in trange(last_epoch, args.epoch_num + last_epoch):
         # print('Epoch: {} Training...'.format(epoch))
         model.train(True)
+        lr = noam_opt.optimizer.state_dict()['param_groups'][0]['lr']
+        writer.add_scalar('params/lr', lr, epoch)
 
         loss, accuracy = run_epoch(train_loader, model, noam_opt.optimizer,
-                                   loss_compute, train_ds, device, is_train=True,
-                                   desc="Train Epoch {}".format(epoch))
-        print('Epoch: {} Evaluating...'.format(epoch))
+                                loss_compute, train_ds, device, is_train=True,
+                                desc="Train Epoch {}".format(epoch+1), args=args, writer=writer, epoch_num=epoch)
+        print('Epoch: {} Evaluating...'.format(epoch+1))
+
         # TODO Save model
+        writer.add_scalar('train/train_loss', loss, epoch + 1)
+        writer.add_scalar('train/train_overall_acc', accuracy, epoch + 1)
+    
         if epoch % args.epoch_save == 0:
             make_checkpoint(args.save_root, args.save_name, epoch, model, noam_opt.optimizer, loss)
 
         # Validation
         model.eval()
         loss, accuracy = run_epoch(valid_loader, model, noam_opt.optimizer,
-                                   loss_compute, valid_ds, device, is_train=False,
-                                   desc="Valid Epoch {}".format(epoch))
+                                loss_compute, valid_ds, device, is_train=False,
+                                desc="Valid Epoch {}".format(epoch+1), args=args, writer=writer, epoch_num=epoch)
+
+    writer.export_scalars_to_json(args.log_dir + "/all_scalars.json")
+    writer.close()
 
 
 if __name__ == "__main__":

@@ -42,8 +42,9 @@ class DualGraphEncoder(nn.Module, ABC):
         channels_ = channels[1:] + [out_channels]
         self.positional_encoding = PositionalEncoding(model_dim=in_channels)
 
-        self.lls = nn.ModuleList([nn.Linear(in_features=channels[i],
-                                            out_features=channels[i + 1]) for i in range(num_layers)])
+        #self.lls = nn.ModuleList([nn.Linear(in_features=channels[i],
+        #                                    out_features=channels[i + 1]) for i in range(num_layers)])
+        self.lls = nn.Linear(in_features=channels[0], out_features=channels[1])
 
         self.spatial_layers = nn.ModuleList([
             EncoderLayer(in_channels=channels_[i],
@@ -88,10 +89,11 @@ class DualGraphEncoder(nn.Module, ABC):
         t = self.bn(rearrange(t, 'b n c -> b (n c)'))
         t = rearrange(t, 'b (n c) -> b n c', c=c)
         t = self.positional_encoding(t)
+        t = self.lls(t)
         for i in range(self.num_layers):
             # Batch X Frames, 25, 6
             #t = fn.relu(self.lls[i](t))
-            t = self.lls[i](t)
+            #t = self.lls[i](t)
             # t = self.temporal_layers[i](t, bi)
             t = fn.relu(self.spatial_layers[i](t, adj))
             # t = fn.relu(self.temporal_layers[i](t, bi))
