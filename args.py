@@ -31,7 +31,7 @@ def make_args():
                         help='whether load_model')
     parser.add_argument('--batch_size', dest='batch_size', default=16,
                         type=int)  # implemented via accumulating gradient
-    parser.add_argument('--num_layers', dest='num_layers', default=6, type=int)
+    parser.add_argument('--num_layers', dest='num_layers', default=8, type=int)
     parser.add_argument('--activation', dest='activation', default='relu', type=str)
     # Training Setting up
     parser.add_argument('--lr', dest='lr', default=0.1, type=float)

@@ -20,12 +20,12 @@ class GCNTrainer(object):
         self.model = model
         self.train_loader = train_loader
         self.val_loader = val_loader
-        self.loss_fn = loss_fn
         self.log_dir = log_dir
         self.adj = adj
         self.optimizer = optimizer
         self.num_classes = 60
         self.device = torch.device('cuda:0')
+        self.loss_fn = nn.CrossEntropyLoss().to(self.device)
 
         self.model = self.model.to(self.device)
         self.adj = self.adj.to(self.device)
@@ -45,7 +45,7 @@ class GCNTrainer(object):
 
             for i, batch in tqdm(enumerate(train_loader), total=len(train_loader), desc="Epoch {}".format(epoch)):
                 batch = batch.to(self.device)
-                self.optimizer.zero_grad()
+                #self.optimizer.zero_grad()
                 output = self.model(batch.x, adj=self.adj, bi=batch.batch)
                 target = batch.y  # - 1
                 # one_hot = fn.one_hot(target.long(), num_classes = 60)
@@ -53,6 +53,7 @@ class GCNTrainer(object):
                 # loss = fn.cross_entropy(output, one_hot)l
                 loss = fn.cross_entropy(output, target.long())
                 # loss_value = loss.cpu().item()
+                self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
 
@@ -165,9 +166,9 @@ if __name__ == '__main__':
     valid_loader = DataLoader(valid_dataset.data, batch_size=args.batch_size, shuffle=True)
 
     model = DualGraphEncoder(in_channels=6,
-                             hidden_channels=32,
-                             out_channels=32,
-                             num_layers=4,
+                             hidden_channels=128,
+                             out_channels=128,
+                             num_layers=8,
                              num_heads=8,
                              linear_temporal=True,
                              sequential=False)
