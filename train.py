@@ -1,6 +1,7 @@
 import os.path as osp
 import os
 import time
+import numpy as np
 
 import matplotlib.pyplot as plt
 import torch
@@ -28,8 +29,8 @@ def plot_grad_flow(named_parameters, path):
             else:
                 empty_grads.append({n: p.mean().cpu().item()})
     plt.plot(ave_grads, alpha=0.3, color="b")
-    plt.hlines(0, 0, len(ave_grads) + 1, linewidth=1, color="k")
-    plt.xticks(range(0, len(ave_grads), 1), layers, rotation="vertical")
+    plt.hlines(0, 0, len(ave_grads) + 1, linewidth=1.5, color="k")
+    plt.xticks(np.arange(0, len(ave_grads), 1), layers, rotation="vertical")
     plt.xlim(xmin=0, xmax=len(ave_grads))
     plt.xlabel("Layers")
     plt.ylabel("average gradient")
