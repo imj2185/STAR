@@ -65,6 +65,8 @@ class DualGraphEncoder(nn.Module, ABC):
 
         self.mlp_head = nn.Sequential(
             nn.LayerNorm(out_channels * num_joints),
+            nn.Linear(out_channels * num_joints, out_channels * num_joints),
+            nn.Tanh(),
             nn.Linear(out_channels * num_joints, classes)
         )
 
@@ -87,15 +89,17 @@ class DualGraphEncoder(nn.Module, ABC):
         else:  # parallel architecture"""
         c = t.shape[-1]
         t = self.bn(rearrange(t, 'b n c -> b (n c)'))
-        t = rearrange(t, 'b (n c) -> b n c', c=c)
+        t = rearrange(t, 'b (n c) -> n b c', c=c)
         t = self.positional_encoding(t)
-        t = self.lls(t)
+        t = rearrange(t, 'n b c -> b n c')
+        t = fn.relu(self.lls(t))
+
         for i in range(self.num_layers):
             # Batch X Frames, 25, 6
             # t = fn.relu(self.lls[i](t))
             # t = self.lls[i](t)
-            # t = self.temporal_layers[i](t, bi)
-            t = fn.relu(self.spatial_layers[i](t, adj))
+            t = self.spatial_layers[i](t, adj)
+            #t = fn.relu(self.spatial_layers[i](t, adj))
             # t = fn.relu(self.temporal_layers[i](t, bi))
             # s = self.spatial_norms[i](fn.relu(self.spatial_layers[i](s, adj)))
             # if self.trainable_factor:
@@ -108,6 +112,6 @@ class DualGraphEncoder(nn.Module, ABC):
         # bi_ = bi[:bi.shape[0]:2**self.num_layers]
         t = rearrange(self.context_attention(t, batch_index=bi),
                       'n f c -> f (n c)')  # bi is the shrunk along the batch index
-        t = self.mlp_head(fn.relu(t))
+        t = self.mlp_head(t)
         # return fn.sigmoid(t)  # dimension (b, n, oc)
         return t

@@ -55,13 +55,13 @@ def make_args():
     parser.add_argument('--log_dir', dest='log_dir', default=osp.join(os.getcwd(), 'log'), type=str)
 
     parser.set_defaults(gpu=True,
-                        batch_size=32,
+                        batch_size=16,
                         dataset_name='NTU',
-                        dataset_root=osp.join(os.getcwd(), 'dataset/ntu_60'),
+                        dataset_root=osp.join(os.getcwd()),
                         load_model=False,
                         in_channels=6,
-                        hid_channels=32,
-                        out_channels=32,
+                        hid_channels=64,
+                        out_channels=64,
                         heads=8)
     args = parser.parse_args()
     return args

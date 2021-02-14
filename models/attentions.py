@@ -19,7 +19,7 @@ class SparseAttention(nn.Module):
     def __init__(self,
                  in_channels,
                  softmax_temp=None,
-                 num_adj=3,
+                 num_adj=1,
                  attention_dropout=0.1):
         """
         :param heads (int):
@@ -34,7 +34,8 @@ class SparseAttention(nn.Module):
         self.in_channels = in_channels
         self.softmax_temp = softmax_temp
         self.dropout = attention_dropout
-        self.beta = nn.Parameter(torch.randn(num_adj), requires_grad=True)
+        
+        self.beta = nn.Parameter(torch.ones(num_adj) / num_adj, requires_grad=True) if num_adj != 1 else None
         # self.weights = nn.Parameter(torch.randn(num_adj, in_channels, in_channels), requires_grad=True)
         # self.ln_o = Linear(mdl_channels, mdl_channels)
 
