@@ -1,4 +1,5 @@
 import os.path as osp
+import os
 import time
 
 import matplotlib.pyplot as plt
@@ -15,7 +16,7 @@ from optimizer import get_std_opt
 from utility.helper import make_checkpoint, load_checkpoint
 
 
-def plot_grad_flow(named_parameters):
+def plot_grad_flow(named_parameters, path):
     ave_grads = []
     layers = []
     empty_grads = []
@@ -34,7 +35,8 @@ def plot_grad_flow(named_parameters):
     plt.ylabel("average gradient")
     plt.title("Gradient flow")
     plt.grid(True)
-    plt.show()
+    plt.savefig(path, dpi=300)
+    # plt.show()
 
 
 def run_epoch(data_loader,
@@ -79,7 +81,8 @@ def run_epoch(data_loader,
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
-                plot_grad_flow(model.named_parameters())
+                if i % 200 == 0:
+                    plot_grad_flow(model.named_parameters(), osp.join(os.getcwd(), 'log/%d.png' % i))
 
                 # plot_grad_flow(model.named_parameters(), writer, (i + 1) + total_batch * epoch_num)
                 # for name, param in model.named_parameters():
