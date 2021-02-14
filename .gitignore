@@ -120,3 +120,4 @@ dataset/
 .DS_Store
 
 log/
+saved_model/
