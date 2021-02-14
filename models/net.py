@@ -42,8 +42,8 @@ class DualGraphEncoder(nn.Module, ABC):
         channels_ = channels[1:] + [out_channels]
         self.positional_encoding = PositionalEncoding(model_dim=in_channels)
 
-        #self.lls = nn.ModuleList([nn.Linear(in_features=channels[i],
-        #                                    out_features=channels[i + 1]) for i in range(num_layers)])
+        # self.lls = nn.ModuleList([nn.Linear(in_features=channels[i],
+        #                                     out_features=channels[i + 1]) for i in range(num_layers)])
         self.lls = nn.Linear(in_features=channels[0], out_features=channels[1])
 
         self.spatial_layers = nn.ModuleList([
@@ -92,8 +92,8 @@ class DualGraphEncoder(nn.Module, ABC):
         t = self.lls(t)
         for i in range(self.num_layers):
             # Batch X Frames, 25, 6
-            #t = fn.relu(self.lls[i](t))
-            #t = self.lls[i](t)
+            # t = fn.relu(self.lls[i](t))
+            # t = self.lls[i](t)
             # t = self.temporal_layers[i](t, bi)
             t = fn.relu(self.spatial_layers[i](t, adj))
             # t = fn.relu(self.temporal_layers[i](t, bi))
@@ -105,7 +105,7 @@ class DualGraphEncoder(nn.Module, ABC):
             #    t = (s + t) * 0.5
         # t = scatter_mean(rearrange(t, 'n f c -> f n c'), bi, dim=0)
         t = rearrange(t, 'f n c -> n f c')
-        #bi_ = bi[:bi.shape[0]:2**self.num_layers] 
+        # bi_ = bi[:bi.shape[0]:2**self.num_layers]
         t = rearrange(self.context_attention(t, batch_index=bi),
                       'n f c -> f (n c)')  # bi is the shrunk along the batch index
         t = self.mlp_head(fn.relu(t))

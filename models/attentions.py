@@ -20,7 +20,6 @@ class SparseAttention(nn.Module):
                  in_channels,
                  softmax_temp=None,
                  num_adj=3,
-                 max_position_embeddings=128,
                  attention_dropout=0.1):
         """
         :param heads (int):
@@ -35,8 +34,8 @@ class SparseAttention(nn.Module):
         self.in_channels = in_channels
         self.softmax_temp = softmax_temp
         self.dropout = attention_dropout
-        self.beta = nn.Parameter(torch.randn(num_adj))
-        self.weights = nn.Parameter(torch.randn(num_adj, in_channels, in_channels))
+        self.beta = nn.Parameter(torch.randn(num_adj), requires_grad=True)
+        # self.weights = nn.Parameter(torch.randn(num_adj, in_channels, in_channels), requires_grad=True)
         # self.ln_o = Linear(mdl_channels, mdl_channels)
 
     def forward(self, queries, keys, values, adj):
@@ -317,9 +316,7 @@ class EncoderLayer(nn.Module):
 
         if spatial:
             self.multi_head_attn = SparseAttention(in_channels=mdl_channels // heads,
-                                                   max_position_embeddings=128,
                                                    attention_dropout=dropout)
-
         else:
             self.multi_head_attn = FullAttention(in_channels=mdl_channels // heads,
                                                  max_position_embeddings=128,

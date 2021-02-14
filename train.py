@@ -25,7 +25,7 @@ def plot_grad_flow(named_parameters):
                 layers.append(n)
                 ave_grads.append(p.grad.abs().mean().cpu().item())
             else:
-                empty_grads.append({n: p})
+                empty_grads.append({n: p.mean().cpu().item()})
     plt.plot(ave_grads, alpha=0.3, color="b")
     plt.hlines(0, 0, len(ave_grads) + 1, linewidth=1, color="k")
     plt.xticks(range(0, len(ave_grads), 1), layers, rotation="vertical")
@@ -34,6 +34,7 @@ def plot_grad_flow(named_parameters):
     plt.ylabel("average gradient")
     plt.title("Gradient flow")
     plt.grid(True)
+    plt.show()
 
 
 def run_epoch(data_loader,
@@ -77,8 +78,8 @@ def run_epoch(data_loader,
             if is_train:
                 optimizer.zero_grad()
                 loss.backward()
-                plot_grad_flow(model.named_parameters())
                 optimizer.step()
+                plot_grad_flow(model.named_parameters())
 
                 # plot_grad_flow(model.named_parameters(), writer, (i + 1) + total_batch * epoch_num)
                 # for name, param in model.named_parameters():
@@ -93,10 +94,8 @@ def run_epoch(data_loader,
 
     elapsed = time.time() - start
     accuracy = correct / total_samples * 100.
-    print('------ loss: %.3f; accuracy: %.3f; average time: %.4f' %
-          (running_loss / (len(dataset) // args.batch_size + 1),
-           accuracy,
-           elapsed / len(dataset)))
+    print('\n------ loss: %.3f; accuracy: %.3f; average time: %.4f' %
+          (running_loss / total_batch, accuracy, elapsed / len(dataset)))
 
     return running_loss, accuracy
 
