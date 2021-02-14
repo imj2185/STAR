@@ -118,3 +118,5 @@ dataset/
 
 # Apple MacOS
 .DS_Store
+
+log/

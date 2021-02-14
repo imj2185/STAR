@@ -258,7 +258,7 @@ class TemporalConv(nn.Module):
                  out_channels,
                  kernel_size,
                  stride=1,
-                 activation = False,
+                 activation=False,
                  dropout=0,
                  bias=True):
         super(TemporalConv, self).__init__()
@@ -278,7 +278,6 @@ class TemporalConv(nn.Module):
         self.activation = activation
 
     def forward(self, x):
-        
         x = self.dropout(x)
         x = self.bn(self.conv(x))  # B * M, C, T, V
         return self.relu(x) if self.activation else x
@@ -307,9 +306,10 @@ class EncoderLayer(nn.Module):
         # self.bn = nn.BatchNorm1d(in_channels * 25)
         self.temp_conv = nn.ModuleList([TemporalConv(in_channels=mdl_channels,
                                                      out_channels=mdl_channels,
-                                                     kernel_size=temp_conv_knl // 2 + 1 if i == (num_conv_layers - 1) else temp_conv_knl,
+                                                     kernel_size=temp_conv_knl // 2 + 1 if i == (
+                                                                 num_conv_layers - 1) else temp_conv_knl,
                                                      stride=temp_conv_stride) for i in range(num_conv_layers)])
-                                                     #stride=temp_conv_stride * 2 if i == (num_conv_layers - 1) else temp_conv_stride) for i in range(num_conv_layers)])
+        # stride=temp_conv_stride * 2 if i == (num_conv_layers - 1) else temp_conv_stride) for i in range(num_conv_layers)])
 
         self.lin_q = Linear(in_channels, mdl_channels)
         self.lin_k = Linear(in_channels, mdl_channels)

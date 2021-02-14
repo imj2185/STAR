@@ -1,3 +1,5 @@
+import os
+import os.path as osp
 from argparse import ArgumentParser
 
 
@@ -50,12 +52,12 @@ def make_args():
     parser.add_argument('--save_root', dest='save_root', default='saved_model', type=str)
     parser.add_argument('--save_name', dest='save_name', default='check_point', type=str)
     parser.add_argument('--model_dim', dest='model_dim', default=150, type=int)
-    parser.add_argument('--log_dir', dest='log_dir', default='/home/dusko/Documents/projects/APBGCN/log', type=str)
+    parser.add_argument('--log_dir', dest='log_dir', default=osp.join(os.getcwd(), 'log'), type=str)
 
     parser.set_defaults(gpu=True,
                         batch_size=32,
                         dataset_name='NTU',
-                        dataset_root='/home/dusko/Documents/projects/APBGCN',
+                        dataset_root=osp.join(os.getcwd(), 'dataset/ntu_60'),
                         load_model=False,
                         in_channels=6,
                         hid_channels=32,
