@@ -35,7 +35,7 @@ class SparseAttention(nn.Module):
         self.softmax_temp = softmax_temp
         self.dropout = attention_dropout
         
-        self.beta = nn.Parameter(torch.ones(num_adj) / num_adj, requires_grad=True) if num_adj != 1 else None
+        #self.beta = nn.Parameter(torch.ones(num_adj) / num_adj, requires_grad=True) if num_adj != 1 else None
         # self.weights = nn.Parameter(torch.randn(num_adj, in_channels, in_channels), requires_grad=True)
         # self.ln_o = Linear(mdl_channels, mdl_channels)
 
@@ -60,17 +60,20 @@ class SparseAttention(nn.Module):
 
         # Compute the un-normalized sparse attention according to adjacency matrix indices
         if isinstance(adj, torch.Tensor):
-            qk = torch.sum(queries[..., adj[0], :, :] *
-                           keys[..., adj[1], :, :], dim=-1)
+            #qk = torch.sum(queries[..., adj[0], :, :] *
+            #               keys[..., adj[1], :, :], dim=-1)
             adj_ = adj
+            qk = torch.sum(queries.index_select(dim=-3, index=adj[0]) * keys.index_select(dim=-3, index=adj[1]), dim=-1)
+
         else:
-            qk = torch.cat([self.beta[k] * torch.sum(
+            pass
+            """qk = torch.cat([self.beta[k] * torch.sum(
                 queries[..., adj[k][0], :, :] *
                 keys[..., adj[k][1], :, :], dim=-1) for k in range(len(adj))], dim=0)
             adj_ = torch.cat(adj, dim=1)
             _, idx = adj_[0].sort()
             adj_ = adj_[:, idx]
-            qk = qk[idx]
+            qk = qk[idx]"""
 
         # Compute the attention and the weighted average, adj[0] is cols idx in the same row
         alpha = fn.dropout(softmax_(softmax_temp * qk, adj[0]),
@@ -342,11 +345,11 @@ class EncoderLayer(nn.Module):
         # x = self.bn()
         # batch norm (x)
         f, n, c = x.shape
-        q, k, v = x, x, x
+        #q, k, v = x, x, x
 
-        query = self.lin_q(q)
-        key = self.lin_k(k)
-        value = self.lin_v(v)
+        query = self.lin_q(x)
+        key = self.lin_k(x)
+        value = self.lin_v(x)
         if self.spatial:
             attn_mask = bi
         else:

@@ -52,7 +52,7 @@ def make_args():
     parser.add_argument('--save_root', dest='save_root', default='saved_model', type=str)
     parser.add_argument('--save_name', dest='save_name', default='check_point', type=str)
     parser.add_argument('--model_dim', dest='model_dim', default=150, type=int)
-    parser.add_argument('--log_dir', dest='log_dir', default=osp.join(os.getcwd(), 'log'), type=str)
+    parser.add_argument('--log_dir', dest='log_dir', default=osp.join(os.getcwd(), 'logs'), type=str)
 
     parser.set_defaults(gpu=True,
                         batch_size=16,

@@ -13,24 +13,31 @@ from tqdm import tqdm, trange
 from args import make_args
 from data.dataset3 import SkeletonDataset
 from models.net import DualGraphEncoder
-from optimizer import get_std_opt
+from optimizer import get_std_opt, SGD_AGC
 from utility.helper import make_checkpoint, load_checkpoint
 
 
-def plot_grad_flow(named_parameters, path):
+def plot_grad_flow(named_parameters, path, writer, step):
     ave_grads = []
     layers = []
     empty_grads = []
+    #total_norm = 0
     for n, p in named_parameters:
         if p.requires_grad and ("bias" not in n):
             if p.grad is not None:
+                #writer.add_scalar('gradients/' + n, p.grad.norm(2).item(), step)
+                writer.add_histogram('gradients/' + n, p.grad, step) 
+                #total_norm += p.grad.data.norm(2).item()
                 layers.append(n)
                 ave_grads.append(p.grad.abs().mean().cpu().item())
             else:
                 empty_grads.append({n: p.mean().cpu().item()})
+    #total_norm = total_norm ** (1. / 2)
+    #print("Norm : ", total_norm)
+    plt.tight_layout()
     plt.plot(ave_grads, alpha=0.3, color="b")
     plt.hlines(0, 0, len(ave_grads) + 1, linewidth=1.5, color="k")
-    plt.xticks(np.arange(0, len(ave_grads), 1), layers, rotation="vertical")
+    plt.xticks(np.arange(0, len(ave_grads), 1), layers, rotation="vertical", fontsize=4)
     plt.xlim(xmin=0, xmax=len(ave_grads))
     plt.xlabel("Layers")
     plt.ylabel("average gradient")
@@ -81,9 +88,11 @@ def run_epoch(data_loader,
             if is_train:
                 optimizer.zero_grad()
                 loss.backward()
+                #torch.nn.utils.clip_grad_norm_(model.parameters(), 9.0)
                 optimizer.step()
-                if i % 200 == 0:
-                    plot_grad_flow(model.named_parameters(), osp.join(os.getcwd(), 'log/%d.png' % i))
+                if i % 100 == 0:
+                    step = (i + 1) + total_batch * epoch_num
+                    plot_grad_flow(model.named_parameters(), osp.join(os.getcwd(), 'gradflow/%3d:%d.png' % (epoch_num, i)), writer, step)
 
                 # plot_grad_flow(model.named_parameters(), writer, (i + 1) + total_batch * epoch_num)
                 # for name, param in model.named_parameters():
@@ -101,7 +110,7 @@ def run_epoch(data_loader,
     print('\n------ loss: %.3f; accuracy: %.3f; average time: %.4f' %
           (running_loss / total_batch, accuracy, elapsed / len(dataset)))
 
-    return running_loss, accuracy
+    return running_loss / total_batch, accuracy
 
 
 def main():
@@ -138,12 +147,15 @@ def main():
                              linear_temporal=True,
                              sequential=False)
     model = model.to(device)
-    noam_opt = get_std_opt(model, args)
+    #noam_opt = get_std_opt(model, args)
+    optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9)
+    decayRate = 0.96
+    lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decayRate)
     if args.load_model:
         last_epoch = args.load_epoch
         last_epoch, loss = load_checkpoint(osp.join(args.save_root,
                                                     args.save_name + '_' + str(last_epoch) + '.pickle'),
-                                           model, noam_opt.optimizer)
+                                           model, optimizer)
         print("Load Model: ", last_epoch)
 
     loss_compute = nn.CrossEntropyLoss().to(device)
@@ -151,10 +163,10 @@ def main():
     for epoch in trange(last_epoch, args.epoch_num + last_epoch):
         # print('Epoch: {} Training...'.format(epoch))
         model.train(True)
-        lr = noam_opt.optimizer.state_dict()['param_groups'][0]['lr']
+        lr = optimizer.state_dict()['param_groups'][0]['lr']
         writer.add_scalar('params/lr', lr, epoch)
 
-        loss, accuracy = run_epoch(train_loader, model, noam_opt.optimizer,
+        loss, accuracy = run_epoch(train_loader, model, optimizer,
                                    loss_compute, train_ds, device, is_train=True,
                                    desc="Train Epoch {}".format(epoch + 1), args=args, writer=writer, epoch_num=epoch)
         print('Epoch: {} Evaluating...'.format(epoch + 1))
@@ -164,13 +176,18 @@ def main():
         writer.add_scalar('train/train_overall_acc', accuracy, epoch + 1)
 
         if epoch % args.epoch_save == 0:
-            make_checkpoint(args.save_root, args.save_name, epoch, model, noam_opt.optimizer, loss)
+            make_checkpoint(args.save_root, args.save_name, epoch, model, optimizer, loss)
 
         # Validation
         model.eval()
-        loss, accuracy = run_epoch(valid_loader, model, noam_opt.optimizer,
+        loss, accuracy = run_epoch(valid_loader, model, optimizer,
                                    loss_compute, valid_ds, device, is_train=False,
                                    desc="Valid Epoch {}".format(epoch + 1), args=args, writer=writer, epoch_num=epoch)
+        
+        writer.add_scalar('val/val_loss', loss, epoch + 1)
+        writer.add_scalar('val/val_overall_acc', accuracy, epoch + 1)
+
+        lr_scheduler.step()
 
     writer.export_scalars_to_json(osp.join(args.log_dir, "all_scalars.json"))
     writer.close()

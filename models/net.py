@@ -31,7 +31,7 @@ class DualGraphEncoder(nn.Module, ABC):
         # self.num_classes = classes
         self.dropout = drop_rate
         self.trainable_factor = trainable_factor
-        self.bn = nn.BatchNorm1d(in_channels * 25)
+        self.bn = nn.BatchNorm1d(hidden_channels * 25)
         channels = [in_channels] + [hidden_channels] * (num_layers - 1) + [out_channels]
         # channels = [hidden_channels * (i + 1)^2 for i in range(num_layers - 1)]
         # self.spatial_norms = nn.ModuleList([
@@ -40,7 +40,7 @@ class DualGraphEncoder(nn.Module, ABC):
         # ])
 
         channels_ = channels[1:] + [out_channels]
-        self.positional_encoding = PositionalEncoding(model_dim=in_channels)
+        self.positional_encoding = PositionalEncoding(model_dim=hidden_channels)
 
         # self.lls = nn.ModuleList([nn.Linear(in_features=channels[i],
         #                                     out_features=channels[i + 1]) for i in range(num_layers)])
@@ -87,12 +87,12 @@ class DualGraphEncoder(nn.Module, ABC):
                                                     t.shape[1:]) + t),  # residual and add_norm
                               'n b c -> b n c')
         else:  # parallel architecture"""
+        t = self.lls(t)
         c = t.shape[-1]
         t = self.bn(rearrange(t, 'b n c -> b (n c)'))
         t = rearrange(t, 'b (n c) -> n b c', c=c)
         t = self.positional_encoding(t)
         t = rearrange(t, 'n b c -> b n c')
-        t = fn.relu(self.lls(t))
 
         for i in range(self.num_layers):
             # Batch X Frames, 25, 6
