@@ -311,7 +311,9 @@ class EncoderLayer(nn.Module):
                                                      out_channels=mdl_channels,
                                                      kernel_size=temp_conv_knl // 2 + 1 if i == (
                                                                  num_conv_layers - 1) else temp_conv_knl,
-                                                     stride=temp_conv_stride) for i in range(num_conv_layers)])
+                                                     stride=temp_conv_stride,
+                                                     activation=False if i == (num_conv_layers - 1) else True,
+                                                     dropout=self.dropout) for i in range(num_conv_layers)])
         # stride=temp_conv_stride * 2 if i == (num_conv_layers - 1) else temp_conv_stride) for i in range(num_conv_layers)])
 
         self.lin_q = Linear(in_channels, mdl_channels)
