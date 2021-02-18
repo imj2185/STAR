@@ -1,9 +1,9 @@
-import os.path as osp
 import os
+import os.path as osp
 import time
-import numpy as np
 
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 import torch.nn as nn
 from tensorboardX import SummaryWriter
@@ -13,7 +13,7 @@ from tqdm import tqdm, trange
 from args import make_args
 from data.dataset3 import SkeletonDataset
 from models.net import DualGraphEncoder
-from optimizer import get_std_opt, SGD_AGC
+from optimizer import SGD_AGC
 from utility.helper import make_checkpoint, load_checkpoint
 
 
@@ -21,19 +21,19 @@ def plot_grad_flow(named_parameters, path, writer, step):
     ave_grads = []
     layers = []
     empty_grads = []
-    #total_norm = 0
+    # total_norm = 0
     for n, p in named_parameters:
         if p.requires_grad and ("bias" not in n):
             if p.grad is not None:
-                #writer.add_scalar('gradients/' + n, p.grad.norm(2).item(), step)
-                writer.add_histogram('gradients/' + n, p.grad, step) 
-                #total_norm += p.grad.data.norm(2).item()
+                # writer.add_scalar('gradients/' + n, p.grad.norm(2).item(), step)
+                writer.add_histogram('gradients/' + n, p.grad, step)
+                # total_norm += p.grad.data.norm(2).item()
                 layers.append(n)
                 ave_grads.append(p.grad.abs().mean().cpu().item())
             else:
                 empty_grads.append({n: p.mean().cpu().item()})
-    #total_norm = total_norm ** (1. / 2)
-    #print("Norm : ", total_norm)
+    # total_norm = total_norm ** (1. / 2)
+    # print("Norm : ", total_norm)
     plt.tight_layout()
     plt.plot(ave_grads, alpha=0.3, color="b")
     plt.hlines(0, 0, len(ave_grads) + 1, linewidth=1.5, color="k")
@@ -68,6 +68,10 @@ def run_epoch(data_loader,
         :param device:
         :param is_train:
         :param desc:
+        :param args:
+        :param writer:
+        :param epoch_num:
+
     """
     # torch.autograd.set_detect_anomaly(True)
     running_loss = 0.
@@ -88,11 +92,15 @@ def run_epoch(data_loader,
             if is_train:
                 optimizer.zero_grad()
                 loss.backward()
-                #torch.nn.utils.clip_grad_norm_(model.parameters(), 9.0)
+                # torch.nn.utils.clip_grad_norm_(model.parameters(), 9.0)
                 optimizer.step()
                 if i % 100 == 0:
                     step = (i + 1) + total_batch * epoch_num
-                    plot_grad_flow(model.named_parameters(), osp.join(os.getcwd(), 'gradflow/%3d:%d.png' % (epoch_num, i)), writer, step)
+                    path = osp.join(os.getcwd(), 'gradflow')
+                    if not osp.exists(path):
+                        os.mkdir(path)
+                    plot_grad_flow(model.named_parameters(), osp.join(path, 'grad%3d:%d.png' % (epoch_num, i)), writer,
+                                   step)
 
                 # plot_grad_flow(model.named_parameters(), writer, (i + 1) + total_batch * epoch_num)
                 # for name, param in model.named_parameters():
@@ -148,7 +156,7 @@ def main():
                              sequential=False,
                              num_conv_layers=args.num_conv_layers)
     model = model.to(device)
-    #noam_opt = get_std_opt(model, args)
+    # noam_opt = get_std_opt(model, args)
     optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9)
     decayRate = 0.96
     lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decayRate)
@@ -184,7 +192,7 @@ def main():
         loss, accuracy = run_epoch(valid_loader, model, optimizer,
                                    loss_compute, valid_ds, device, is_train=False,
                                    desc="Valid Epoch {}".format(epoch + 1), args=args, writer=writer, epoch_num=epoch)
-        
+
         writer.add_scalar('val/val_loss', loss, epoch + 1)
         writer.add_scalar('val/val_overall_acc', accuracy, epoch + 1)
 

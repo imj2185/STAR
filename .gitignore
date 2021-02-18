@@ -120,4 +120,6 @@ dataset/
 .DS_Store
 
 log/
+logs/
 saved_model/
+gradflow/
