@@ -25,7 +25,7 @@ def make_args():
     # model
     parser.add_argument('--linear_temporal', dest='linear_temporal', type=bool, default=True,
                         help='set to linear temporal Transformer model')
-    parser.add_argument('--drop_rate', dest='drop_rate', type=float, default=0.3,
+    parser.add_argument('--drop_rate', dest='drop_rate', type=float, default=0.5,
                         help='whether dropout rate, default 0.5')
     parser.add_argument('--load_model', dest='load_model', default=False, type=bool,
                         help='whether load_model')
@@ -34,7 +34,7 @@ def make_args():
     parser.add_argument('--batch_size', dest='batch_size', default=16,
                         type=int)  # implemented via accumulating gradient
     parser.add_argument('--num_enc_layers', dest='num_enc_layers', default=6, type=int)
-    parser.add_argument('--num_conv_layers', dest='num_conv_layers', default=6, type=int)
+    parser.add_argument('--num_conv_layers', dest='num_conv_layers', default=3, type=int)
     parser.add_argument('--activation', dest='activation', default='relu', type=str)
     parser.add_argument('--in_channels', dest='in_channels', default=6, type=int)
     parser.add_argument('--hid_channels', dest='hid_channels', default=32, type=int)

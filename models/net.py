@@ -22,11 +22,13 @@ class DualGraphEncoder(nn.Module, ABC):
                  drop_rate=0.5,
                  sequential=True,
                  linear_temporal=True,
-                 trainable_factor=False):
+                 trainable_factor=False,
+                 num_conv_layers=3):
         super(DualGraphEncoder, self).__init__()
         self.spatial_factor = nn.Parameter(torch.ones(num_layers)) * 0.5
         self.sequential = sequential
         self.num_layers = num_layers
+        self.num_conv_layers = num_conv_layers
         # self.num_joints = num_joints
         # self.num_classes = classes
         self.dropout = drop_rate
@@ -51,7 +53,8 @@ class DualGraphEncoder(nn.Module, ABC):
                          mdl_channels=channels_[i + 1],
                          spatial=True,
                          heads=num_heads,
-                         dropout=drop_rate) for i in range(num_layers)])
+                         dropout=drop_rate,
+                         num_conv_layers=self.num_conv_layers) for i in range(num_layers)])
 
         """self.temporal_layers = nn.ModuleList([
             # necessary parameters are: dim

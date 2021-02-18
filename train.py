@@ -145,7 +145,8 @@ def main():
                              num_layers=args.num_enc_layers,
                              num_heads=args.heads,
                              linear_temporal=True,
-                             sequential=False)
+                             sequential=False,
+                             num_conv_layers=args.num_conv_layers)
     model = model.to(device)
     #noam_opt = get_std_opt(model, args)
     optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9)

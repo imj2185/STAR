@@ -235,6 +235,11 @@ def resolve_filename(name):
     return action_class, subject_id, camera_id, setup_id
 
 
+def data_padding(sparse_tensor, pad_length):
+    f, n, c = sparse_tensor.shape
+    return  torch.cat([torch.zeros(pad_length, n, c)] + [sparse_tensor] + [torch.zeros(pad_length, n, c)], dim=0)
+
+
 class SkeletonDataset(Dataset, ABC):
     def __init__(self,
                  root,
@@ -330,6 +335,7 @@ class SkeletonDataset(Dataset, ABC):
 
         torch_data = pre_normalization(torch_data)
         torch_data = gen_bone_data(torch_data, self.paris, self.benchmark)
+        torch_data = data_padding(torch_data, 5)
         sparse_data = Data(x=torch_data, y=action_class - 1)
         return sparse_data
 
