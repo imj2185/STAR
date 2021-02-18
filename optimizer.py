@@ -36,7 +36,7 @@ class NoamOpt(object):
 
 
 def get_std_opt(model, args):
-    #channels = [int(n) for n in args.encoder_channels.split(',')]
+    # channels = [int(n) for n in args.encoder_channels.split(',')]
     return NoamOpt(args.model_dim,  # TODO num_nodes is not fixed
                    args.opt_train_factor,
                    args.warmup_steps,
@@ -57,7 +57,7 @@ def unitwise_norm(x: torch.Tensor):
     else:
         raise ValueError('Wrong input dimensions')
 
-    return torch.sum(x**2, dim=dim, keepdim=keepdim) ** 0.5
+    return torch.sum(x ** 2, dim=dim, keepdim=keepdim) ** 0.5
 
 
 class SGD_AGC(Optimizer):
@@ -74,7 +74,8 @@ class SGD_AGC(Optimizer):
         dampening (float, optional): dampening for momentum (default: 0)
         nesterov (bool, optional): enables Nesterov momentum (default: False)
         dampening (float, optional): dampening for momentum (default: 0.01)
-        eps (float, optional): dampening for momentum (default: 1e-3)
+        clipping (float, optional): clipping value (default: 1e-3)
+        eps (float, optional): eps (default: 1e-3)
     Example:
         >>> optimizer = torch.optim.SGD_AGC(model.parameters(), lr=0.1, momentum=0.9)
         >>> optimizer.zero_grad()
@@ -91,7 +92,7 @@ class SGD_AGC(Optimizer):
                 v_{t+1} & = \mu * v_{t} + g_{t+1}, \\
                 p_{t+1} & = p_{t} - \text{lr} * v_{t+1},
             \end{aligned}
-        where :math:`p`, :math:`g`, :math:`v` and :math:`\mu` denote the 
+        where :math:`p`, :math:`g`, :math:`v` and :math:`\mu` denote the
         parameters, gradient, velocity, and momentum respectively.
         This is in contrast to Sutskever et. al. and
         other frameworks which employ an update of the form
@@ -143,12 +144,14 @@ class SGD_AGC(Optimizer):
 
         for group in self.param_groups:
             for p in group['params']:
+                if p.grad is None:
+                    continue
                 param_norm = torch.max(unitwise_norm(
-                    p), torch.tensor(group['eps']).to(p.device))
-                grad_norm = unitwise_norm(p.grad)
+                    p.detach()), torch.tensor(group['eps']).to(p.device))
+                grad_norm = unitwise_norm(p.grad.detach())
                 max_norm = param_norm * group['clipping']
 
-                trigger = grad_norm > max_norm
+                trigger = grad_norm < max_norm
 
                 clipped_grad = p.grad * \
                     (max_norm / torch.max(grad_norm,

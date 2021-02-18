@@ -34,8 +34,8 @@ class SparseAttention(nn.Module):
         self.in_channels = in_channels
         self.softmax_temp = softmax_temp
         self.dropout = attention_dropout
-        
-        #self.beta = nn.Parameter(torch.ones(num_adj) / num_adj, requires_grad=True) if num_adj != 1 else None
+
+        # self.beta = nn.Parameter(torch.ones(num_adj) / num_adj, requires_grad=True) if num_adj != 1 else None
         # self.weights = nn.Parameter(torch.randn(num_adj, in_channels, in_channels), requires_grad=True)
         # self.ln_o = Linear(mdl_channels, mdl_channels)
 
@@ -60,13 +60,13 @@ class SparseAttention(nn.Module):
 
         # Compute the un-normalized sparse attention according to adjacency matrix indices
         if isinstance(adj, torch.Tensor):
-            #qk = torch.sum(queries[..., adj[0], :, :] *
+            # qk = torch.sum(queries[..., adj[0], :, :] *
             #               keys[..., adj[1], :, :], dim=-1)
             adj_ = adj
             qk = torch.sum(queries.index_select(dim=-3, index=adj[0]) * keys.index_select(dim=-3, index=adj[1]), dim=-1)
 
         else:
-            pass
+            qk = adj_ = None
             """qk = torch.cat([self.beta[k] * torch.sum(
                 queries[..., adj[k][0], :, :] *
                 keys[..., adj[k][1], :, :], dim=-1) for k in range(len(adj))], dim=0)
@@ -262,7 +262,7 @@ class TemporalConv(nn.Module):
                  kernel_size,
                  stride=1,
                  activation=False,
-                 dropout=0,
+                 dropout=0.,
                  bias=True):
         super(TemporalConv, self).__init__()
         pad = int((kernel_size - 1) / 2)
@@ -310,11 +310,12 @@ class EncoderLayer(nn.Module):
         self.temp_conv = nn.ModuleList([TemporalConv(in_channels=mdl_channels,
                                                      out_channels=mdl_channels,
                                                      kernel_size=temp_conv_knl // 2 + 1 if i == (
-                                                                 num_conv_layers - 1) else temp_conv_knl,
+                                                             num_conv_layers - 1) else temp_conv_knl,
                                                      stride=temp_conv_stride,
                                                      activation=False if i == (num_conv_layers - 1) else True,
                                                      dropout=self.dropout) for i in range(num_conv_layers)])
-        # stride=temp_conv_stride * 2 if i == (num_conv_layers - 1) else temp_conv_stride) for i in range(num_conv_layers)])
+        # stride=temp_conv_stride * 2 if i == (num_conv_layers - 1)
+        # else temp_conv_stride) for i in range(num_conv_layers)])
 
         self.lin_q = Linear(in_channels, mdl_channels)
         self.lin_k = Linear(in_channels, mdl_channels)
@@ -347,7 +348,7 @@ class EncoderLayer(nn.Module):
         # x = self.bn()
         # batch norm (x)
         f, n, c = x.shape
-        #q, k, v = x, x, x
+        # q, k, v = x, x, x
 
         query = self.lin_q(x)
         key = self.lin_k(x)

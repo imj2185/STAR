@@ -2,7 +2,6 @@ from abc import ABC
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as fn
 # from third_party.performer import SelfAttention
 from einops import rearrange
 
@@ -97,20 +96,10 @@ class DualGraphEncoder(nn.Module, ABC):
         t = self.positional_encoding(t)
         t = rearrange(t, 'n b c -> b n c')
 
+        # Core pipeline
         for i in range(self.num_layers):
-            # Batch X Frames, 25, 6
-            # t = fn.relu(self.lls[i](t))
-            # t = self.lls[i](t)
             t = self.spatial_layers[i](t, adj)
-            #t = fn.relu(self.spatial_layers[i](t, adj))
-            # t = fn.relu(self.temporal_layers[i](t, bi))
-            # s = self.spatial_norms[i](fn.relu(self.spatial_layers[i](s, adj)))
-            # if self.trainable_factor:
-            #    factor = torch.sigmoid(self.spatial_factor).to(t.device)
-            #    t = factor[i] * s + (1. - factor[i]) * t
-            # else:
-            #    t = (s + t) * 0.5
-        # t = scatter_mean(rearrange(t, 'n f c -> f n c'), bi, dim=0)
+
         t = rearrange(t, 'f n c -> n f c')
         # bi_ = bi[:bi.shape[0]:2**self.num_layers]
         t = rearrange(self.context_attention(t, batch_index=bi),
