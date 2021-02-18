@@ -415,7 +415,7 @@ def test():
     parser.add_argument('--dataset', dest='dataset', default='ntu_60',
                         type=str, help='Dataset')
     args = parser.parse_args()
-    ds = SkeletonDataset(root="/home/dusko/Documents/projects/APBGCN",
+    ds = SkeletonDataset(root=os.getcwd(),
                          name='ntu_60_test',
                          benchmark='xsub',
                          sample='val')
