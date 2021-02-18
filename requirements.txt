@@ -12,7 +12,7 @@ torch>=1.1.0
 tqdm>=4.32.1
 scipy~=1.5.3
 einops~=0.3.0
-fast_transformers
+pytorch-fast-transformers
 torchvision~=0.8.1+cu110
 tensorboardX~=2.1
 torchviz~=0.0.1
