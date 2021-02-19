@@ -60,7 +60,7 @@ def make_args():
                         in_channels=6,
                         num_enc_layers=6,
                         num_conv_layers=3,
-                        weight_decay=4e-3,
+                        weight_decay=0.,  # 4e-3,
                         dropout=0.5,
                         hid_channels=32,
                         out_channels=32,
