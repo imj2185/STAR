@@ -276,7 +276,7 @@ class TemporalConv(nn.Module):
             stride=stride,
             bias=bias)
 
-        # self.bn = nn.BatchNorm1d(out_channels)
+        self.bn = nn.BatchNorm1d(out_channels)
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(dropout, inplace=True)
         self.activation = activation
