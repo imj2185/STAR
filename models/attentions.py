@@ -6,6 +6,7 @@ import torch.nn.functional as fn
 from einops import rearrange
 from torch import Tensor
 from torch.nn import Linear
+from .layers import WSConv1d
 
 from utility.linalg import BatchedMask, softmax_, spmm_
 
@@ -267,7 +268,7 @@ class TemporalConv(nn.Module):
         super(TemporalConv, self).__init__()
         pad = int((kernel_size - 1) / 2)
 
-        self.conv = nn.Conv1d(
+        self.conv = WSConv1d(   # nn.Conv1d
             in_channels,
             out_channels,
             kernel_size=kernel_size,
@@ -275,7 +276,7 @@ class TemporalConv(nn.Module):
             stride=stride,
             bias=bias)
 
-        self.bn = nn.BatchNorm1d(out_channels)
+        # self.bn = nn.BatchNorm1d(out_channels)
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(dropout, inplace=True)
         self.activation = activation
@@ -283,6 +284,7 @@ class TemporalConv(nn.Module):
     def forward(self, x):
         x = self.dropout(x)
         x = self.bn(self.conv(x))  # B * M, C, T, V
+        # x = self.conv(x)
         return self.relu(x) if self.activation else x
 
 
