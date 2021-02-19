@@ -157,7 +157,7 @@ def main():
                              num_conv_layers=args.num_conv_layers)
     model = model.to(device)
     # noam_opt = get_std_opt(model, args)
-    optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9)
+    optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
     decayRate = 0.96
     lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decayRate)
     if args.load_model:
