@@ -13,7 +13,7 @@ from tqdm import tqdm, trange
 from args import make_args
 from data.dataset3 import SkeletonDataset
 from models.net import DualGraphEncoder
-from optimizer import SGD_AGC
+from optimizer import SGD_AGC, CosineAnnealingWarmupRestarts
 from utility.helper import make_checkpoint, load_checkpoint
 
 
@@ -154,12 +154,14 @@ def main():
                              num_heads=args.heads,
                              linear_temporal=True,
                              sequential=False,
-                             num_conv_layers=args.num_conv_layers)
+                             num_conv_layers=args.num_conv_layers,
+                             drop_rate=args.drop_rate)
     model = model.to(device)
     # noam_opt = get_std_opt(model, args)
     optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
     decayRate = 0.96
     lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decayRate)
+    #lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=len(train_loader), cycle_mult=1.0, max_lr=0.1, min_lr=0.001, warmup_steps=len(train_loader)//4, gamma=0.5)
     if args.load_model:
         last_epoch = args.load_epoch
         last_epoch, loss = load_checkpoint(osp.join(args.save_root,
@@ -195,8 +197,8 @@ def main():
 
         writer.add_scalar('val/val_loss', loss, epoch + 1)
         writer.add_scalar('val/val_overall_acc', accuracy, epoch + 1)
-
-        lr_scheduler.step()
+        if epoch > 15:
+            lr_scheduler.step()
 
     writer.export_scalars_to_json(osp.join(args.log_dir, "all_scalars.json"))
     writer.close()

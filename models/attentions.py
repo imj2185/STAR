@@ -315,7 +315,7 @@ class EncoderLayer(nn.Module):
                                                              num_conv_layers - 1) else temp_conv_knl,
                                                      stride=temp_conv_stride,
                                                      activation=False if i == (num_conv_layers - 1) else True,
-                                                     dropout=self.dropout) for i in range(num_conv_layers)])
+                                                     dropout=self.dropout[0]) for i in range(num_conv_layers)])
         # stride=temp_conv_stride * 2 if i == (num_conv_layers - 1)
         # else temp_conv_stride) for i in range(num_conv_layers)])
 
@@ -325,16 +325,16 @@ class EncoderLayer(nn.Module):
 
         if spatial:
             self.multi_head_attn = SparseAttention(in_channels=mdl_channels // heads,
-                                                   attention_dropout=dropout)
+                                                   attention_dropout=dropout[1])
         else:
             self.multi_head_attn = FullAttention(in_channels=mdl_channels // heads,
                                                  max_position_embeddings=128,
                                                  attention_dropout=dropout)
 
-        self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout)
-        self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout)
+        self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout[2])
+        self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2])
         self.ffn = FeedForward(
-            self.mdl_channels, self.mdl_channels, self.dropout)
+            self.mdl_channels, self.mdl_channels, self.dropout[3])
 
         self.reset_parameters()
 

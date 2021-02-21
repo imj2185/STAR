@@ -23,7 +23,7 @@ def make_args():
     # model
     parser.add_argument('--linear_temporal', dest='linear_temporal', type=bool, default=True,
                         help='set to linear temporal Transformer model')
-    parser.add_argument('--drop_rate', dest='drop_rate', type=float, default=0.3,
+    parser.add_argument('--drop_rate', dest='drop_rate', type=list, default=[0.3, 0.3, 0.3, 0.3],
                         help='whether dropout rate, default 0.5')
     parser.add_argument('--load_model', dest='load_model', default=False, type=bool,
                         help='whether load_model')
@@ -55,15 +55,15 @@ def make_args():
     parser.set_defaults(gpu=True,
                         batch_size=16,
                         dataset_name='NTU',
-                        dataset_root=osp.join(os.getcwd(), 'dataset/ntu_60'),
+                        dataset_root=osp.join(os.getcwd()),
                         load_model=False,
                         in_channels=6,
                         num_enc_layers=6,
                         num_conv_layers=3,
                         weight_decay=0.,  # 4e-3,
-                        dropout=0.5,
-                        hid_channels=32,
-                        out_channels=32,
+                        dropout=[0.3, 0.1, 0.5, 0.5], #temp_conv, sparse_attention, add_norm, ffn
+                        hid_channels=64,
+                        out_channels=64,
                         heads=8)
     args = parser.parse_args()
     return args

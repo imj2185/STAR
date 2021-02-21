@@ -18,7 +18,7 @@ class DualGraphEncoder(nn.Module, ABC):
                  num_heads=8,
                  num_joints=25,
                  classes=60,
-                 drop_rate=0.5,
+                 drop_rate=[0.3,0.3,0.3,0.3],
                  sequential=True,
                  linear_temporal=True,
                  trainable_factor=False,
@@ -68,7 +68,8 @@ class DualGraphEncoder(nn.Module, ABC):
         self.mlp_head = nn.Sequential(
             nn.LayerNorm(out_channels * num_joints),
             nn.Linear(out_channels * num_joints, out_channels * num_joints),
-            nn.Tanh(),
+            #nn.Tanh(),
+            nn.LeakyReLU(),
             nn.Linear(out_channels * num_joints, classes)
         )
 
