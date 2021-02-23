@@ -55,13 +55,13 @@ def make_args():
     parser.set_defaults(gpu=True,
                         batch_size=16,
                         dataset_name='NTU',
-                        dataset_root=osp.join(os.getcwd()),  # , "dataset/ntu_60"),
+                        dataset_root=osp.join(os.getcwd()),
                         load_model=False,
                         in_channels=6,
                         num_enc_layers=6,
                         num_conv_layers=3,
                         weight_decay=0.,  # 4e-3,
-                        dropout=[0.3, 0.1, 0.5, 0.5],  # temp_conv, sparse_attention, add_norm, ffn
+                        dropout=[0.3, 0.1, 0.5, 0.5], #temp_conv, sparse_attention, add_norm, ffn
                         hid_channels=64,
                         out_channels=64,
                         heads=8)

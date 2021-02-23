@@ -13,7 +13,7 @@ from tqdm import tqdm, trange
 from args import make_args
 from data.dataset3 import SkeletonDataset
 from models.net import DualGraphEncoder
-from optimizer import SGD_AGC
+from optimizer import SGD_AGC, CosineAnnealingWarmupRestarts
 from utility.helper import make_checkpoint, load_checkpoint
 
 
@@ -53,7 +53,6 @@ def run_epoch(data_loader,
               loss_compute,
               dataset,
               device,
-              scale_tuner=None,
               is_train=True,
               desc=None,
               args=None,
@@ -67,7 +66,6 @@ def run_epoch(data_loader,
         :param loss_compute:
         :param dataset:
         :param device:
-        :param scale_tuner:
         :param is_train:
         :param desc:
         :param args:
@@ -88,39 +86,32 @@ def run_epoch(data_loader,
         batch = batch.to(device)
         sample, label, bi = batch.x, batch.y, batch.batch.to(device)
 
-        # with torch.set_grad_enabled(is_train):
-        with torch.cuda.amp.autocast():
+        with torch.set_grad_enabled(is_train):
             out = model(sample, adj=dataset.skeleton_.to(device), bi=bi)
             loss = loss_compute(out, label.long())
-
-        if is_train:
-            optimizer.zero_grad()
-            if scale_tuner is not None:
-                scale_tuner.scale(loss).backward()
-                scale_tuner.step(optimizer)
-                scale_tuner.update()
-            else:
+            if is_train:
+                optimizer.zero_grad()
                 loss.backward()
+                # torch.nn.utils.clip_grad_norm_(model.parameters(), 9.0)
                 optimizer.step()
+                if i % 400 == 0:
+                    step = (i + 1) + total_batch * epoch_num
+                    path = osp.join(os.getcwd(), 'gradflow')
+                    if not osp.exists(path):
+                        os.mkdir(path)
+                    plot_grad_flow(model.named_parameters(), osp.join(path, 'grad%3d:%d.png' % (epoch_num, i)), writer,
+                                   step)
 
-            if i % 400 == 0:
-                step = (i + 1) + total_batch * epoch_num
-                path = osp.join(os.getcwd(), 'gradflow')
-                if not osp.exists(path):
-                    os.mkdir(path)
-                plot_grad_flow(model.named_parameters(), osp.join(path, 'grad%3d:%d.png' % (epoch_num, i)), writer,
-                               step)
+                # plot_grad_flow(model.named_parameters(), writer, (i + 1) + total_batch * epoch_num)
+                # for name, param in model.named_parameters():
+                # if param.requires_grad and param.grad is not None:
+                # writer.add_scalar('gradients/' + name, param.grad.norm(2).item(), (i + 1) + total_batch * epoch_num)
 
-            # plot_grad_flow(model.named_parameters(), writer, (i + 1) + total_batch * epoch_num)
-            # for name, param in model.named_parameters():
-            # if param.requires_grad and param.grad is not None:
-            # writer.add_scalar('gradients/' + name, param.grad.norm(2).item(), (i + 1) + total_batch * epoch_num)
-
-        # statistics
-        running_loss += loss.item()
-        pred = torch.max(out, 1)[1]
-        total_samples += label.size(0)
-        correct += (pred == label).double().sum().item()
+            # statistics
+            running_loss += loss.item()
+            pred = torch.max(out, 1)[1]
+            total_samples += label.size(0)
+            correct += (pred == label).double().sum().item()
 
     elapsed = time.time() - start
     accuracy = correct / total_samples * 100.
@@ -136,6 +127,7 @@ def main():
     writer = SummaryWriter(args.log_dir)
     device = torch.device('cuda:0') if args.use_gpu and torch.cuda.is_available() else torch.device('cpu')
     # device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
     # download and save the dataset
     train_ds = SkeletonDataset(args.dataset_root, name='ntu_60',
                                use_motion_vector=False,
@@ -167,12 +159,9 @@ def main():
     model = model.to(device)
     # noam_opt = get_std_opt(model, args)
     optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
-    scale_tuner = torch.cuda.amp.GradScaler()
-    decay_rate = 0.96
-    lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decay_rate)
-    # lr_scheduler = CosineAnnealingWarmupRestarts(optimizer,
-    # first_cycle_steps=len(train_loader), cycle_mult=1.0,
-    # max_lr=0.1, min_lr=0.001, warmup_steps=len(train_loader)//4, gamma=0.5)
+    decayRate = 0.96
+    lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decayRate)
+    #lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=len(train_loader), cycle_mult=1.0, max_lr=0.1, min_lr=0.001, warmup_steps=len(train_loader)//4, gamma=0.5)
     if args.load_model:
         last_epoch = args.load_epoch
         last_epoch, loss = load_checkpoint(osp.join(args.save_root,
@@ -189,8 +178,7 @@ def main():
         writer.add_scalar('params/lr', lr, epoch)
 
         loss, accuracy = run_epoch(train_loader, model, optimizer,
-                                   loss_compute, train_ds, device,
-                                   scale_tuner=scale_tuner, is_train=True,
+                                   loss_compute, train_ds, device, is_train=True,
                                    desc="Train Epoch {}".format(epoch + 1), args=args, writer=writer, epoch_num=epoch)
         print('Epoch: {} Evaluating...'.format(epoch + 1))
 
@@ -204,8 +192,7 @@ def main():
         # Validation
         model.eval()
         loss, accuracy = run_epoch(valid_loader, model, optimizer,
-                                   loss_compute, valid_ds, device,
-                                   scale_tuner=scale_tuner, is_train=False,
+                                   loss_compute, valid_ds, device, is_train=False,
                                    desc="Valid Epoch {}".format(epoch + 1), args=args, writer=writer, epoch_num=epoch)
 
         writer.add_scalar('val/val_loss', loss, epoch + 1)
