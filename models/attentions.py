@@ -59,6 +59,8 @@ class SparseAttention(nn.Module):
 
         softmax_temp = self.softmax_temp or 1. / math.sqrt(e)
 
+        #relative_position_scores_key = torch.einsum("blhd, lrd -> bhlr", keys, tree_pos_enc_key)
+
         # Compute the un-normalized sparse attention according to adjacency matrix indices
         if isinstance(adj, torch.Tensor):
             # qk = torch.sum(queries[..., adj[0], :, :] *
@@ -77,6 +79,7 @@ class SparseAttention(nn.Module):
             qk = qk[idx]"""
 
         # Compute the attention and the weighted average, adj[0] is cols idx in the same row
+        #relative_position_scores_value = torch.einsum("blhd, lrd -> bhlr", values, tree_pos_enc_value)
         alpha = fn.dropout(softmax_(softmax_temp * qk, adj[0]),
                            training=self.training)
         # sparse matmul, adj as indices and qk as nonzero
@@ -212,7 +215,7 @@ class MLP(nn.Module):
         return self.layers[-1](x)
 
 
-class PositionalEncoding(nn.Module):
+class SequentialEncoding(nn.Module):
     def __init__(self,
                  model_dim: int):
         """ Positional Encoding
@@ -221,7 +224,7 @@ class PositionalEncoding(nn.Module):
             sequence
         :param model_dim (int): the dimension of the token (feature channel length)
         """
-        super(PositionalEncoding, self).__init__()
+        super(SequentialEncoding, self).__init__()
         self.model_dim = model_dim
 
     def forward(self, x) -> Tensor:
@@ -298,7 +301,8 @@ class EncoderLayer(nn.Module):
                  dropout=0.1,
                  temp_conv_knl=9,
                  temp_conv_stride=1,
-                 num_conv_layers=3):
+                 num_conv_layers=3,
+                 num_joints=25):
         super(EncoderLayer, self).__init__()
         self.in_channels = in_channels
         self.mdl_channels = mdl_channels
@@ -307,6 +311,12 @@ class EncoderLayer(nn.Module):
         self.spatial = spatial
         self.beta = beta
         self.num_conv_layers = num_conv_layers
+
+        self.tree_key_weights = nn.Parameter(torch.randn(in_channels, in_channels), requires_grad=True)
+        #self.tree_key_embedding = nn.Embedding(num_joints, in_channels, _weight=self.tree_key_weights)
+
+        self.tree_value_weights = nn.Parameter(torch.randn(in_channels, in_channels), requires_grad=True)
+        #self.tree_value_embedding = nn.Embedding(num_joints, in_channels, _weight=self.tree_value_weights)
 
         # self.bn = nn.BatchNorm1d(in_channels * 25)
         self.temp_conv = nn.ModuleList([TemporalConv(in_channels=mdl_channels,
@@ -319,9 +329,11 @@ class EncoderLayer(nn.Module):
         # stride=temp_conv_stride * 2 if i == (num_conv_layers - 1)
         # else temp_conv_stride) for i in range(num_conv_layers)])
 
-        self.lin_q = Linear(in_channels, mdl_channels)
-        self.lin_k = Linear(in_channels, mdl_channels)
-        self.lin_v = Linear(in_channels, mdl_channels)
+        #self.lin_q = Linear(in_channels, mdl_channels)
+        #self.lin_k = Linear(in_channels, mdl_channels)
+        #self.lin_v = Linear(in_channels, mdl_channels)
+
+        self.lin_qkv = Linear(in_channels, mdl_channels * 3, bias=False)
 
         if spatial:
             self.multi_head_attn = SparseAttention(in_channels=mdl_channels // heads,
@@ -339,22 +351,34 @@ class EncoderLayer(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        self.lin_k.reset_parameters()
-        self.lin_q.reset_parameters()
-        self.lin_v.reset_parameters()
+        #self.lin_k.reset_parameters()
+        #self.lin_q.reset_parameters()
+        #self.lin_v.reset_parameters()
+        self.lin_qkv.reset_parameters()
         self.add_norm_att.reset_parameters()
         self.add_norm_ffn.reset_parameters()
         self.ffn.reset_parameters()
 
-    def forward(self, x, bi=None):
+    def forward(self, x, bi=None, tree_encoding=None):
         # x = self.bn()
         # batch norm (x)
         f, n, c = x.shape
         # q, k, v = x, x, x
 
-        query = self.lin_q(x)
-        key = self.lin_k(x)
-        value = self.lin_v(x)
+        #query = self.lin_q(x)
+        #key = self.lin_k(x)
+        #value = self.lin_v(x)
+        
+        query, key, value = self.lin_qkv(x).chunk(3, dim = -1)
+
+        #tree_pos_enc_key = self.tree_key_embedding(tree_encoding)
+        #tree_pos_enc_value = self.tree_value_embedding(tree_encoding)
+        tree_pos_enc_key = torch.matmul(tree_encoding, self.tree_key_weights)
+        tree_pos_enc_value = torch.matmul(tree_encoding, self.tree_value_weights)
+        
+        key = key + tree_pos_enc_key.unsqueeze(dim=0)
+        value = value + tree_pos_enc_value.unsqueeze(dim=0)
+        
         if self.spatial:
             attn_mask = bi
         else:

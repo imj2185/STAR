@@ -15,7 +15,18 @@ from data.dataset3 import SkeletonDataset
 from models.net import DualGraphEncoder
 from optimizer import SGD_AGC, CosineAnnealingWarmupRestarts
 from utility.helper import make_checkpoint, load_checkpoint
+from random import shuffle
+import imageio
+#import adamod
 
+def gif_grad_flow(path, name):
+    with imageio.get_writer(name + '.gif', mode='I') as writer:
+        for filename in os.listdir(path):
+            image = imageio.imread(filename)
+            writer.append_data(image)
+
+    for filename in os.listdir(path):
+        os.remove(filename)
 
 def plot_grad_flow(named_parameters, path, writer, step):
     ave_grads = []
@@ -34,6 +45,7 @@ def plot_grad_flow(named_parameters, path, writer, step):
                 empty_grads.append({n: p.mean().cpu().item()})
     # total_norm = total_norm ** (1. / 2)
     # print("Norm : ", total_norm)
+    plt.clf()
     plt.tight_layout()
     plt.plot(ave_grads, alpha=0.3, color="b")
     plt.hlines(0, 0, len(ave_grads) + 1, linewidth=1.5, color="k")
@@ -89,7 +101,13 @@ def run_epoch(data_loader,
         with torch.set_grad_enabled(is_train):
             out = model(sample, adj=dataset.skeleton_.to(device), bi=bi)
             loss = loss_compute(out, label.long())
+            loss_ = loss
             if is_train:
+                l2_lambda = args.weight_decay
+                for param in model.parameters():
+                    if param.requires_grad:
+                        loss += l2_lambda * torch.sum(((param)) ** 2)
+                
                 optimizer.zero_grad()
                 loss.backward()
                 # torch.nn.utils.clip_grad_norm_(model.parameters(), 9.0)
@@ -108,7 +126,7 @@ def run_epoch(data_loader,
                 # writer.add_scalar('gradients/' + name, param.grad.norm(2).item(), (i + 1) + total_batch * epoch_num)
 
             # statistics
-            running_loss += loss.item()
+            running_loss += loss_.item()
             pred = torch.max(out, 1)[1]
             total_samples += label.size(0)
             correct += (pred == label).double().sum().item()
@@ -125,6 +143,17 @@ def main():
     # torch.cuda.empty_cache()
     args = make_args()
     writer = SummaryWriter(args.log_dir)
+    #writer.add_hparams({'lr': args.lr, 
+    #                    'bsize': args.batch_size},
+    #                    {'hparam/num_enc_layers':args.num_enc_layers,
+    #                    'hparam/num_conv_layers': args.num_conv_layers,
+    #                    'hparam/temp_conv_drop': args.dropout[0], 
+    #                    'hparam/sparse_attention_drop': args.dropout[1],
+    #                    'hparam/add_norm_drop' : args.dropout[2], 
+    #                    'hparam/ffn_drop' : args.dropout[3], 
+    #                    'hparam/hid_channels': args.hid_channels
+    #                    })
+
     device = torch.device('cuda:0') if args.use_gpu and torch.cuda.is_available() else torch.device('cpu')
     # device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -132,15 +161,18 @@ def main():
     train_ds = SkeletonDataset(args.dataset_root, name='ntu_60',
                                use_motion_vector=False,
                                benchmark='xsub', sample='train')
-    valid_ds = SkeletonDataset(args.dataset_root, name='ntu_60',
+    test_ds = SkeletonDataset(args.dataset_root, name='ntu_60',
                                use_motion_vector=False,
                                benchmark='xsub', sample='val')
 
     # randomly split into around 80% train, 10% val and 10% train
-    train_loader = DataLoader(train_ds.data,
-                              batch_size=args.batch_size,
-                              shuffle=True)
-    valid_loader = DataLoader(valid_ds.data,
+
+    last_train = int(len(train_ds) * 0.8)
+
+    # train_loader = DataLoader(train_ds[:last_train].data,
+    #                           batch_size=args.batch_size,
+    #                           shuffle=True)
+    test_loader = DataLoader(test_ds.data,
                               batch_size=args.batch_size,
                               shuffle=True)
 
@@ -158,10 +190,12 @@ def main():
                              drop_rate=args.drop_rate)
     model = model.to(device)
     # noam_opt = get_std_opt(model, args)
-    optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
+    optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=0)
+    #optimizer = adamod.AdaMod(model.parameters(), lr=args.lr, beta3=0.999)
     decayRate = 0.96
-    lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decayRate)
-    #lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=len(train_loader), cycle_mult=1.0, max_lr=0.1, min_lr=0.001, warmup_steps=len(train_loader)//4, gamma=0.5)
+    #lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decayRate)
+    lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=20, cycle_mult=1.0, max_lr=0.1, min_lr=1e-4, warmup_steps=3, gamma=0.4)
+    #writer.add_hparams({'first_cycle_steps':12, 'warmup_steps':2}, {'hparam/gamma':0.6 })
     if args.load_model:
         last_epoch = args.load_epoch
         last_epoch, loss = load_checkpoint(osp.join(args.save_root,
@@ -172,6 +206,17 @@ def main():
     loss_compute = nn.CrossEntropyLoss().to(device)
 
     for epoch in trange(last_epoch, args.epoch_num + last_epoch):
+        #train_ds.shuffle()  # train_ds.data = train_ds.data[shuffled_index]
+        shuffled_list = [i for i in range(len(train_ds))]
+        shuffle(shuffled_list)
+        train_ds = train_ds[shuffled_list]
+        
+        train_loader = DataLoader(train_ds[:last_train],
+                                  batch_size=args.batch_size,
+                                  shuffle=True)
+        valid_loader = DataLoader(train_ds[last_train:],
+                                  batch_size=args.batch_size,
+                                  shuffle=True)
         # print('Epoch: {} Training...'.format(epoch))
         model.train(True)
         lr = optimizer.state_dict()['param_groups'][0]['lr']
@@ -197,9 +242,16 @@ def main():
 
         writer.add_scalar('val/val_loss', loss, epoch + 1)
         writer.add_scalar('val/val_overall_acc', accuracy, epoch + 1)
-        if epoch > 15:
-            lr_scheduler.step()
+        #if epoch > 15:
+        lr_scheduler.step()
 
+    model.eval()
+    loss, accuracy = run_epoch(test_loader, model, optimizer,
+                               oss_compute, valid_ds, device, is_train=False,
+                               desc="Final test: ", args=args, writer=writer, epoch_num=epoch)
+
+    writer.add_scalar('test/test_loss', loss)
+    writer.add_scalar('test/test_overall_acc', accuracy)
     writer.export_scalars_to_json(osp.join(args.log_dir, "all_scalars.json"))
     writer.close()
 
