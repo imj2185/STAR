@@ -15,6 +15,7 @@ from data.dataset3 import SkeletonDataset
 from models.net import DualGraphEncoder
 from optimizer import SGD_AGC, CosineAnnealingWarmupRestarts
 from utility.helper import make_checkpoint, load_checkpoint
+from random import shuffle
 
 
 def plot_grad_flow(named_parameters, path, writer, step):
@@ -132,15 +133,17 @@ def main():
     train_ds = SkeletonDataset(args.dataset_root, name='ntu_60',
                                use_motion_vector=False,
                                benchmark='xsub', sample='train')
-    valid_ds = SkeletonDataset(args.dataset_root, name='ntu_60',
-                               use_motion_vector=False,
-                               benchmark='xsub', sample='val')
+    test_ds = SkeletonDataset(args.dataset_root, name='ntu_60',
+                              use_motion_vector=False,
+                              benchmark='xsub', sample='val')
+
+    last_train = int(len(train_ds) * 0.8)
 
     # randomly split into around 80% train, 10% val and 10% train
-    train_loader = DataLoader(train_ds.data,
-                              batch_size=args.batch_size,
-                              shuffle=True)
-    valid_loader = DataLoader(valid_ds.data,
+    #train_loader = DataLoader(train_ds.data,
+    #                          batch_size=args.batch_size,
+    #                          shuffle=True)
+    test_loader = DataLoader(test_ds,
                               batch_size=args.batch_size,
                               shuffle=True)
 
@@ -160,8 +163,8 @@ def main():
     # noam_opt = get_std_opt(model, args)
     optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
     decayRate = 0.96
-    lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decayRate)
-    #lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=len(train_loader), cycle_mult=1.0, max_lr=0.1, min_lr=0.001, warmup_steps=len(train_loader)//4, gamma=0.5)
+    #lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decayRate)
+    lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=12, cycle_mult=1.0, max_lr=0.1, min_lr=1e-4, warmup_steps=3, gamma=0.4)
     if args.load_model:
         last_epoch = args.load_epoch
         last_epoch, loss = load_checkpoint(osp.join(args.save_root,
@@ -172,6 +175,16 @@ def main():
     loss_compute = nn.CrossEntropyLoss().to(device)
 
     for epoch in trange(last_epoch, args.epoch_num + last_epoch):
+        shuffled_list = [i for i in range(len(train_ds))]
+        shuffle(shuffled_list)
+        train_ds = train_ds[shuffled_list]
+        
+        train_loader = DataLoader(train_ds[:last_train],
+                                  batch_size=args.batch_size,
+                                  shuffle=True)
+        valid_loader = DataLoader(train_ds[last_train:],
+                                  batch_size=args.batch_size,
+                                  shuffle=True)
         # print('Epoch: {} Training...'.format(epoch))
         model.train(True)
         lr = optimizer.state_dict()['param_groups'][0]['lr']
@@ -197,8 +210,16 @@ def main():
 
         writer.add_scalar('val/val_loss', loss, epoch + 1)
         writer.add_scalar('val/val_overall_acc', accuracy, epoch + 1)
-        if epoch > 15:
-            lr_scheduler.step()
+        #if epoch > 15:
+        lr_scheduler.step()
+
+    model.eval()
+    loss, accuracy = run_epoch(test_loader, model, optimizer,
+                            loss_compute, test_ds, device, is_train=False,
+                            desc="Final test: ", args=args, writer=writer, epoch_num=epoch)
+
+    writer.add_scalar('test/test_loss', loss)
+    writer.add_scalar('test/test_overall_acc', accuracy)
 
     writer.export_scalars_to_json(osp.join(args.log_dir, "all_scalars.json"))
     writer.close()

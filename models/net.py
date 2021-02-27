@@ -41,7 +41,7 @@ class DualGraphEncoder(nn.Module, ABC):
         # ])
 
         channels_ = channels[1:] + [out_channels]
-        self.positional_encoding = PositionalEncoding(model_dim=hidden_channels)
+        #self.positional_encoding = PositionalEncoding(model_dim=hidden_channels)
 
         # self.lls = nn.ModuleList([nn.Linear(in_features=channels[i],
         #                                     out_features=channels[i + 1]) for i in range(num_layers)])
@@ -93,9 +93,10 @@ class DualGraphEncoder(nn.Module, ABC):
         t = self.lls(t)
         c = t.shape[-1]
         t = self.bn(rearrange(t, 'b n c -> b (n c)'))
-        t = rearrange(t, 'b (n c) -> n b c', c=c)
-        t = self.positional_encoding(t)
-        t = rearrange(t, 'n b c -> b n c')
+        t = rearrange(t, 'b (n c) -> b n c', c=c)
+        #t = rearrange(t, 'b (n c) -> n b c', c=c)
+        #t = self.positional_encoding(t)
+        #t = rearrange(t, 'n b c -> b n c')
 
         # Core pipeline
         for i in range(self.num_layers):

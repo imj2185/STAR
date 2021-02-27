@@ -59,9 +59,9 @@ def make_args():
                         load_model=False,
                         in_channels=6,
                         num_enc_layers=6,
-                        num_conv_layers=3,
-                        weight_decay=0.,  # 4e-3,
-                        dropout=[0.3, 0.1, 0.5, 0.5], #temp_conv, sparse_attention, add_norm, ffn
+                        num_conv_layers=2,
+                        weight_decay=4e-5,
+                        dropout=[0.5, 0.5, 0.5, 0.5], #temp_conv, sparse_attention, add_norm, ffn
                         hid_channels=64,
                         out_channels=64,
                         heads=8)
