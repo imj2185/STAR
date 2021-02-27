@@ -179,10 +179,13 @@ def main():
         shuffle(shuffled_list)
         train_ds = train_ds[shuffled_list]
         
-        train_loader = DataLoader(train_ds[:last_train],
+        train_ds_ = train_ds[:last_train]
+        valid_ds_ = train_ds[last_train:]
+
+        train_loader = DataLoader(train_ds_,
                                   batch_size=args.batch_size,
                                   shuffle=True)
-        valid_loader = DataLoader(train_ds[last_train:],
+        valid_loader = DataLoader(valid_ds_,
                                   batch_size=args.batch_size,
                                   shuffle=True)
         # print('Epoch: {} Training...'.format(epoch))
@@ -191,7 +194,7 @@ def main():
         writer.add_scalar('params/lr', lr, epoch)
 
         loss, accuracy = run_epoch(train_loader, model, optimizer,
-                                   loss_compute, train_ds, device, is_train=True,
+                                   loss_compute, train_ds_, device, is_train=True,
                                    desc="Train Epoch {}".format(epoch + 1), args=args, writer=writer, epoch_num=epoch)
         print('Epoch: {} Evaluating...'.format(epoch + 1))
 
@@ -205,7 +208,7 @@ def main():
         # Validation
         model.eval()
         loss, accuracy = run_epoch(valid_loader, model, optimizer,
-                                   loss_compute, valid_ds, device, is_train=False,
+                                   loss_compute, valid_ds_, device, is_train=False,
                                    desc="Valid Epoch {}".format(epoch + 1), args=args, writer=writer, epoch_num=epoch)
 
         writer.add_scalar('val/val_loss', loss, epoch + 1)
