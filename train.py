@@ -19,13 +19,13 @@ from random import shuffle
 import imageio
 #import adamod
 
-def gif_grad_flow(path, name):
-    with imageio.get_writer(name + '.gif', mode='I') as writer:
-        for filename in os.listdir(path):
+def gif_grad_flow(path, gif_path, name):
+    with imageio.get_writer(osp.join(gif_path, name + '.gif'), mode='I') as writer:
+        for filename in path:
             image = imageio.imread(filename)
             writer.append_data(image)
 
-    for filename in os.listdir(path):
+    for filename in path:
         os.remove(filename)
 
 def plot_grad_flow(named_parameters, path, writer, step):
@@ -45,7 +45,6 @@ def plot_grad_flow(named_parameters, path, writer, step):
                 empty_grads.append({n: p.mean().cpu().item()})
     # total_norm = total_norm ** (1. / 2)
     # print("Norm : ", total_norm)
-    plt.clf()
     plt.tight_layout()
     plt.plot(ave_grads, alpha=0.3, color="b")
     plt.hlines(0, 0, len(ave_grads) + 1, linewidth=1.5, color="k")
@@ -53,9 +52,10 @@ def plot_grad_flow(named_parameters, path, writer, step):
     plt.xlim(xmin=0, xmax=len(ave_grads))
     plt.xlabel("Layers")
     plt.ylabel("average gradient")
-    plt.title("Gradient flow")
+    plt.title("Gradient flow" + str(int))
     plt.grid(True)
     plt.savefig(path, dpi=300)
+    plt.close()
     # plt.show()
 
 
@@ -92,6 +92,7 @@ def run_epoch(data_loader,
     total_samples = 0
     start = time.time()
     total_batch = len(dataset) // args.batch_size + 1
+    gradflow_file_list = []
     for i, batch in tqdm(enumerate(data_loader),
                          total=total_batch,
                          desc=desc):
@@ -117,8 +118,9 @@ def run_epoch(data_loader,
                     path = osp.join(os.getcwd(), 'gradflow')
                     if not osp.exists(path):
                         os.mkdir(path)
-                    plot_grad_flow(model.named_parameters(), osp.join(path, 'grad%3d:%d.png' % (epoch_num, i)), writer,
+                    plot_grad_flow(model.named_parameters(), osp.join(path, '%3d:%d.png' % (epoch_num, i)), writer,
                                    step)
+                    gradflow_file_list.append(osp.join(path, '%3d:%d.png' % (epoch_num, i)))
 
                 # plot_grad_flow(model.named_parameters(), writer, (i + 1) + total_batch * epoch_num)
                 # for name, param in model.named_parameters():
@@ -130,6 +132,12 @@ def run_epoch(data_loader,
             pred = torch.max(out, 1)[1]
             total_samples += label.size(0)
             correct += (pred == label).double().sum().item()
+    
+    gif_path = osp.join(os.getcwd(), 'gif_gradlow')
+    if not osp.exists(gif_path):
+        os.mkdir(gif_path)
+    #gif_grad_flow(gradflow_file_list, gif_path, str(epoch_num))
+    gradflow_file_list = []
 
     elapsed = time.time() - start
     accuracy = correct / total_samples * 100.
