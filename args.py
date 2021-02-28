@@ -44,7 +44,7 @@ def make_args():
     parser.add_argument('--weight_decay', dest='weight_decay', default=0.09, type=float)
     parser.add_argument('--warmup_steps', dest='warmup_steps', default=6e5, type=float)
     parser.add_argument('--opt_train_factor', dest='opt_train_factor', default=4, type=float)
-    parser.add_argument('--epoch_num', dest='epoch_num', default=200, type=int)  # paper used: 2001
+    parser.add_argument('--epoch_num', dest='epoch_num', default=100, type=int)  # paper used: 2001
     parser.add_argument('--epoch_log', dest='epoch_log', default=50, type=int)  # test every
     parser.add_argument('--epoch_save', dest='epoch_save', default=500, type=int)  # save every
     parser.add_argument('--save_root', dest='save_root', default='saved_model', type=str)
@@ -58,7 +58,7 @@ def make_args():
                         dataset_root=osp.join(os.getcwd()),
                         load_model=False,
                         in_channels=6,
-                        num_enc_layers=6,
+                        num_enc_layers=5,
                         num_conv_layers=2,
                         weight_decay=4e-5,
                         dropout=[0.5, 0.5, 0.5, 0.5], #temp_conv, sparse_attention, add_norm, ffn

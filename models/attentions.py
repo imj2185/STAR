@@ -296,9 +296,11 @@ class EncoderLayer(nn.Module):
         # stride=temp_conv_stride * 2 if i == (num_conv_layers - 1)
         # else temp_conv_stride) for i in range(num_conv_layers)])
 
-        self.lin_q = Linear(in_channels, mdl_channels)
-        self.lin_k = Linear(in_channels, mdl_channels)
-        self.lin_v = Linear(in_channels, mdl_channels)
+        #self.lin_q = Linear(in_channels, mdl_channels)
+        #self.lin_k = Linear(in_channels, mdl_channels)
+        #self.lin_v = Linear(in_channels, mdl_channels)
+
+        self.lin_qkv = Linear(in_channels, mdl_channels * 3, bias=False)
 
         if spatial:
             self.multi_head_attn = SparseAttention(in_channels=mdl_channels // heads,
@@ -329,9 +331,12 @@ class EncoderLayer(nn.Module):
         f, n, c = x.shape
         # q, k, v = x, x, x
 
-        query = self.lin_q(x)
-        key = self.lin_k(x)
-        value = self.lin_v(x)
+        #query = self.lin_q(x)
+        #key = self.lin_k(x)
+        #value = self.lin_v(x)
+
+        query, key, value = self.lin_qkv(x).chunk(3, dim = -1)
+        
         if self.spatial:
             attn_mask = bi
         else:
