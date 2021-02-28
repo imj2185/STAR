@@ -35,7 +35,7 @@ def plot_grad_flow(named_parameters, path, writer, step):
                 empty_grads.append({n: p.mean().cpu().item()})
     # total_norm = total_norm ** (1. / 2)
     # print("Norm : ", total_norm)
-    plt.tight_layout()
+    #plt.tight_layout()
     plt.plot(ave_grads, alpha=0.3, color="b")
     plt.hlines(0, 0, len(ave_grads) + 1, linewidth=1.5, color="k")
     plt.xticks(np.arange(0, len(ave_grads), 1), layers, rotation="vertical", fontsize=4)
@@ -216,13 +216,14 @@ def main():
         # if epoch > 15:
         lr_scheduler.step()
 
-    model.eval()
-    loss, accuracy = run_epoch(test_loader, model, optimizer,
-                               loss_compute, test_ds, device, is_train=False,
-                               desc="Final test: ", args=args, writer=writer, epoch_num=epoch)
+        if epoch % 10 == 0:
+            model.eval()
+            loss, accuracy = run_epoch(test_loader, model, optimizer,
+                                    loss_compute, test_ds, device, is_train=False,
+                                    desc="Final test: ", args=args, writer=writer, epoch_num=epoch)
 
-    writer.add_scalar('test/test_loss', loss)
-    writer.add_scalar('test/test_overall_acc', accuracy)
+            writer.add_scalar('test/test_loss', loss, , epoch + 1)
+            writer.add_scalar('test/test_overall_acc', accuracy, epoch + 1)
 
     writer.export_scalars_to_json(osp.join(args.log_dir, "all_scalars.json"))
     writer.close()
