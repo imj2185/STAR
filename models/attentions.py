@@ -318,9 +318,10 @@ class EncoderLayer(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        self.lin_k.reset_parameters()
-        self.lin_q.reset_parameters()
-        self.lin_v.reset_parameters()
+        #self.lin_k.reset_parameters()
+        #self.lin_q.reset_parameters()
+        #self.lin_v.reset_parameters()
+        self.lin_qkv.reset_parameters()
         self.add_norm_att.reset_parameters()
         self.add_norm_ffn.reset_parameters()
         self.ffn.reset_parameters()

@@ -6,7 +6,7 @@ import torch.nn as nn
 from einops import rearrange
 
 from .attentions import EncoderLayer
-from positional_encoding import SeqPosEncoding
+from models.positional_encoding import SeqPosEncoding
 from .layers import GlobalContextAttention
 
 
