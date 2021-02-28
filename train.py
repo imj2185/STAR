@@ -1,6 +1,7 @@
 import os
 import os.path as osp
 import time
+from random import shuffle
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -37,7 +38,7 @@ def plot_grad_flow(named_parameters, path, writer, step):
         if p.requires_grad and not (("bias" in n) or ("norm" in n) or ("bn" in n) or ("gain" in n)):
             if p.grad is not None:
                 # writer.add_scalar('gradients/' + n, p.grad.norm(2).item(), step)
-                writer.add_histogram('gradients/' + n, p.grad, step)
+                # writer.add_histogram('gradients/' + n, p.grad, step)
                 # total_norm += p.grad.data.norm(2).item()
                 layers.append(n)
                 ave_grads.append(p.grad.abs().mean().cpu().item())
@@ -45,7 +46,7 @@ def plot_grad_flow(named_parameters, path, writer, step):
                 empty_grads.append({n: p.mean().cpu().item()})
     # total_norm = total_norm ** (1. / 2)
     # print("Norm : ", total_norm)
-    plt.tight_layout()
+    #plt.tight_layout()
     plt.plot(ave_grads, alpha=0.3, color="b")
     plt.hlines(0, 0, len(ave_grads) + 1, linewidth=1.5, color="k")
     plt.xticks(np.arange(0, len(ave_grads), 1), layers, rotation="vertical", fontsize=4)
@@ -170,19 +171,18 @@ def main():
                                use_motion_vector=False,
                                benchmark='xsub', sample='train')
     test_ds = SkeletonDataset(args.dataset_root, name='ntu_60',
-                               use_motion_vector=False,
-                               benchmark='xsub', sample='val')
-
-    # randomly split into around 80% train, 10% val and 10% train
+                              use_motion_vector=False,
+                              benchmark='xsub', sample='val')
 
     last_train = int(len(train_ds) * 0.8)
 
-    # train_loader = DataLoader(train_ds[:last_train].data,
-    #                           batch_size=args.batch_size,
-    #                           shuffle=True)
-    test_loader = DataLoader(test_ds.data,
-                              batch_size=args.batch_size,
-                              shuffle=True)
+    # randomly split into around 80% train, 10% val and 10% train
+    # train_loader = DataLoader(train_ds.data,
+    #                          batch_size=args.batch_size,
+    #                          shuffle=True)
+    test_loader = DataLoader(test_ds,
+                             batch_size=args.batch_size,
+                             shuffle=True)
 
     # criterion = LabelSmoothing(V, padding_idx=dataset.pad_id, smoothing=0.1)
     # make_model black box
@@ -192,18 +192,17 @@ def main():
                              out_channels=args.out_channels,
                              num_layers=args.num_enc_layers,
                              num_heads=args.heads,
-                             linear_temporal=True,
                              sequential=False,
                              num_conv_layers=args.num_conv_layers,
                              drop_rate=args.drop_rate)
     model = model.to(device)
     # noam_opt = get_std_opt(model, args)
-    optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=0)
-    #optimizer = adamod.AdaMod(model.parameters(), lr=args.lr, beta3=0.999)
-    decayRate = 0.96
-    #lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decayRate)
-    lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=20, cycle_mult=1.0, max_lr=0.1, min_lr=1e-4, warmup_steps=3, gamma=0.4)
-    #writer.add_hparams({'first_cycle_steps':12, 'warmup_steps':2}, {'hparam/gamma':0.6 })
+
+    optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
+    decay_rate = 0.97
+    lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decay_rate)
+    #lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=12, cycle_mult=1.0, max_lr=0.1,
+    #                                             min_lr=1e-4, warmup_steps=3, gamma=0.4)
     if args.load_model:
         last_epoch = args.load_epoch
         last_epoch, loss = load_checkpoint(osp.join(args.save_root,
@@ -214,15 +213,17 @@ def main():
     loss_compute = nn.CrossEntropyLoss().to(device)
 
     for epoch in trange(last_epoch, args.epoch_num + last_epoch):
-        #train_ds.shuffle()  # train_ds.data = train_ds.data[shuffled_index]
         shuffled_list = [i for i in range(len(train_ds))]
         shuffle(shuffled_list)
         train_ds = train_ds[shuffled_list]
-        
-        train_loader = DataLoader(train_ds[:last_train],
+
+        train_ds_ = train_ds[:last_train]
+        valid_ds_ = train_ds[last_train:]
+
+        train_loader = DataLoader(train_ds_,
                                   batch_size=args.batch_size,
                                   shuffle=True)
-        valid_loader = DataLoader(train_ds[last_train:],
+        valid_loader = DataLoader(valid_ds_,
                                   batch_size=args.batch_size,
                                   shuffle=True)
         # print('Epoch: {} Training...'.format(epoch))
@@ -231,7 +232,7 @@ def main():
         writer.add_scalar('params/lr', lr, epoch)
 
         loss, accuracy = run_epoch(train_loader, model, optimizer,
-                                   loss_compute, train_ds, device, is_train=True,
+                                   loss_compute, train_ds_, device, is_train=True,
                                    desc="Train Epoch {}".format(epoch + 1), args=args, writer=writer, epoch_num=epoch)
         print('Epoch: {} Evaluating...'.format(epoch + 1))
 
@@ -245,21 +246,24 @@ def main():
         # Validation
         model.eval()
         loss, accuracy = run_epoch(valid_loader, model, optimizer,
-                                   loss_compute, valid_ds, device, is_train=False,
+                                   loss_compute, valid_ds_, device, is_train=False,
                                    desc="Valid Epoch {}".format(epoch + 1), args=args, writer=writer, epoch_num=epoch)
 
         writer.add_scalar('val/val_loss', loss, epoch + 1)
         writer.add_scalar('val/val_overall_acc', accuracy, epoch + 1)
-        #if epoch > 15:
+
+        # if epoch > 15:
         lr_scheduler.step()
 
-    model.eval()
-    loss, accuracy = run_epoch(test_loader, model, optimizer,
-                               oss_compute, valid_ds, device, is_train=False,
-                               desc="Final test: ", args=args, writer=writer, epoch_num=epoch)
+        if epoch % 10 == 0:
+            model.eval()
+            loss, accuracy = run_epoch(test_loader, model, optimizer,
+                                    loss_compute, test_ds, device, is_train=False,
+                                    desc="Final test: ", args=args, writer=writer, epoch_num=epoch)
 
-    writer.add_scalar('test/test_loss', loss)
-    writer.add_scalar('test/test_overall_acc', accuracy)
+            writer.add_scalar('test/test_loss', loss, epoch + 1)
+            writer.add_scalar('test/test_overall_acc', accuracy, epoch + 1)
+
     writer.export_scalars_to_json(osp.join(args.log_dir, "all_scalars.json"))
     writer.close()
 

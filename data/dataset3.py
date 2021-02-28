@@ -180,7 +180,7 @@ def num_processes():
     return os.cpu_count() - 4
 
 
-def skeleton_parts(num_joints=25, dataset='ntu'):
+def skeleton_parts(num_joints=25, dataset='ntu', cat=True):
     if 'ntu' in dataset:
         sk_adj = torch.tensor(
             # [[0, 0, 0, 1, 1, 2, 2, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8,
@@ -202,6 +202,9 @@ def skeleton_parts(num_joints=25, dataset='ntu'):
         )
     else:
         return None
+
+    if not cat:
+        return sk_adj
 
     sk_adj_undirected = torch.cat((sk_adj, torch.stack([sk_adj[1], sk_adj[0]])), dim=1)
 

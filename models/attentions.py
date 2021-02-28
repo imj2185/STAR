@@ -214,30 +214,7 @@ class MLP(nn.Module):
             x = fn.relu(self.layers[i](x))
         return self.layers[-1](x)
 
-
-class SequentialEncoding(nn.Module):
-    def __init__(self,
-                 model_dim: int):
-        """ Positional Encoding
-            This kind of encoding uses the trigonometric functions to
-            incorporate the relative position information into the input
-            sequence
-        :param model_dim (int): the dimension of the token (feature channel length)
-        """
-        super(SequentialEncoding, self).__init__()
-        self.model_dim = model_dim
-
-    def forward(self, x) -> Tensor:
-        sequence_length = x.shape[-2]
-        pos = torch.arange(sequence_length, dtype=torch.float,
-                           device=x.device).reshape(1, -1, 1)
-        dim = torch.arange(self.model_dim, dtype=torch.float,
-                           device=x.device).reshape(1, 1, -1)
-        phase = (pos / 1e4) ** (dim // self.model_dim)
-        assert x.shape[-2] == sequence_length and x.shape[-1] == self.model_dim
-        return x + torch.where(dim.long() % 2 == 0, torch.sin(phase), torch.cos(phase))
-
-
+      
 class FeedForward(nn.Module):
     def __init__(self, in_channels, hidden_channels, dropout=0.):
         super().__init__()
@@ -319,13 +296,6 @@ class EncoderLayer(nn.Module):
         #self.tree_value_embedding = nn.Embedding(num_joints, in_channels, _weight=self.tree_value_weights)
 
         # self.bn = nn.BatchNorm1d(in_channels * 25)
-        self.temp_conv = nn.ModuleList([TemporalConv(in_channels=mdl_channels,
-                                                     out_channels=mdl_channels,
-                                                     kernel_size=temp_conv_knl // 2 + 1 if i == (
-                                                             num_conv_layers - 1) else temp_conv_knl,
-                                                     stride=temp_conv_stride,
-                                                     activation=False if i == (num_conv_layers - 1) else True,
-                                                     dropout=self.dropout[0]) for i in range(num_conv_layers)])
         # stride=temp_conv_stride * 2 if i == (num_conv_layers - 1)
         # else temp_conv_stride) for i in range(num_conv_layers)])
 
@@ -347,6 +317,14 @@ class EncoderLayer(nn.Module):
         self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2])
         self.ffn = FeedForward(
             self.mdl_channels, self.mdl_channels, self.dropout[3])
+        
+        self.temp_conv = nn.ModuleList([TemporalConv(in_channels=mdl_channels,
+                                                     out_channels=mdl_channels,
+                                                     kernel_size=temp_conv_knl // 2 + 1 if i == (
+                                                             num_conv_layers - 1) else temp_conv_knl,
+                                                     stride=temp_conv_stride,
+                                                     activation=False if i == (num_conv_layers - 1) else True,
+                                                     dropout=self.dropout[0]) for i in range(num_conv_layers)])
 
         self.reset_parameters()
 

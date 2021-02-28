@@ -8,6 +8,7 @@ import networkx as nx
 
 # sequential relative
 # tree-based
+from torch import nn
 
 
 def bfs_enc(edges, root, device):
@@ -45,12 +46,40 @@ def tree_struct_pos_enc(adj, max_chs, func=None, device=None):
     return enc
 
 
-def test():
-    adj = torch.tensor(
-       [[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24],
-        [1, 20, 20, 2, 20, 4, 5, 6, 20, 8, 9, 10, 0, 12, 13, 14, 0, 16, 17, 18, 22, 7, 24, 11]
-    ]).to('cuda')
+class SeqPosEncoding(nn.Module):
+    def __init__(self,
+                 model_dim: int):
+        """ Sequential Positional Encoding
+            This kind of encoding uses the trigonometric functions to
+            incorporate the relative position information into the input
+            sequence
+        :param model_dim (int): the dimension of the token (feature channel length)
+        """
+        super(SeqPosEncoding, self).__init__()
+        self.model_dim = model_dim
 
+    @staticmethod
+    def segment(pos, bi, device):
+        offset = (torch.cat([torch.tensor([1]).to(device),
+                             bi[1:] - bi[:-1]]) == 1).nonzero(as_tuple=True)[0]
+        return pos - offset[bi]
+
+    def forward(self, x, bi=None) -> torch.Tensor:
+        d = self.model_dim
+        sequence_length = x.shape[-2]
+        pos = torch.arange(sequence_length, dtype=torch.float).to(x.device)
+        if bi is not None:
+            pos = self.segment(pos, bi, x.device)
+        pos = pos.reshape(1, -1, 1).to(x.device)
+        dim = torch.arange(d, dtype=torch.float).reshape(1, 1, -1).to(x.device)
+        phase = (pos / 1e4) ** (dim / d)
+        assert x.shape[-2] == sequence_length and x.shape[-1] == self.model_dim
+        return x + torch.where(dim.long() % 2 == 0, torch.sin(phase), torch.cos(phase))
+
+
+def test():
+    from ..data.dataset3 import skeleton_parts
+    adj = skeleton_parts(cat=False)
     enc = tree_struct_pos_enc(adj, 25, 25, None, 'cuda')
     print(enc)
 
