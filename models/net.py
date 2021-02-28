@@ -5,7 +5,8 @@ import torch.nn as nn
 # from third_party.performer import SelfAttention
 from einops import rearrange
 
-from .attentions import EncoderLayer, PositionalEncoding
+from .attentions import EncoderLayer
+# from positional_encoding import SeqPosEncoding
 from .layers import GlobalContextAttention
 
 
@@ -18,18 +19,21 @@ class DualGraphEncoder(nn.Module, ABC):
                  num_heads=8,
                  num_joints=25,
                  classes=60,
-                 drop_rate=[0.3,0.3,0.3,0.3],
+                 drop_rate=None,
                  sequential=True,
-                 linear_temporal=True,
                  trainable_factor=False,
                  num_conv_layers=3):
         super(DualGraphEncoder, self).__init__()
+        if drop_rate is None:
+            self.drop_rate = [0.3, 0.3, 0.3, 0.3]
+        else:
+            self.drop_rate = drop_rate
         self.spatial_factor = nn.Parameter(torch.ones(num_layers)) * 0.5
         self.sequential = sequential
         self.num_layers = num_layers
         self.num_conv_layers = num_conv_layers
-        # self.num_joints = num_joints
-        # self.num_classes = classes
+        self.num_joints = num_joints
+        self.num_classes = classes
         self.dropout = drop_rate
         self.trainable_factor = trainable_factor
         self.bn = nn.BatchNorm1d(hidden_channels * 25)
@@ -41,7 +45,7 @@ class DualGraphEncoder(nn.Module, ABC):
         # ])
 
         channels_ = channels[1:] + [out_channels]
-        #self.positional_encoding = PositionalEncoding(model_dim=hidden_channels)
+        # self.positional_encoding = SeqPosEncoding(model_dim=hidden_channels)
 
         # self.lls = nn.ModuleList([nn.Linear(in_features=channels[i],
         #                                     out_features=channels[i + 1]) for i in range(num_layers)])
@@ -68,7 +72,7 @@ class DualGraphEncoder(nn.Module, ABC):
         self.mlp_head = nn.Sequential(
             nn.LayerNorm(out_channels * num_joints),
             nn.Linear(out_channels * num_joints, out_channels * num_joints),
-            #nn.Tanh(),
+            # nn.Tanh(),
             nn.LeakyReLU(),
             nn.Linear(out_channels * num_joints, classes)
         )
@@ -94,9 +98,9 @@ class DualGraphEncoder(nn.Module, ABC):
         c = t.shape[-1]
         t = self.bn(rearrange(t, 'b n c -> b (n c)'))
         t = rearrange(t, 'b (n c) -> b n c', c=c)
-        #t = rearrange(t, 'b (n c) -> n b c', c=c)
-        #t = self.positional_encoding(t)
-        #t = rearrange(t, 'n b c -> b n c')
+        # t = rearrange(t, 'b (n c) -> n b c', c=c)
+        # t = self.positional_encoding(t)
+        # t = rearrange(t, 'n b c -> b n c')
 
         # Core pipeline
         for i in range(self.num_layers):

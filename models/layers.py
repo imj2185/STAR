@@ -16,7 +16,7 @@ from torch_geometric.nn.inits import glorot, zeros
 from torch_geometric.utils import remove_self_loops, add_self_loops
 from torch_scatter import scatter_mean
 
-# from models.attentions import PositionalEncoding
+# from models.attentions import SeqPosEncoding
 from utility.linalg import batched_spmm, batched_transpose, BatchedMask, softmax_
 
 
@@ -313,7 +313,7 @@ class GlobalContextAttention(nn.Module):
 #         self.heads = heads
 #         self.is_linear = is_linear
 #
-#         self.pos_encode = PositionalEncoding(model_dim=in_channels) if use_pos_encode else None
+#         self.pos_encode = SeqPosEncoding(model_dim=in_channels) if use_pos_encode else None
 #         if is_linear:
 #             self.attention = LinearAttention(in_channels)
 #         else:
