@@ -16,7 +16,18 @@ from data.dataset3 import SkeletonDataset
 from models.net import DualGraphEncoder
 from optimizer import SGD_AGC, CosineAnnealingWarmupRestarts
 from utility.helper import make_checkpoint, load_checkpoint
+from random import shuffle
+import imageio
+#import adamod
 
+def gif_grad_flow(path, gif_path, name):
+    with imageio.get_writer(osp.join(gif_path, name + '.gif'), mode='I') as writer:
+        for filename in path:
+            image = imageio.imread(filename)
+            writer.append_data(image)
+
+    for filename in path:
+        os.remove(filename)
 
 def plot_grad_flow(named_parameters, path, writer, step):
     ave_grads = []
@@ -42,9 +53,10 @@ def plot_grad_flow(named_parameters, path, writer, step):
     plt.xlim(xmin=0, xmax=len(ave_grads))
     plt.xlabel("Layers")
     plt.ylabel("average gradient")
-    plt.title("Gradient flow")
+    plt.title("Gradient flow" + str(int))
     plt.grid(True)
     plt.savefig(path, dpi=300)
+    plt.close()
     # plt.show()
 
 
@@ -81,6 +93,7 @@ def run_epoch(data_loader,
     total_samples = 0
     start = time.time()
     total_batch = len(dataset) // args.batch_size + 1
+    gradflow_file_list = []
     for i, batch in tqdm(enumerate(data_loader),
                          total=total_batch,
                          desc=desc):
@@ -90,7 +103,13 @@ def run_epoch(data_loader,
         with torch.set_grad_enabled(is_train):
             out = model(sample, adj=dataset.skeleton_.to(device), bi=bi)
             loss = loss_compute(out, label.long())
+            loss_ = loss
             if is_train:
+                l2_lambda = args.weight_decay
+                for param in model.parameters():
+                    if param.requires_grad:
+                        loss += l2_lambda * torch.sum(((param)) ** 2)
+                
                 optimizer.zero_grad()
                 loss.backward()
                 # torch.nn.utils.clip_grad_norm_(model.parameters(), 9.0)
@@ -100,8 +119,9 @@ def run_epoch(data_loader,
                     path = osp.join(os.getcwd(), 'gradflow')
                     if not osp.exists(path):
                         os.mkdir(path)
-                    plot_grad_flow(model.named_parameters(), osp.join(path, 'grad%3d:%d.png' % (epoch_num, i)), writer,
+                    plot_grad_flow(model.named_parameters(), osp.join(path, '%3d:%d.png' % (epoch_num, i)), writer,
                                    step)
+                    gradflow_file_list.append(osp.join(path, '%3d:%d.png' % (epoch_num, i)))
 
                 # plot_grad_flow(model.named_parameters(), writer, (i + 1) + total_batch * epoch_num)
                 # for name, param in model.named_parameters():
@@ -109,10 +129,16 @@ def run_epoch(data_loader,
                 # writer.add_scalar('gradients/' + name, param.grad.norm(2).item(), (i + 1) + total_batch * epoch_num)
 
             # statistics
-            running_loss += loss.item()
+            running_loss += loss_.item()
             pred = torch.max(out, 1)[1]
             total_samples += label.size(0)
             correct += (pred == label).double().sum().item()
+    
+    gif_path = osp.join(os.getcwd(), 'gif_gradlow')
+    if not osp.exists(gif_path):
+        os.mkdir(gif_path)
+    #gif_grad_flow(gradflow_file_list, gif_path, str(epoch_num))
+    gradflow_file_list = []
 
     elapsed = time.time() - start
     accuracy = correct / total_samples * 100.
@@ -126,6 +152,17 @@ def main():
     # torch.cuda.empty_cache()
     args = make_args()
     writer = SummaryWriter(args.log_dir)
+    #writer.add_hparams({'lr': args.lr, 
+    #                    'bsize': args.batch_size},
+    #                    {'hparam/num_enc_layers':args.num_enc_layers,
+    #                    'hparam/num_conv_layers': args.num_conv_layers,
+    #                    'hparam/temp_conv_drop': args.dropout[0], 
+    #                    'hparam/sparse_attention_drop': args.dropout[1],
+    #                    'hparam/add_norm_drop' : args.dropout[2], 
+    #                    'hparam/ffn_drop' : args.dropout[3], 
+    #                    'hparam/hid_channels': args.hid_channels
+    #                    })
+
     device = torch.device('cuda:0') if args.use_gpu and torch.cuda.is_available() else torch.device('cpu')
     # device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -160,6 +197,7 @@ def main():
                              drop_rate=args.drop_rate)
     model = model.to(device)
     # noam_opt = get_std_opt(model, args)
+
     optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
     decay_rate = 0.97
     lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decay_rate)
@@ -213,6 +251,7 @@ def main():
 
         writer.add_scalar('val/val_loss', loss, epoch + 1)
         writer.add_scalar('val/val_overall_acc', accuracy, epoch + 1)
+
         # if epoch > 15:
         lr_scheduler.step()
 

@@ -5,9 +5,11 @@ import torch.nn as nn
 # from third_party.performer import SelfAttention
 from einops import rearrange
 
+
 from .attentions import EncoderLayer
 from models.positional_encoding import SeqPosEncoding
 from .layers import GlobalContextAttention
+from utility.tree import tree_encoding_from_traversal
 
 
 class DualGraphEncoder(nn.Module, ABC):
@@ -45,6 +47,10 @@ class DualGraphEncoder(nn.Module, ABC):
         # ])
 
         channels_ = channels[1:] + [out_channels]
+
+        
+        self.tree_encoding = tree_encoding_from_traversal(onehot_length=3, max_padding=hidden_channels)
+        #self.embedding_weight = nn.Parameter(torch.randn(num_joints, hidden_channels))
         self.positional_encoding = SeqPosEncoding(model_dim=hidden_channels)
 
         # self.lls = nn.ModuleList([nn.Linear(in_features=channels[i],
@@ -57,7 +63,8 @@ class DualGraphEncoder(nn.Module, ABC):
                          spatial=True,
                          heads=num_heads,
                          dropout=drop_rate,
-                         num_conv_layers=self.num_conv_layers) for i in range(num_layers)])
+                         num_conv_layers=self.num_conv_layers,
+                         num_joints=num_joints) for i in range(num_layers)])
 
         """self.temporal_layers = nn.ModuleList([
             # necessary parameters are: dim
@@ -99,12 +106,13 @@ class DualGraphEncoder(nn.Module, ABC):
         t = self.bn(rearrange(t, 'b n c -> b (n c)'))
         #t = rearrange(t, 'b (n c) -> b n c', c=c)
         t = rearrange(t, 'b (n c) -> n b c', c=c)
+
         t = self.positional_encoding(t, bi)
         t = rearrange(t, 'n b c -> b n c')
         
         # Core pipeline
         for i in range(self.num_layers):
-            t = self.spatial_layers[i](t, adj)
+            t = self.spatial_layers[i](t, adj, tree_encoding=self.tree_encoding)
 
         t = rearrange(t, 'f n c -> n f c')
         # bi_ = bi[:bi.shape[0]:2**self.num_layers]
