@@ -222,7 +222,7 @@ def main():
                                     loss_compute, test_ds, device, is_train=False,
                                     desc="Final test: ", args=args, writer=writer, epoch_num=epoch)
 
-            writer.add_scalar('test/test_loss', loss, , epoch + 1)
+            writer.add_scalar('test/test_loss', loss, epoch + 1)
             writer.add_scalar('test/test_overall_acc', accuracy, epoch + 1)
 
     writer.export_scalars_to_json(osp.join(args.log_dir, "all_scalars.json"))
