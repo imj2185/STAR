@@ -4,11 +4,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as fn
 from einops import rearrange
-from torch import Tensor
 from torch.nn import Linear
-from .layers import WSConv1d
 
 from utility.linalg import BatchedMask, softmax_, spmm_
+from .layers import WSConv1d
+from fast_transformers.feature_maps import elu_feature_map
 
 
 class SparseAttention(nn.Module):
@@ -59,7 +59,7 @@ class SparseAttention(nn.Module):
 
         softmax_temp = self.softmax_temp or 1. / math.sqrt(e)
 
-        #relative_position_scores_key = torch.einsum("blhd, lrd -> bhlr", keys, tree_pos_enc_key)
+        # relative_position_scores_key = torch.einsum("blhd, lrd -> bhlr", keys, tree_pos_enc_key)
 
         # Compute the un-normalized sparse attention according to adjacency matrix indices
         if isinstance(adj, torch.Tensor):
@@ -93,14 +93,34 @@ class LinearAttention(nn.Module):
     def __init__(self,
                  in_channels,
                  softmax_temp=None,
+                 feature_map=None,
+                 eps=1e-6,
                  attention_dropout=0.1):
         super(LinearAttention, self).__init__()
         self.in_channels = in_channels
         self.softmax_temp = softmax_temp
         self.dropout = attention_dropout
+        self.eps = eps
+        self.feature_map = (
+            feature_map(in_channels) if feature_map else
+            elu_feature_map(query_dims=in_channels)
+        )
 
-    def forward(self):
-        return
+    def forward(self, queries, keys, values, bi=None):
+        n, l, h, e = queries.shape  # batch, n_heads, length, depth
+        _, _, s, d = values.shape
+        softmax_temp = self.softmax_temp or 1. / math.sqrt(e)  # TODO: how to use this?
+        self.feature_map.new_feature_map(queries.device)
+        q = self.feature_map.forward_queries(queries)
+        k = self.feature_map.forward_keys(keys)
+
+        if bi is None:
+            kv = torch.einsum("nshd, nshm -> nhmd", k, values)
+            z = 1 / (torch.einsum("nlhd, nhd -> nlh", q, k.sum(dim=1)) + self.eps)
+            v = torch.einsum("nlhd, nhmd, nlh -> nlhm", q, kv, z)
+        else:
+            v = None
+        return v.contiguous()
 
 
 class FullAttention(nn.Module):  # B * T X V X C
@@ -228,7 +248,7 @@ class MLP(nn.Module):
             x = fn.relu(self.layers[i](x))
         return self.layers[-1](x)
 
-      
+
 class FeedForward(nn.Module):
     def __init__(self, in_channels, hidden_channels, dropout=0.):
         super().__init__()
@@ -262,7 +282,7 @@ class TemporalConv(nn.Module):
         super(TemporalConv, self).__init__()
         pad = int((kernel_size - 1) / 2)
 
-        self.conv = WSConv1d(   # nn.Conv1d
+        self.conv = WSConv1d(  # nn.Conv1d
             in_channels,
             out_channels,
             kernel_size=kernel_size,
@@ -304,18 +324,18 @@ class EncoderLayer(nn.Module):
         self.num_conv_layers = num_conv_layers
 
         self.tree_key_weights = nn.Parameter(torch.randn(in_channels, in_channels), requires_grad=True)
-        #self.tree_key_embedding = nn.Embedding(num_joints, in_channels, _weight=self.tree_key_weights)
+        # self.tree_key_embedding = nn.Embedding(num_joints, in_channels, _weight=self.tree_key_weights)
 
         self.tree_value_weights = nn.Parameter(torch.randn(in_channels, in_channels), requires_grad=True)
-        #self.tree_value_embedding = nn.Embedding(num_joints, in_channels, _weight=self.tree_value_weights)
+        # self.tree_value_embedding = nn.Embedding(num_joints, in_channels, _weight=self.tree_value_weights)
 
         # self.bn = nn.BatchNorm1d(in_channels * 25)
         # stride=temp_conv_stride * 2 if i == (num_conv_layers - 1)
         # else temp_conv_stride) for i in range(num_conv_layers)])
 
-        #self.lin_q = Linear(in_channels, mdl_channels)
-        #self.lin_k = Linear(in_channels, mdl_channels)
-        #self.lin_v = Linear(in_channels, mdl_channels)
+        # self.lin_q = Linear(in_channels, mdl_channels)
+        # self.lin_k = Linear(in_channels, mdl_channels)
+        # self.lin_v = Linear(in_channels, mdl_channels)
 
         self.lin_qkv = Linear(in_channels, mdl_channels * 3, bias=False)
 
@@ -331,7 +351,7 @@ class EncoderLayer(nn.Module):
         self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2])
         self.ffn = FeedForward(
             self.mdl_channels, self.mdl_channels, self.dropout[3])
-        
+
         self.temp_conv = nn.ModuleList([TemporalConv(in_channels=mdl_channels,
                                                      out_channels=mdl_channels,
                                                      kernel_size=temp_conv_knl // 2 + 1 if i == (
@@ -343,9 +363,9 @@ class EncoderLayer(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        #self.lin_k.reset_parameters()
-        #self.lin_q.reset_parameters()
-        #self.lin_v.reset_parameters()
+        # self.lin_k.reset_parameters()
+        # self.lin_q.reset_parameters()
+        # self.lin_v.reset_parameters()
         self.lin_qkv.reset_parameters()
         self.add_norm_att.reset_parameters()
         self.add_norm_ffn.reset_parameters()
@@ -357,20 +377,20 @@ class EncoderLayer(nn.Module):
         f, n, c = x.shape
         # q, k, v = x, x, x
 
-        #query = self.lin_q(x)
-        #key = self.lin_k(x)
-        #value = self.lin_v(x)
-        
-        query, key, value = self.lin_qkv(x).chunk(3, dim = -1)
+        # query = self.lin_q(x)
+        # key = self.lin_k(x)
+        # value = self.lin_v(x)
 
-        #tree_pos_enc_key = self.tree_key_embedding(tree_encoding)
-        #tree_pos_enc_value = self.tree_value_embedding(tree_encoding)
+        query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
+
+        # tree_pos_enc_key = self.tree_key_embedding(tree_encoding)
+        # tree_pos_enc_value = self.tree_value_embedding(tree_encoding)
         tree_pos_enc_key = torch.matmul(tree_encoding, self.tree_key_weights)
         tree_pos_enc_value = torch.matmul(tree_encoding, self.tree_value_weights)
-        
+
         key = key + tree_pos_enc_key.unsqueeze(dim=0)
         value = value + tree_pos_enc_value.unsqueeze(dim=0)
-        
+
         if self.spatial:
             attn_mask = bi
         else:
