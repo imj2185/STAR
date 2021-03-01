@@ -107,8 +107,8 @@ class LinearAttention(nn.Module):
         )
 
     def forward(self, queries, keys, values, bi=None):
-        n, l, h, e = queries.shape  # batch, n_heads, length, depth
-        _, _, s, d = values.shape
+        # n, l, h, e = queries.shape  # batch, n_heads, length, depth
+        # _, _, s, d = values.shape
         softmax_temp = self.softmax_temp or 1. / math.sqrt(e)  # TODO: how to use this?
         self.feature_map.new_feature_map(queries.device)
         q = self.feature_map.forward_queries(queries)
