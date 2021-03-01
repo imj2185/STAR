@@ -17,7 +17,7 @@ from models.net import DualGraphEncoder
 from optimizer import SGD_AGC, CosineAnnealingWarmupRestarts
 from utility.helper import make_checkpoint, load_checkpoint
 from random import shuffle
-import imageio
+#import imageio
 #import adamod
 
 def gif_grad_flow(path, gif_path, name):
@@ -196,6 +196,7 @@ def main():
                              num_conv_layers=args.num_conv_layers,
                              drop_rate=args.drop_rate)
     model = model.to(device)
+    print(sum(p.numel() for p in model.parameters()))
     # noam_opt = get_std_opt(model, args)
 
     optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)

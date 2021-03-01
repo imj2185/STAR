@@ -53,7 +53,7 @@ def make_args():
     parser.add_argument('--log_dir', dest='log_dir', default=osp.join(os.getcwd(), 'logs'), type=str)
 
     parser.set_defaults(gpu=True,
-                        batch_size=64,
+                        batch_size=16,
                         dataset_name='NTU',
                         dataset_root=osp.join(os.getcwd()),
                         load_model=False,

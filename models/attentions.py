@@ -107,9 +107,9 @@ class LinearAttention(nn.Module):
         )
 
     def forward(self, queries, keys, values, bi=None):
-        # n, l, h, e = queries.shape  # batch, n_heads, length, depth
+        #n, l, h, e = queries.shape  # batch, n_heads, length, depth
         # _, _, s, d = values.shape
-        softmax_temp = self.softmax_temp or 1. / math.sqrt(e)  # TODO: how to use this?
+        #softmax_temp = self.softmax_temp or 1. / math.sqrt(e)  # TODO: how to use this?
         self.feature_map.new_feature_map(queries.device)
         q = self.feature_map.forward_queries(queries)
         k = self.feature_map.forward_keys(keys)
@@ -121,7 +121,7 @@ class LinearAttention(nn.Module):
         else:
             offset = (torch.cat([torch.tensor([1]).to(q.device),
                                  bi[1:] - bi[:-1]]) == 1).nonzero(as_tuple=True)[0]
-            offset = torch.cat([offset, torch.tensor([len(bi) - 1]).to(q.device)])
+            offset = torch.cat([offset, torch.tensor([len(bi)]).to(q.device)])
             kv = [torch.einsum("nshd, nshm -> nhmd",
                                k[:, offset[i]: offset[i + 1], ...],
                                values[:, offset[i]: offset[i + 1], ...])
@@ -436,4 +436,112 @@ class EncoderLayer(nn.Module):
         # x = rearrange(x, 'n f c -> f n c')
         # batch norm(x)
         x = rearrange(x, 'n c f -> f n c')
+        return x
+
+
+class SpatialEncoderLayer(nn.Module):
+    def __init__(self,
+                 in_channels=6,
+                 mdl_channels=64,
+                 heads=8,
+                 beta=True,
+                 dropout=0.1):
+        super(SpatialEncoderLayer, self).__init__()
+        self.in_channels = in_channels
+        self.mdl_channels = mdl_channels
+        self.heads = heads
+        self.dropout = dropout
+        self.beta = beta
+
+        self.tree_key_weights = nn.Parameter(torch.randn(in_channels, in_channels), requires_grad=True)
+        self.tree_value_weights = nn.Parameter(torch.randn(in_channels, in_channels), requires_grad=True)
+
+        self.lin_qkv = Linear(in_channels, mdl_channels * 3, bias=False)
+
+        self.multi_head_attn = SparseAttention(in_channels=mdl_channels // heads,
+                                               attention_dropout=dropout[1])
+
+        self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout[2])
+        self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2])
+        self.ffn = FeedForward(self.mdl_channels, self.mdl_channels, self.dropout[3])
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        self.lin_qkv.reset_parameters()
+        self.add_norm_att.reset_parameters()
+        self.add_norm_ffn.reset_parameters()
+        self.ffn.reset_parameters()
+
+    def forward(self, x, bi=None, tree_encoding=None):
+        f, n, c = x.shape
+        query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
+
+        tree_pos_enc_key = torch.matmul(tree_encoding, self.tree_key_weights)
+        tree_pos_enc_value = torch.matmul(tree_encoding, self.tree_value_weights)
+
+        key = key + tree_pos_enc_key.unsqueeze(dim=0)
+        value = value + tree_pos_enc_value.unsqueeze(dim=0)
+
+        query = rearrange(query, 'f n (h c) -> f n h c', h=self.heads)
+        key = rearrange(key, 'f n(h c) -> f n h c', h=self.heads)
+        value = rearrange(value, 'f n (h c) -> f n h c', h=self.heads)
+
+        t = self.multi_head_attn(query, key, value, bi)
+        t = rearrange(t, 'f n h c -> f n (h c)', h=self.heads)
+
+        x = self.add_norm_att(x, t)
+        x = self.add_norm_ffn(x, self.ffn(x))
+
+        return x
+
+
+class TemporalEncoderLayer(nn.Module):
+    def __init__(self,
+                 in_channels=6,
+                 mdl_channels=64,
+                 heads=8,
+                 beta=True,
+                 dropout=0.1):
+        super(TemporalEncoderLayer, self).__init__()
+        self.in_channels = in_channels
+        self.mdl_channels = mdl_channels
+        self.heads = heads
+        self.dropout = dropout
+        self.beta = beta
+
+        self.lin_qkv = Linear(in_channels, mdl_channels * 3, bias=False)
+
+
+        self.multi_head_attn = LinearAttention(in_channels=mdl_channels // heads,
+                                                attention_dropout=dropout[1])
+
+
+        self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout[2])
+        self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2])
+        self.ffn = FeedForward(self.mdl_channels, self.mdl_channels, self.dropout[3])
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        self.lin_qkv.reset_parameters()
+        self.add_norm_att.reset_parameters()
+        self.add_norm_ffn.reset_parameters()
+        self.ffn.reset_parameters()
+
+    def forward(self, x, bi=None, seq_encoding=None):
+        f, n, c = x.shape
+
+        query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
+
+        query = rearrange(query, 'f n (h c) -> n f h c', h=self.heads)
+        key = rearrange(key, 'f n (h c) -> n f h c', h=self.heads)
+        value = rearrange(value, 'f n (h c) -> n f h c', h=self.heads)
+
+        t = self.multi_head_attn(query, key, value, bi)
+        t = rearrange(t, 'n f h c -> f n (h c)', h=self.heads)
+
+        x = self.add_norm_att(x, t)
+        x = self.add_norm_ffn(x, self.ffn(x))
+
         return x
