@@ -119,8 +119,23 @@ class LinearAttention(nn.Module):
             z = 1 / (torch.einsum("nlhd, nhd -> nlh", q, k.sum(dim=1)) + self.eps)
             v = torch.einsum("nlhd, nhmd, nlh -> nlhm", q, kv, z)
         else:
-            v = None
-        return v.contiguous()
+            offset = (torch.cat([torch.tensor([1]).to(q.device),
+                                 bi[1:] - bi[:-1]]) == 1).nonzero(as_tuple=True)[0]
+            offset = torch.cat([offset, torch.tensor([len(bi) - 1]).to(q.device)])
+            kv = [torch.einsum("nshd, nshm -> nhmd",
+                               k[:, offset[i]: offset[i + 1], ...],
+                               values[:, offset[i]: offset[i + 1], ...])
+                  for i in range(len(offset) - 1)]
+            z = [1 / (torch.einsum("nlhd, nhd -> nlh",
+                                   q[:, offset[i]: offset[i + 1], ...],
+                                   k[:, offset[i]: offset[i + 1], ...].sum(dim=1)) + self.eps)
+                 for i in range(len(offset) - 1)]
+            v = [torch.einsum("nlhd, nhmd, nlh -> nlhm",
+                              q[:, offset[i]: offset[i + 1], ...],
+                              kv[i],
+                              z[i])
+                 for i in range(len(offset) - 1)]
+        return torch.cat(v, dim=1).contiguous()
 
 
 class FullAttention(nn.Module):  # B * T X V X C
