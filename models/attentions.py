@@ -20,7 +20,7 @@ class SparseAttention(nn.Module):
     def __init__(self,
                  in_channels,
                  softmax_temp=None,
-                 num_adj=1,
+                 # num_adj=1,
                  attention_dropout=0.1):
         """
         :param heads (int):
@@ -79,7 +79,7 @@ class SparseAttention(nn.Module):
             qk = qk[idx]"""
 
         # Compute the attention and the weighted average, adj[0] is cols idx in the same row
-        #relative_position_scores_value = torch.einsum("blhd, lrd -> bhlr", values, tree_pos_enc_value)
+        # relative_position_scores_value = torch.einsum("blhd, lrd -> bhlr", values, tree_pos_enc_value)
         alpha = fn.dropout(softmax_(softmax_temp * qk, adj[0]),
                            training=self.training)
         # sparse matmul, adj as indices and qk as nonzero
@@ -87,6 +87,20 @@ class SparseAttention(nn.Module):
         # v = torch.reshape(v, (n, l, h * d))   # concatenate the multi-heads attention
         # Make sure that what we return is contiguous
         return v.contiguous()
+
+
+class LinearAttention(nn.Module):
+    def __init__(self,
+                 in_channels,
+                 softmax_temp=None,
+                 attention_dropout=0.1):
+        super(LinearAttention, self).__init__()
+        self.in_channels = in_channels
+        self.softmax_temp = softmax_temp
+        self.dropout = attention_dropout
+
+    def forward(self):
+        return
 
 
 class FullAttention(nn.Module):  # B * T X V X C
