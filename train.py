@@ -3,7 +3,10 @@ import os.path as osp
 import time
 from random import shuffle
 
+import matplotlib
+matplotlib.use('Agg') 
 import matplotlib.pyplot as plt
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -53,10 +56,10 @@ def plot_grad_flow(named_parameters, path, writer, step):
     plt.xlim(xmin=0, xmax=len(ave_grads))
     plt.xlabel("Layers")
     plt.ylabel("average gradient")
-    plt.title("Gradient flow" + str(int))
+    plt.title("Gradient flow" + str(step))
     plt.grid(True)
     plt.savefig(path, dpi=300)
-    plt.close()
+    #plt.close()
     # plt.show()
 
 
@@ -119,8 +122,7 @@ def run_epoch(data_loader,
                     path = osp.join(os.getcwd(), 'gradflow')
                     if not osp.exists(path):
                         os.mkdir(path)
-                    plot_grad_flow(model.named_parameters(), osp.join(path, '%3d:%d.png' % (epoch_num, i)), writer,
-                                   step)
+                    plot_grad_flow(model.named_parameters(), osp.join(path, '%3d:%d.png' % (epoch_num, i)), writer, step)
                     gradflow_file_list.append(osp.join(path, '%3d:%d.png' % (epoch_num, i)))
 
                 # plot_grad_flow(model.named_parameters(), writer, (i + 1) + total_batch * epoch_num)
@@ -256,7 +258,7 @@ def main():
         # if epoch > 15:
         lr_scheduler.step()
 
-        if epoch % 10 == 0:
+        if (epoch+1) % 5 == 0:
             model.eval()
             loss, accuracy = run_epoch(test_loader, model, optimizer,
                                     loss_compute, test_ds, device, is_train=False,

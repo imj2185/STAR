@@ -115,7 +115,7 @@ class LinearAttention(nn.Module):
         k = self.feature_map.forward_keys(keys)
 
         if bi is None:
-            kv = torch.einsum("nshd, nshm -> nhmd", k, values)
+            kv = torch.einsum("nshd, nshm -> nhmd", k, values)  
             z = 1 / (torch.einsum("nlhd, nhd -> nlh", q, k.sum(dim=1)) + self.eps)
             v = torch.einsum("nlhd, nhmd, nlh -> nlhm", q, kv, z)
         else:
@@ -501,7 +501,7 @@ class TemporalEncoderLayer(nn.Module):
                  in_channels=6,
                  mdl_channels=64,
                  heads=8,
-                 beta=True,
+                 beta=False,
                  dropout=0.1):
         super(TemporalEncoderLayer, self).__init__()
         self.in_channels = in_channels
@@ -534,12 +534,13 @@ class TemporalEncoderLayer(nn.Module):
 
         query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
 
-        query = rearrange(query, 'f n (h c) -> n f h c', h=self.heads)
-        key = rearrange(key, 'f n (h c) -> n f h c', h=self.heads)
-        value = rearrange(value, 'f n (h c) -> n f h c', h=self.heads)
+        query = rearrange(query, 'n f (h c) -> n f h c', h=self.heads)
+        key = rearrange(key, 'n f (h c) -> n f h c', h=self.heads)
+        value = rearrange(value, 'n f (h c) -> n f h c', h=self.heads)
 
         t = self.multi_head_attn(query, key, value, bi)
-        t = rearrange(t, 'n f h c -> f n (h c)', h=self.heads)
+        #t = rearrange(t, 'n f h c -> f n (h c)', h=self.heads)
+        t = rearrange(t, 'n f h c -> n f (h c)', h=self.heads)
 
         x = self.add_norm_att(x, t)
         x = self.add_norm_ffn(x, self.ffn(x))
