@@ -473,7 +473,7 @@ class SpatialEncoderLayer(nn.Module):
         self.add_norm_ffn.reset_parameters()
         self.ffn.reset_parameters()
 
-    def forward(self, x, bi=None, tree_encoding=None):
+    def forward(self, x, adj=None, tree_encoding=None):
         f, n, c = x.shape
         query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
 
@@ -487,7 +487,7 @@ class SpatialEncoderLayer(nn.Module):
         key = rearrange(key, 'f n(h c) -> f n h c', h=self.heads)
         value = rearrange(value, 'f n (h c) -> f n h c', h=self.heads)
 
-        t = self.multi_head_attn(query, key, value, bi)
+        t = self.multi_head_attn(query, key, value, adj)
         t = rearrange(t, 'f n h c -> f n (h c)', h=self.heads)
 
         x = self.add_norm_att(x, t)

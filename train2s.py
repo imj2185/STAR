@@ -15,7 +15,7 @@ from torch_geometric.data import DataLoader
 from tqdm import tqdm, trange
 
 from args import make_args
-from data.dataset3 import SkeletonDataset
+from data.dataset3 import SkeletonDataset, skeleton_parts
 from models.net2s import DualGraphEncoder
 from optimizer import SGD_AGC, CosineAnnealingWarmupRestarts
 from utility.helper import make_checkpoint, load_checkpoint
@@ -73,7 +73,8 @@ def run_epoch(data_loader,
               desc=None,
               args=None,
               writer=None,
-              epoch_num=0):
+              epoch_num=0,
+              adj=None):
     """Standard Training and Logging Function
 
         :param data_loader:
@@ -101,10 +102,10 @@ def run_epoch(data_loader,
                          total=total_batch,
                          desc=desc):
         batch = batch.to(device)
-        sample, label, bi = batch.x, batch.y, batch.batch.to(device)
+        sample, label, bi = batch.x, batch.y, batch.batch
 
         with torch.set_grad_enabled(is_train):
-            out = model(sample, adj=dataset.skeleton_.to(device), bi=bi)
+            out = model(sample, adj=adj, bi=bi)
             loss = loss_compute(out, label.long())
             loss_ = loss
             if is_train:
@@ -197,6 +198,11 @@ def main():
                              sequential=False,
                              num_conv_layers=args.num_conv_layers,
                              drop_rate=args.drop_rate)
+
+    if torch.cuda.device_count() > 1:
+        print("Let's use ", torch.cuda.device_count(), " GPUs!")
+        model = nn.DataParallel(model)
+
     model = model.to(device)
     print(sum(p.numel() for p in model.parameters()))
     # noam_opt = get_std_opt(model, args)
@@ -214,6 +220,8 @@ def main():
         print("Load Model: ", last_epoch)
 
     loss_compute = nn.CrossEntropyLoss().to(device)
+
+    adj = skeleton_parts().to(device)
 
     for epoch in trange(last_epoch, args.epoch_num + last_epoch):
         shuffled_list = [i for i in range(len(train_ds))]
@@ -236,7 +244,7 @@ def main():
 
         loss, accuracy = run_epoch(train_loader, model, optimizer,
                                    loss_compute, train_ds_, device, is_train=True,
-                                   desc="Train Epoch {}".format(epoch + 1), args=args, writer=writer, epoch_num=epoch)
+                                   desc="Train Epoch {}".format(epoch + 1), args=args, writer=writer, epoch_num=epoch, adj=adj)
         print('Epoch: {} Evaluating...'.format(epoch + 1))
 
         # TODO Save model
@@ -250,7 +258,7 @@ def main():
         model.eval()
         loss, accuracy = run_epoch(valid_loader, model, optimizer,
                                    loss_compute, valid_ds_, device, is_train=False,
-                                   desc="Valid Epoch {}".format(epoch + 1), args=args, writer=writer, epoch_num=epoch)
+                                   desc="Valid Epoch {}".format(epoch + 1), args=args, writer=writer, epoch_num=epoch, adj=adj)
 
         writer.add_scalar('val/val_loss', loss, epoch + 1)
         writer.add_scalar('val/val_overall_acc', accuracy, epoch + 1)
@@ -262,7 +270,7 @@ def main():
             model.eval()
             loss, accuracy = run_epoch(test_loader, model, optimizer,
                                     loss_compute, test_ds, device, is_train=False,
-                                    desc="Final test: ", args=args, writer=writer, epoch_num=epoch)
+                                    desc="Final test: ", args=args, writer=writer, epoch_num=epoch, adj=adj)
 
             writer.add_scalar('test/test_loss', loss, epoch + 1)
             writer.add_scalar('test/test_overall_acc', accuracy, epoch + 1)

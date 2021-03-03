@@ -257,8 +257,8 @@ class SkeletonDataset(Dataset, ABC):
         self.sample = sample
 
         self.num_joints = 25 if 'ntu' in self.name else 18
-        self.skeleton_ = skeleton_parts(num_joints=self.num_joints,
-                                        dataset=self.name)
+        #self.skeleton_ = skeleton_parts(num_joints=self.num_joints,
+        #                                dataset=self.name)
         self.training_subjects = [1, 2, 4, 5, 8, 9, 13, 14, 15, 16, 17, 18, 19, 25, 27, 28, 31, 34, 35,
                                   38, 45, 46, 47, 49, 50, 52, 53, 54, 55, 56, 57, 58, 59, 70, 74, 78,
                                   80, 81, 82, 83, 84, 85, 86, 89, 91, 92, 93, 94, 95, 97, 98, 100, 103]
