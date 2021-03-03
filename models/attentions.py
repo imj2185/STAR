@@ -9,6 +9,7 @@ from torch.nn import Linear
 from utility.linalg import BatchedMask, softmax_, spmm_
 from .layers import WSConv1d
 from fast_transformers.feature_maps import elu_feature_map
+from torch_scatter import scatter_sum
 
 
 class SparseAttention(nn.Module):
@@ -107,15 +108,15 @@ class LinearAttention(nn.Module):
         )
 
     def forward(self, queries, keys, values, bi=None):
-        #n, l, h, e = queries.shape  # batch, n_heads, length, depth
+        # n, l, h, e = queries.shape  # batch, n_heads, length, depth
         # _, _, s, d = values.shape
-        #softmax_temp = self.softmax_temp or 1. / math.sqrt(e)  # TODO: how to use this?
+        # softmax_temp = self.softmax_temp or 1. / math.sqrt(e)  # TODO: how to use this?
         self.feature_map.new_feature_map(queries.device)
         q = self.feature_map.forward_queries(queries)
         k = self.feature_map.forward_keys(keys)
 
         if bi is None:
-            kv = torch.einsum("nshd, nshm -> nhmd", k, values)  
+            kv = torch.einsum("nshd, nshm -> nhmd", k, values)
             z = 1 / (torch.einsum("nlhd, nhd -> nlh", q, k.sum(dim=1)) + self.eps)
             v = torch.einsum("nlhd, nhmd, nlh -> nlhm", q, kv, z)
         else:
@@ -136,6 +137,49 @@ class LinearAttention(nn.Module):
                               z[i])
                  for i in range(len(offset) - 1)]
         return torch.cat(v, dim=1).contiguous()
+
+
+class LinearAttention2(nn.Module):
+    def __init__(self,
+                 in_channels,
+                 softmax_temp=None,
+                 feature_map=None,
+                 eps=1e-6,
+                 attention_dropout=0.1):
+        super(LinearAttention2, self).__init__()
+        self.in_channels = in_channels
+        self.softmax_temp = softmax_temp
+        self.dropout = attention_dropout
+        self.eps = eps
+        self.feature_map = (
+            feature_map(in_channels) if feature_map else
+            elu_feature_map(query_dims=in_channels)
+        )
+
+    def forward(self, queries, keys, values, bi=None):
+        # n, l, h, e = queries.shape  # batch, n_heads, length, depth
+        # _, _, s, d = values.shape
+        # softmax_temp = self.softmax_temp or 1. / math.sqrt(e)  # TODO: how to use this?
+        self.feature_map.new_feature_map(queries.device)
+        q = self.feature_map.forward_queries(queries)
+        k = self.feature_map.forward_keys(keys)
+
+        if bi is None:
+            kv = torch.einsum("nshd, nshm -> nhmd", k, values)
+            z = 1 / (torch.einsum("nlhd, nhd -> nlh", q, k.sum(dim=1)) + self.eps)
+            v = torch.einsum("nlhd, nhmd, nlh -> nlhm", q, kv, z)
+        else:
+            # change the dimensions of values to (N, H, L, 1, D) and keys to (N, H, L, D, 1)
+            q = rearrange(q, 'n l h d -> n h l d')
+            k = rearrange(k, 'n l h d -> n h l d')
+            kv = torch.matmul(rearrange(k, 'n h l d -> n h l d 1'),
+                              rearrange(values, 'n l h d -> n h l 1 d'))     # N H L D1 D2
+            kv = scatter_sum(kv, bi, dim=-3).index_select(dim=-3, index=bi)  # N H (L) D1 D2
+            k_ = scatter_sum(k, bi, dim=-2).index_select(dim=-2, index=bi)
+            z = 1 / torch.sum(q * k_, dim=-1)
+            v = torch.matmul(rearrange(q, 'n h l d -> n h l 1 d'),
+                             kv).squeeze(dim=-2) * z
+        return rearrange(v, 'n h l d -> n l h d').contiguous()
 
 
 class FullAttention(nn.Module):  # B * T X V X C
@@ -512,10 +556,8 @@ class TemporalEncoderLayer(nn.Module):
 
         self.lin_qkv = Linear(in_channels, mdl_channels * 3, bias=False)
 
-
         self.multi_head_attn = LinearAttention(in_channels=mdl_channels // heads,
-                                                attention_dropout=dropout[1])
-
+                                               attention_dropout=dropout[1])
 
         self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout[2])
         self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2])
@@ -539,7 +581,7 @@ class TemporalEncoderLayer(nn.Module):
         value = rearrange(value, 'n f (h c) -> n f h c', h=self.heads)
 
         t = self.multi_head_attn(query, key, value, bi)
-        #t = rearrange(t, 'n f h c -> f n (h c)', h=self.heads)
+        # t = rearrange(t, 'n f h c -> f n (h c)', h=self.heads)
         t = rearrange(t, 'n f h c -> n f (h c)', h=self.heads)
 
         x = self.add_norm_att(x, t)
