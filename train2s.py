@@ -114,10 +114,10 @@ def run_epoch(data_loader,
             loss = loss_compute(out, label.long())
             loss_ = loss
             if is_train:
-                l2_lambda = args.weight_decay
-                for param in model.parameters():
-                    if param.requires_grad:
-                        loss += l2_lambda * torch.sum(((param)) ** 2)
+                #l2_lambda = args.weight_decay
+                #for param in model.parameters():
+                #    if param.requires_grad:
+                #        loss += l2_lambda * torch.sum(((param)) ** 2)
 
                 optimizer.zero_grad()
                 loss.backward()
