@@ -4,7 +4,8 @@ import time
 from random import shuffle
 
 import matplotlib
-matplotlib.use('Agg') 
+
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 import numpy as np
@@ -20,8 +21,10 @@ from models.net2s import DualGraphEncoder
 from optimizer import SGD_AGC, CosineAnnealingWarmupRestarts
 from utility.helper import make_checkpoint, load_checkpoint
 from random import shuffle
-#import imageio
-#import adamod
+
+import imageio
+# import adamod
+
 
 def gif_grad_flow(path, gif_path, name):
     with imageio.get_writer(osp.join(gif_path, name + '.gif'), mode='I') as writer:
@@ -31,6 +34,7 @@ def gif_grad_flow(path, gif_path, name):
 
     for filename in path:
         os.remove(filename)
+
 
 def plot_grad_flow(named_parameters, path, writer, step):
     ave_grads = []
@@ -49,7 +53,7 @@ def plot_grad_flow(named_parameters, path, writer, step):
                 empty_grads.append({n: p.mean().cpu().item()})
     # total_norm = total_norm ** (1. / 2)
     # print("Norm : ", total_norm)
-    #plt.tight_layout()
+    # plt.tight_layout()
     plt.plot(ave_grads, alpha=0.3, color="b")
     plt.hlines(0, 0, len(ave_grads) + 1, linewidth=1.5, color="k")
     plt.xticks(np.arange(0, len(ave_grads), 1), layers, rotation="vertical", fontsize=4)
@@ -59,7 +63,7 @@ def plot_grad_flow(named_parameters, path, writer, step):
     plt.title("Gradient flow" + str(step))
     plt.grid(True)
     plt.savefig(path, dpi=300)
-    #plt.close()
+    # plt.close()
     # plt.show()
 
 
@@ -77,6 +81,7 @@ def run_epoch(data_loader,
               adj=None):
     """Standard Training and Logging Function
 
+        :param adj:
         :param data_loader:
         :param model:
         :param optimizer:
@@ -113,7 +118,7 @@ def run_epoch(data_loader,
                 for param in model.parameters():
                     if param.requires_grad:
                         loss += l2_lambda * torch.sum(((param)) ** 2)
-                
+
                 optimizer.zero_grad()
                 loss.backward()
                 # torch.nn.utils.clip_grad_norm_(model.parameters(), 9.0)
@@ -123,7 +128,8 @@ def run_epoch(data_loader,
                     path = osp.join(os.getcwd(), 'gradflow')
                     if not osp.exists(path):
                         os.mkdir(path)
-                    plot_grad_flow(model.named_parameters(), osp.join(path, '%3d:%d.png' % (epoch_num, i)), writer, step)
+                    plot_grad_flow(model.named_parameters(), osp.join(path, '%3d:%d.png' % (epoch_num, i)), writer,
+                                   step)
                     gradflow_file_list.append(osp.join(path, '%3d:%d.png' % (epoch_num, i)))
 
                 # plot_grad_flow(model.named_parameters(), writer, (i + 1) + total_batch * epoch_num)
@@ -136,11 +142,11 @@ def run_epoch(data_loader,
             pred = torch.max(out, 1)[1]
             total_samples += label.size(0)
             correct += (pred == label).double().sum().item()
-    
+
     gif_path = osp.join(os.getcwd(), 'gif_gradlow')
     if not osp.exists(gif_path):
         os.mkdir(gif_path)
-    #gif_grad_flow(gradflow_file_list, gif_path, str(epoch_num))
+    # gif_grad_flow(gradflow_file_list, gif_path, str(epoch_num))
     gradflow_file_list = []
 
     elapsed = time.time() - start
@@ -155,7 +161,7 @@ def main():
     # torch.cuda.empty_cache()
     args = make_args()
     writer = SummaryWriter(args.log_dir)
-    #writer.add_hparams({'lr': args.lr, 
+    # writer.add_hparams({'lr': args.lr,
     #                    'bsize': args.batch_size},
     #                    {'hparam/num_enc_layers':args.num_enc_layers,
     #                    'hparam/num_conv_layers': args.num_conv_layers,
@@ -176,6 +182,8 @@ def main():
     test_ds = SkeletonDataset(args.dataset_root, name='ntu_60',
                               use_motion_vector=False,
                               benchmark='xsub', sample='val')
+
+    adj = skeleton_parts().to(device)
 
     last_train = int(len(train_ds) * 0.8)
 
@@ -200,7 +208,9 @@ def main():
                              drop_rate=args.drop_rate)
 
     if torch.cuda.device_count() > 1:
-        print("Let's use ", torch.cuda.device_count(), " GPUs!")
+        num_gpu = torch.cuda.device_count()
+        print("Let's use ", num_gpu, " GPUs!")
+        adj = torch.stack([adj] * num_gpu).to(device)
         model = nn.DataParallel(model)
 
     model = model.to(device)
@@ -210,7 +220,7 @@ def main():
     optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
     decay_rate = 0.97
     lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decay_rate)
-    #lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=12, cycle_mult=1.0, max_lr=0.1,
+    # lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=12, cycle_mult=1.0, max_lr=0.1,
     #                                             min_lr=1e-4, warmup_steps=3, gamma=0.4)
     if args.load_model:
         last_epoch = args.load_epoch
@@ -220,8 +230,6 @@ def main():
         print("Load Model: ", last_epoch)
 
     loss_compute = nn.CrossEntropyLoss().to(device)
-
-    adj = skeleton_parts().to(device)
 
     for epoch in trange(last_epoch, args.epoch_num + last_epoch):
         shuffled_list = [i for i in range(len(train_ds))]
@@ -244,7 +252,8 @@ def main():
 
         loss, accuracy = run_epoch(train_loader, model, optimizer,
                                    loss_compute, train_ds_, device, is_train=True,
-                                   desc="Train Epoch {}".format(epoch + 1), args=args, writer=writer, epoch_num=epoch, adj=adj)
+                                   desc="Train Epoch {}".format(epoch + 1), args=args, writer=writer, epoch_num=epoch,
+                                   adj=adj)
         print('Epoch: {} Evaluating...'.format(epoch + 1))
 
         # TODO Save model
@@ -258,7 +267,8 @@ def main():
         model.eval()
         loss, accuracy = run_epoch(valid_loader, model, optimizer,
                                    loss_compute, valid_ds_, device, is_train=False,
-                                   desc="Valid Epoch {}".format(epoch + 1), args=args, writer=writer, epoch_num=epoch, adj=adj)
+                                   desc="Valid Epoch {}".format(epoch + 1), args=args, writer=writer, epoch_num=epoch,
+                                   adj=adj)
 
         writer.add_scalar('val/val_loss', loss, epoch + 1)
         writer.add_scalar('val/val_overall_acc', accuracy, epoch + 1)
@@ -266,11 +276,11 @@ def main():
         # if epoch > 15:
         lr_scheduler.step()
 
-        if (epoch+1) % 5 == 0:
+        if (epoch + 1) % 5 == 0:
             model.eval()
             loss, accuracy = run_epoch(test_loader, model, optimizer,
-                                    loss_compute, test_ds, device, is_train=False,
-                                    desc="Final test: ", args=args, writer=writer, epoch_num=epoch, adj=adj)
+                                       loss_compute, test_ds, device, is_train=False,
+                                       desc="Final test: ", args=args, writer=writer, epoch_num=epoch, adj=adj)
 
             writer.add_scalar('test/test_loss', loss, epoch + 1)
             writer.add_scalar('test/test_overall_acc', accuracy, epoch + 1)
