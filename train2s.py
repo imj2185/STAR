@@ -67,6 +67,18 @@ def plot_grad_flow(named_parameters, path, writer, step):
     # plt.show()
 
 
+def chunkIt(seq, num):
+    avg = len(seq) / float(num)
+    out = []
+    last = 0.0
+
+    while last < len(seq):
+        out.append(seq[int(last):int(last + avg)])
+        last += avg
+
+    return out
+
+
 def run_epoch(data_loader,
               model,
               optimizer,
@@ -125,7 +137,7 @@ def run_epoch(data_loader,
                 optimizer.step()
                 if i % 400 == 0:
                     step = (i + 1) + total_batch * epoch_num
-                    path = osp.join(os.getcwd(), 'gradflow')
+                    path = osp.join(os.getcwd(), args.gradflow_dir)
                     if not osp.exists(path):
                         os.mkdir(path)
                     plot_grad_flow(model.named_parameters(), osp.join(path, '%3d:%d.png' % (epoch_num, i)), writer,
@@ -207,7 +219,7 @@ def main():
                              num_conv_layers=args.num_conv_layers,
                              drop_rate=args.drop_rate)
 
-    if torch.cuda.device_count() > 1:
+    if torch.cuda.device_count() > 1 and args.data_parallel:
         num_gpu = torch.cuda.device_count()
         print("Let's use ", num_gpu, " GPUs!")
         adj = torch.stack([adj] * num_gpu).to(device)
@@ -218,8 +230,9 @@ def main():
     # noam_opt = get_std_opt(model, args)
 
     optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
+    #optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     decay_rate = 0.97
-    lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decay_rate)
+    #lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decay_rate)
     # lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=12, cycle_mult=1.0, max_lr=0.1,
     #                                             min_lr=1e-4, warmup_steps=3, gamma=0.4)
     if args.load_model:
@@ -230,14 +243,16 @@ def main():
         print("Load Model: ", last_epoch)
 
     loss_compute = nn.CrossEntropyLoss().to(device)
+    shuffled_list = [i for i in range(len(train_ds))]
+    shuffle(shuffled_list)
+    kfold = chunkIt(shuffled_list, args.cross_k)
 
     for epoch in trange(last_epoch, args.epoch_num + last_epoch):
-        shuffled_list = [i for i in range(len(train_ds))]
-        shuffle(shuffled_list)
-        train_ds = train_ds[shuffled_list]
-
-        train_ds_ = train_ds[:last_train]
-        valid_ds_ = train_ds[last_train:]
+        train_ds_ = []
+        for i in range(args.cross_k):
+            if i != epoch % args.cross_k:
+                train_ds_ += train_ds[kfold[i]]
+        valid_ds_ = train_ds[kfold[epoch % args.cross_k]]
 
         train_loader = DataLoader(train_ds_,
                                   batch_size=args.batch_size,
@@ -274,7 +289,7 @@ def main():
         writer.add_scalar('val/val_overall_acc', accuracy, epoch + 1)
 
         # if epoch > 15:
-        lr_scheduler.step()
+        #lr_scheduler.step()
 
         if (epoch + 1) % 5 == 0:
             model.eval()

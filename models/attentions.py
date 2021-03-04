@@ -90,7 +90,7 @@ class SparseAttention(nn.Module):
         return v.contiguous()
 
 
-class LinearAttention(nn.Module):
+"""class LinearAttention(nn.Module):
     def __init__(self,
                  in_channels,
                  softmax_temp=None,
@@ -136,17 +136,17 @@ class LinearAttention(nn.Module):
                               kv[i],
                               z[i])
                  for i in range(len(offset) - 1)]
-        return torch.cat(v, dim=1).contiguous()
+        return torch.cat(v, dim=1).contiguous()"""
 
 
-class LinearAttention2(nn.Module):
+class LinearAttention(nn.Module):
     def __init__(self,
                  in_channels,
                  softmax_temp=None,
                  feature_map=None,
                  eps=1e-6,
                  attention_dropout=0.1):
-        super(LinearAttention2, self).__init__()
+        super(LinearAttention, self).__init__()
         self.in_channels = in_channels
         self.softmax_temp = softmax_temp
         self.dropout = attention_dropout
@@ -178,7 +178,7 @@ class LinearAttention2(nn.Module):
             k_ = scatter_sum(k, bi, dim=-2).index_select(dim=-2, index=bi)
             z = 1 / torch.sum(q * k_, dim=-1)
             v = torch.matmul(rearrange(q, 'n h l d -> n h l 1 d'),
-                             kv).squeeze(dim=-2) * z
+                             kv).squeeze(dim=-2) * z.unsqueeze(-1)
         return rearrange(v, 'n h l d -> n l h d').contiguous()
 
 

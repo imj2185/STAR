@@ -337,8 +337,8 @@ class SkeletonDataset(Dataset, ABC):
         torch_data = rearrange(torch_data, 'm f n c -> (m f) n c')  # <- always even so you can get person idx
 
         torch_data = pre_normalization(torch_data)
-        torch_data = gen_bone_data(torch_data, self.paris, self.benchmark)
-        torch_data = data_padding(torch_data, 5)
+        #torch_data = gen_bone_data(torch_data, self.paris, self.benchmark)
+        #torch_data = data_padding(torch_data, 5)
         sparse_data = Data(x=torch_data, y=action_class - 1)
         return sparse_data
 
