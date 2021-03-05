@@ -11,6 +11,7 @@ from torch_geometric.data import Dataset, Data
 from torch_sparse import spspmm
 from tqdm import tqdm
 
+
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 
@@ -314,7 +315,7 @@ class SkeletonDataset(Dataset, ABC):
         # Download to `self.raw_dir`.
         pass
 
-    def read_xyz(self, file, max_body=4):  # 取了前两个body
+    def read_xyz(self, file, sample, max_body=4):  # 取了前两个body
         filename = osp.split(file)[-1]
         action_class = int(filename[filename.find('A') + 1: filename.find('A') + 4])
         seq_info = read_skeleton_filter(file)
@@ -334,13 +335,41 @@ class SkeletonDataset(Dataset, ABC):
         data = data[index]
 
         torch_data = torch.from_numpy(data)
+        del data
         torch_data = rearrange(torch_data, 'm f n c -> (m f) n c')  # <- always even so you can get person idx
 
         torch_data = pre_normalization(torch_data)
-        #torch_data = gen_bone_data(torch_data, self.paris, self.benchmark)
-        #torch_data = data_padding(torch_data, 5)
-        sparse_data = Data(x=torch_data, y=action_class - 1)
+        #torch_data += torch.normal(mean=0, std=0.01, size=torch_data.size())
+        pre_data = gen_bone_data(torch_data, self.paris, self.benchmark)
+        sparse_data = Data(x=pre_data, y=action_class - 1)
+
         return sparse_data
+
+        '''if sample == 'train':
+            gaussian_noise = torch.normal(mean=0, std=0.01, size=torch_data.size())
+            noisy_data = torch_data + gaussian_noise
+            noisy_data = gen_bone_data(noisy_data, self.paris, self.benchmark)
+            noisy_sparse_data = Data(x=noisy_data, y=action_class - 1)
+            return sparse_data, noisy_sparse_data
+        else:
+            return (sparse_data,)'''
+
+
+    def add_noise(self, data, scale):
+        t = data.x[:, :, :3]
+        y = data.y
+        t += torch.normal(mean=0, std=scale, size=t.size())
+        t = gen_bone_data(t, self.paris, self.benchmark)
+        '''print("After gen bone data")
+
+        if torch.isnan(t).sum().item() != 0:
+            print("Nan in tensor")
+        if torch.isinf(t).sum().item() != 0:
+            print("Inf in tensor")'''
+
+        t = Data(x=t, y=y)
+        return t
+
 
     def process(self):
         if self.missing_skeleton_path is not None:
@@ -353,6 +382,7 @@ class SkeletonDataset(Dataset, ABC):
         sample_label = []
 
         sparse_data_list = []
+
         for file in self.raw_file_names:
             filename = osp.split(file)[-1]
             if filename in ignored_samples:
@@ -381,15 +411,29 @@ class SkeletonDataset(Dataset, ABC):
 
         pool = Pool(processes=num_processes())
         partial_func = partial(self.read_xyz,
-                               max_body=4)
+                               sample=self.sample, max_body=4)
 
         progress_bar = tqdm(pool.imap(func=partial_func, iterable=sample_name),
                             total=len(sample_name))
 
-        for (data) in progress_bar:
-            sparse_data_list.append(data)
+        for data in progress_bar:
+            sparse_data_list.append(data) 
 
-        torch.save(sparse_data_list, osp.join(self.processed_dir,
+        noisy_sparse_data_list = []
+        if self.sample == 'train':
+            #pool = Pool(processes=num_processes())
+            #partial_func = partial(self.add_noise,
+            #                    scale=0.01)
+
+            #progress_bar = tqdm(pool.imap(func=partial_func, iterable=sparse_data_list),
+            #                    total=len(sparse_data_list))
+
+            #for data in progress_bar:
+            #    noisy_sparse_data_list.append(data) 
+            for data in sparse_data_list:
+                noisy_sparse_data_list.append(self.add_noise(data, scale=0.01))
+
+        torch.save(sparse_data_list + noisy_sparse_data_list, osp.join(self.processed_dir,
                                               self.processed_file_names))
 
     def len(self):
