@@ -150,7 +150,6 @@ class SGD_AGC(Optimizer):
                 param_norm = torch.max(unitwise_norm(
                     p.detach()), torch.tensor(group['eps']).to(p.device))
                 grad_norm = unitwise_norm(p.grad.detach())
-
                 max_norm = param_norm * group['clipping']
 
                 trigger = grad_norm > max_norm   # TODO: not working if "grad_norm < max_norm"
@@ -158,7 +157,7 @@ class SGD_AGC(Optimizer):
                 clipped_grad = p.grad * \
                     (max_norm / torch.max(grad_norm,
                                           torch.tensor(1e-6).to(grad_norm.device)))
-                p.grad.data.copy_(torch.where(trigger, clipped_grad, p.grad))
+                p.grad.detach().copy_(torch.where(trigger, clipped_grad, p.grad))
 
         for group in self.param_groups:
             weight_decay = group['weight_decay']
@@ -175,8 +174,7 @@ class SGD_AGC(Optimizer):
                 if momentum != 0:
                     param_state = self.state[p]
                     if 'momentum_buffer' not in param_state:
-                        buf = param_state['momentum_buffer'] = torch.clone(
-                            d_p).detach()
+                        buf = param_state['momentum_buffer'] = torch.clone(d_p).detach()
                     else:
                         buf = param_state['momentum_buffer']
                         buf.mul_(momentum).add_(d_p, alpha=1 - dampening)
