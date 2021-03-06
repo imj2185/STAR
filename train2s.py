@@ -22,7 +22,7 @@ from optimizer import SGD_AGC, CosineAnnealingWarmupRestarts
 from utility.helper import make_checkpoint, load_checkpoint
 from random import shuffle
 
-import imageio
+# import imageio
 # import adamod
 
 

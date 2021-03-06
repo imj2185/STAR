@@ -84,27 +84,27 @@ def rotate_joints(data, joint_i, joint_j):
 
 def pre_normalization(data, z_axis=None, x_axis=None):
     # `index` of frames that have non-zero nodes
-    if x_axis is None:
-        x_axis = [8, 4]
-    if z_axis is None:
-        z_axis = [0, 1]
-    debug_data = data.clone()
+    #if x_axis is None:
+    #    x_axis = [8, 4]
+    #if z_axis is None:
+    #    z_axis = [0, 1]
+    #debug_data = data.clone()
     index = (data.sum(-1).sum(-1) != 0)
 
     if data.sum() == 0:
         print('empty video without skeleton information')
 
     data = data[index]
-    v1_frame = index[:(len(index) // 2)].sum().item()
-    v2_frame = index[(len(index) // 2):].sum().item()
+    #v1_frame = index[:(len(index) // 2)].sum().item()
+    #v2_frame = index[(len(index) // 2):].sum().item()
 
     # print('sub the center joint #1 (spine joint in ntu and neck joint in kinetics)')
     # Use the first person's body center (`1:2` along the nodes dimension)
-    main_body_center = data[:v1_frame, 1:2, :].clone()
+    #main_body_center = data[:v1_frame, 1:2, :].clone()
     # For all `person`, compute the `mask` which is the non-zero channel dimension
-    mask = rearrange((data.sum(-1) != 0), 'f n -> f n 1')
+    #mask = rearrange((data.sum(-1) != 0), 'f n -> f n 1')
 
-    data[:v1_frame] = (data[:v1_frame] - main_body_center) * mask[:v1_frame]
+    '''data[:v1_frame] = (data[:v1_frame] - main_body_center) * mask[:v1_frame]
     if v1_frame > v2_frame:
         data[v1_frame:] = (data[v1_frame:] - main_body_center[:v2_frame]) * mask[v1_frame:]
     elif v1_frame < v2_frame:
@@ -112,18 +112,18 @@ def pre_normalization(data, z_axis=None, x_axis=None):
         pad = torch.cat([main_body_center for _ in range(reps)])[:v2_frame]
         data[v1_frame:] = (data[v1_frame:] - pad) * mask[v1_frame:]
     else:
-        data[v1_frame:] = (data[v1_frame:] - main_body_center) * mask[v1_frame:]
+        data[v1_frame:] = (data[v1_frame:] - main_body_center) * mask[v1_frame:]'''
 
     # print('parallel the bone between hip(jpt 0) and spine(jpt 1) of the first person to the z axis')
-    joint_bottom = data[0, z_axis[0]]
+    """joint_bottom = data[0, z_axis[0]]
     joint_top = data[0, z_axis[1]]
-    rotate_joints(data, joint_top, joint_bottom)
+    rotate_joints(data, joint_top, joint_bottom)"""
 
     # print('parallel the bone between right shoulder(jpt 8) and
     # left shoulder(jpt 4) of the first person to the x axis')
-    joint_r_shoulder = data[0, x_axis[0]]
+    """joint_r_shoulder = data[0, x_axis[0]]
     joint_l_shoulder = data[0, x_axis[1]]
-    rotate_joints(data, joint_r_shoulder, joint_l_shoulder)
+    rotate_joints(data, joint_r_shoulder, joint_l_shoulder)"""
 
     return data
 
@@ -340,8 +340,8 @@ class SkeletonDataset(Dataset, ABC):
 
         torch_data = pre_normalization(torch_data)
         #torch_data += torch.normal(mean=0, std=0.01, size=torch_data.size())
-        pre_data = gen_bone_data(torch_data, self.paris, self.benchmark)
-        sparse_data = Data(x=pre_data, y=action_class - 1)
+        #pre_data = gen_bone_data(torch_data, self.paris, self.benchmark)
+        sparse_data = Data(x=torch_data, y=action_class - 1)
 
         return sparse_data
 
@@ -420,7 +420,7 @@ class SkeletonDataset(Dataset, ABC):
             sparse_data_list.append(data) 
 
         noisy_sparse_data_list = []
-        if self.sample == 'train':
+        '''if self.sample == 'train':
             #pool = Pool(processes=num_processes())
             #partial_func = partial(self.add_noise,
             #                    scale=0.01)
@@ -431,7 +431,7 @@ class SkeletonDataset(Dataset, ABC):
             #for data in progress_bar:
             #    noisy_sparse_data_list.append(data) 
             for data in sparse_data_list:
-                noisy_sparse_data_list.append(self.add_noise(data, scale=0.01))
+                noisy_sparse_data_list.append(self.add_noise(data, scale=0.01))'''
 
         torch.save(sparse_data_list + noisy_sparse_data_list, osp.join(self.processed_dir,
                                               self.processed_file_names))

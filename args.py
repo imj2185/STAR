@@ -57,14 +57,14 @@ def make_args():
     parser.add_argument('--alpha', dest='alpha', default=0.01, type=float)
 
     parser.set_defaults(gpu=True,
-                        batch_size=16,
+                        batch_size=24,
                         dataset_name='NTU',
                         dataset_root=osp.join(os.getcwd()),
                         load_model=False,
                         in_channels=3,
                         num_enc_layers=5,
                         num_conv_layers=2,
-                        weight_decay=1e-4,
+                        weight_decay=4e-5,
                         dropout=[0.5, 0.5, 0.5, 0.5], #temp_conv, sparse_attention, add_norm, ffn
                         hid_channels=64,
                         out_channels=64,
