@@ -10,7 +10,7 @@ PyYAML>=5.1.1
 six>=1.12.0
 torch>=1.1.0
 tqdm>=4.32.1
-scipy~=1.5.3
+scipy>=1.5.3
 einops~=0.3.0
 pytorch-fast-transformers
 torchvision~=0.8.1+cu110
