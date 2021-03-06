@@ -125,9 +125,12 @@ class SGD_AGC(Optimizer):
         if nesterov and (momentum <= 0 or dampening != 0):
             raise ValueError(
                 "Nesterov momentum requires a momentum and zero dampening")
+
+        # Annealed Gaussian noise hyper-parameters t, eta, and gamma
         self.t = 0
         self.eta = eta
         self.gamma = gamma
+
         super(SGD_AGC, self).__init__(params, defaults)
 
     def __setstate__(self, state):
