@@ -154,22 +154,25 @@ class SGD_AGC(Optimizer):
             for p in group['params']:
                 if p.grad is None:
                     continue
+
                 param_norm = torch.max(unitwise_norm(
                     p.detach()), torch.tensor(group['eps']).to(p.device))
-                grad_norm = unitwise_norm(p.grad.detach())
                 max_norm = param_norm * group['clipping']
-
-                trigger = grad_norm > max_norm  # TODO: not working if "grad_norm < max_norm"
-
-                clipped_grad = p.grad * \
-                               (max_norm / torch.max(grad_norm,
-                                                     torch.tensor(1e-6).to(grad_norm.device)))
-                p.grad.detach().copy_(torch.where(trigger, clipped_grad, p.grad))
 
                 # add noise to gradients
                 normal = torch.empty(p.shape).normal_(
                     mean=0, std=math.sqrt(self.eta / ((1 + self.t) ** self.gamma))).to(p.device)
                 p.grad += normal
+
+                # Gradient clipping
+                grad_norm = unitwise_norm(p.grad.detach())
+
+                trigger = grad_norm > max_norm  # TODO: not working if "grad_norm < max_norm"
+
+                clipped_grad = p.grad * \
+                    (max_norm / torch.max(grad_norm,
+                                          torch.tensor(1e-6).to(grad_norm.device)))
+                p.grad.detach().copy_(torch.where(trigger, clipped_grad, p.grad))
 
         self.t += 1
 
