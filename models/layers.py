@@ -6,18 +6,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as fn
 from einops import rearrange, reduce
-from fast_transformers.attention.full_attention import FullAttention
-from fast_transformers.attention.linear_attention import LinearAttention
-from fast_transformers.masking import FullMask, LengthMask
 from torch import Tensor
-from torch.nn import Parameter, Linear, Dropout
+from torch.nn import Parameter, Linear
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.nn.inits import glorot, zeros
 from torch_geometric.utils import remove_self_loops, add_self_loops
 from torch_scatter import scatter_mean
 
 # from models.attentions import SeqPosEncoding
-from utility.linalg import batched_spmm, batched_transpose, BatchedMask, softmax_
+from utility.linalg import batched_spmm, batched_transpose, softmax_
 
 
 def clones(module, k):
@@ -111,12 +108,6 @@ class HGAConv(MessagePassing):
 
     def _attention(self, adj, score):  # score: [num_edges, heads]
         alpha = fn.leaky_relu(score, self.negative_slope)
-        # if len(alpha.shape) == 2:
-        #     alpha = softmax(alpha, adj[1])
-        # else:
-        #     c = alpha.shape[-1]
-        #     al = softmax(rearrange(alpha, 'b n c -> n (b c)'), adj[1])
-        #     alpha = rearrange(al, 'n (b c) -> b n c', c=c)
         alpha = softmax_(alpha, index=adj[1])  # , num_nodes=alpha.shape[-2])
         self._alpha = alpha
         return fn.dropout(alpha, p=self.dropout, training=self.training)
@@ -298,65 +289,6 @@ class GlobalContextAttention(nn.Module):
         return scatter_mean(gc_ * x, index=batch_index, dim=1)
 
 
-# class TemporalSelfAttention(nn.Module):
-#     def __init__(self,
-#                  in_channels,
-#                  mdl_channels,
-#                  heads=8,
-#                  use_pos_encode=False,
-#                  activation="relu",
-#                  is_linear=True,
-#                  dropout=0.1):
-#         super(TemporalSelfAttention, self).__init__()
-#         self.in_channels = in_channels
-#         self.out_channels = mdl_channels
-#         self.heads = heads
-#         self.is_linear = is_linear
-#
-#         self.pos_encode = SeqPosEncoding(model_dim=in_channels) if use_pos_encode else None
-#         if is_linear:
-#             self.attention = LinearAttention(in_channels)
-#         else:
-#             self.attention = FullAttention(attention_dropout=dropout)
-#
-#         self.lin_q = Linear(in_channels, mdl_channels)
-#         self.lin_k = Linear(in_channels, mdl_channels)
-#         self.lin_v = Linear(in_channels, mdl_channels)
-#         self.dropout = Dropout(dropout)
-#         self.activation = fn.relu if activation == "relu" else fn.gelu
-#
-#     def forward(self, x, bi=None):
-#         """
-#         reference: Fast Transformer [code: https://tinyurl.com/yber224s]
-#         :param x:  tensor(frames, num_joints, channels)
-#         :param bi:
-#         :return:
-#         """
-#         f, n, c = x.shape
-#
-#         x = rearrange(x, 'f n c -> n f c')
-#         if self.pos_encode is not None:
-#             x = self.pos_encode(x)
-#         q, k, v = x, x, x
-#
-#         query = self.lin_q(q)
-#         key = self.lin_k(k)
-#         value = self.lin_v(v)
-#
-#         attn_mask = FullMask(f, device=x.device) if self.is_linear else BatchedMask(bi)
-#         length_mask = LengthMask(x.new_full((n,), f, dtype=torch.int64))
-#
-#         # Split heads
-#         query = rearrange(query, 'n f (h c) -> n f h c', h=self.heads)
-#         key = rearrange(key, 'n f (h c) -> n f h c', h=self.heads)
-#         value = rearrange(value, 'n f (h c) -> n f h c', h=self.heads)
-#
-#         # Run self attention and add it to the input (residual)
-#         t = self.attention(query, key, value, attn_mask, length_mask, length_mask)
-#         t = rearrange(t, 'f n h c -> n f (h c)')
-#         return t
-
-
 class AddNorm(nn.Module):
     def __init__(self, normalized_shape, dropout, **kwargs):
         super(AddNorm, self).__init__(**kwargs)
@@ -392,37 +324,6 @@ class MLP(nn.Module):
         for i in range(self.num_layers - 1):
             x = fn.relu(self.layers[i](x))
         return self.layers[-1](x)
-
-
-class TransformerEncoder(nn.Module):
-    def __init__(self,
-                 in_channels=6,
-                 mdl_channels=64,
-                 heads=8,
-                 activation="relu",
-                 # add bool parameter: spatial or not
-                 is_linear=False,
-                 dropout=0.1):
-        super(TransformerEncoder, self).__init__()
-        self.in_channels = in_channels
-        self.mdl_channels = mdl_channels
-        self.heads = heads
-        self.is_linear = is_linear
-        self.dropout = dropout
-        # TODO
-        self.multi_head_attn = TemporalSelfAttention(in_channels=self.in_channels,
-                                                     mdl_channels=self.mdl_channels,
-                                                     heads=self.heads,
-                                                     is_linear=self.is_linear)
-        self.add_norm_att = AddNorm(self.mdl_channels, self.dropout)
-        self.add_norm_mlp = AddNorm(self.mdl_channels, self.dropout)
-        self.mlp = MLP(self.mdl_channels, self.mdl_channels, self.mdl_channels)
-
-    def forward(self, x, bi=None):
-        x = self.add_norm_att(x, self.multi_head_attn(x, bi))
-        x = self.add_norm_mlp(x, self.mlp(x))
-        x = rearrange(x, 'n f c -> f n c')
-        return x
 
 
 class WSConv1d(nn.Conv1d):
