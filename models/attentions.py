@@ -82,6 +82,7 @@ class SparseAttention(nn.Module):
         # Compute the attention and the weighted average, adj[0] is cols idx in the same row
         # relative_position_scores_value = torch.einsum("blhd, lrd -> bhlr", values, tree_pos_enc_value)
         alpha = fn.dropout(softmax_(softmax_temp * qk, adj[0]),
+                           p=self.dropout,
                            training=self.training)
         # sparse matmul, adj as indices and qk as nonzero
         v = spmm_(adj_, alpha, l, l, values)
@@ -182,86 +183,86 @@ class LinearAttention(nn.Module):
         return rearrange(v, 'n h l d -> n l h d').contiguous()
 
 
-class FullAttention(nn.Module):  # B * T X V X C
-    """Implement the scaled dot product attention with softmax.
-    Arguments
-    ---------
-        softmax_temp: The temperature to use for the softmax attention.
-                      (default: 1/sqrt(d_keys) where d_keys is computed at
-                      runtime)
-        attention_dropout: The dropout rate to apply to the attention
-                           (default: 0.1)
-        event_dispatcher: str or EventDispatcher instance to be used by this
-                          module for dispatching events (default: the default
-                          global dispatcher)
-    """
-
-    def __init__(self, in_channels, max_position_embeddings=128,
-                 softmax_temp=None, attention_dropout=0.1):
-        super(FullAttention, self).__init__()
-        self.softmax_temp = softmax_temp
-        self.dropout = nn.Dropout(attention_dropout)
-        self.max_position_embeddings = max_position_embeddings
-        self.embedding_weight = nn.Parameter(torch.randn(
-            2 * max_position_embeddings + 1, in_channels))
-        self.distance_embedding = nn.Embedding(
-            2 * max_position_embeddings + 1, in_channels, _weight=self.embedding_weight)
-
-    def forward(self, queries, keys, values, attn_mask):
-        """Implements the multihead softmax attention.
-        Arguments
-        ---------
-            queries: (N, L, H, E) The tensor containing the queries
-            keys: (N, S, H, E) The tensor containing the keys
-            values: (N, S, H, D) The tensor containing the values
-            attn_mask: An implementation of BaseMask that encodes where each
-                       query can attend to
-            query_lengths: An implementation of BaseMask that encodes how
-                           many queries each sequence in the batch consists of
-            key_lengths: An implementation of BaseMask that encodes how
-                         many queries each sequence in the batch consists of
-        """
-        # Extract some shapes and compute the temperature
-        n, l, h, e = queries.shape
-        _, s, _, d = values.shape
-        softmax_temp = self.softmax_temp or 1. / math.sqrt(e)
-
-        # Compute the unnormalized attention and apply the masks
-        qk = torch.einsum("nlhe, nshe -> nhls", queries, keys)
-
-        position_ids_l = torch.arange(
-            l, dtype=torch.long, device=queries.device).view(-1, 1)
-        position_ids_r = torch.arange(
-            l, dtype=torch.long, device=queries.device).view(1, -1)
-
-        distance = (position_ids_l - position_ids_r).clip(-self.max_position_embeddings,
-                                                          self.max_position_embeddings)
-        positional_embedding = self.distance_embedding(
-            distance + self.max_position_embeddings)
-
-        relative_position_scores_query = torch.einsum(
-            "blhd, lrd -> bhlr", queries, positional_embedding)
-        relative_position_scores_key = torch.einsum(
-            "brhd, lrd -> bhlr", keys, positional_embedding)
-        qk = qk + relative_position_scores_query + relative_position_scores_key
-
-        if not attn_mask.all_ones:
-            qk = qk + attn_mask.additive_matrix
-        # QK = QK + key_lengths.additive_matrix[:, None, None]
-
-        # Compute the attention and the weighted average
-        att = self.dropout(torch.softmax(softmax_temp * qk, dim=-1))
-        v = torch.einsum("nhls, nshd -> nlhd", att, values)
-
-        # Make sure that what we return is contiguous
-        return v.contiguous()
+# class FullAttention(nn.Module):  # B * T X V X C
+#     """Implement the scaled dot product attention with softmax.
+#     Arguments
+#     ---------
+#         softmax_temp: The temperature to use for the softmax attention.
+#                       (default: 1/sqrt(d_keys) where d_keys is computed at
+#                       runtime)
+#         attention_dropout: The dropout rate to apply to the attention
+#                            (default: 0.1)
+#         event_dispatcher: str or EventDispatcher instance to be used by this
+#                           module for dispatching events (default: the default
+#                           global dispatcher)
+#     """
+#
+#     def __init__(self, in_channels, max_position_embeddings=128,
+#                  softmax_temp=None, attention_dropout=0.1):
+#         super(FullAttention, self).__init__()
+#         self.softmax_temp = softmax_temp
+#         self.dropout = nn.Dropout(attention_dropout)
+#         self.max_position_embeddings = max_position_embeddings
+#         self.embedding_weight = nn.Parameter(torch.randn(
+#             2 * max_position_embeddings + 1, in_channels))
+#         self.distance_embedding = nn.Embedding(
+#             2 * max_position_embeddings + 1, in_channels, _weight=self.embedding_weight)
+#
+#     def forward(self, queries, keys, values, attn_mask):
+#         """Implements the multihead softmax attention.
+#         Arguments
+#         ---------
+#             queries: (N, L, H, E) The tensor containing the queries
+#             keys: (N, S, H, E) The tensor containing the keys
+#             values: (N, S, H, D) The tensor containing the values
+#             attn_mask: An implementation of BaseMask that encodes where each
+#                        query can attend to
+#             query_lengths: An implementation of BaseMask that encodes how
+#                            many queries each sequence in the batch consists of
+#             key_lengths: An implementation of BaseMask that encodes how
+#                          many queries each sequence in the batch consists of
+#         """
+#         # Extract some shapes and compute the temperature
+#         n, l, h, e = queries.shape
+#         _, s, _, d = values.shape
+#         softmax_temp = self.softmax_temp or 1. / math.sqrt(e)
+#
+#         # Compute the unnormalized attention and apply the masks
+#         qk = torch.einsum("nlhe, nshe -> nhls", queries, keys)
+#
+#         position_ids_l = torch.arange(
+#             l, dtype=torch.long, device=queries.device).view(-1, 1)
+#         position_ids_r = torch.arange(
+#             l, dtype=torch.long, device=queries.device).view(1, -1)
+#
+#         distance = (position_ids_l - position_ids_r).clip(-self.max_position_embeddings,
+#                                                           self.max_position_embeddings)
+#         positional_embedding = self.distance_embedding(
+#             distance + self.max_position_embeddings)
+#
+#         relative_position_scores_query = torch.einsum(
+#             "blhd, lrd -> bhlr", queries, positional_embedding)
+#         relative_position_scores_key = torch.einsum(
+#             "brhd, lrd -> bhlr", keys, positional_embedding)
+#         qk = qk + relative_position_scores_query + relative_position_scores_key
+#
+#         if not attn_mask.all_ones:
+#             qk = qk + attn_mask.additive_matrix
+#         # QK = QK + key_lengths.additive_matrix[:, None, None]
+#
+#         # Compute the attention and the weighted average
+#         att = self.dropout(torch.softmax(softmax_temp * qk, dim=-1))
+#         v = torch.einsum("nhls, nshd -> nlhd", att, values)
+#
+#         # Make sure that what we return is contiguous
+#         return v.contiguous()
 
 
 class AddNorm(nn.Module):
     def __init__(self, normalized_shape, beta, dropout, **kwargs):
         super(AddNorm, self).__init__(**kwargs)
         self.dropout = nn.Dropout(dropout)
-        self.ln = nn.LayerNorm(normalized_shape)
+        self.ln = nn.LayerNorm(normalized_shape, elementwise_affine=False)
         self.beta = beta
         if self.beta:
             self.lin_beta = Linear(3 * normalized_shape, 1, bias=False)
@@ -361,126 +362,126 @@ class TemporalConv(nn.Module):
         return self.relu(x) if self.activation else x
 
 
-class EncoderLayer(nn.Module):
-    def __init__(self,
-                 in_channels=6,
-                 mdl_channels=64,
-                 heads=8,
-                 spatial=False,
-                 beta=True,
-                 dropout=0.1,
-                 temp_conv_knl=9,
-                 temp_conv_stride=1,
-                 num_conv_layers=3,
-                 num_joints=25):
-        super(EncoderLayer, self).__init__()
-        self.in_channels = in_channels
-        self.mdl_channels = mdl_channels
-        self.heads = heads
-        self.dropout = dropout
-        self.spatial = spatial
-        self.beta = beta
-        self.num_conv_layers = num_conv_layers
-
-        self.tree_key_weights = nn.Parameter(torch.randn(in_channels, in_channels), requires_grad=True)
-        # self.tree_key_embedding = nn.Embedding(num_joints, in_channels, _weight=self.tree_key_weights)
-
-        self.tree_value_weights = nn.Parameter(torch.randn(in_channels, in_channels), requires_grad=True)
-        # self.tree_value_embedding = nn.Embedding(num_joints, in_channels, _weight=self.tree_value_weights)
-
-        # self.bn = nn.BatchNorm1d(in_channels * 25)
-        # stride=temp_conv_stride * 2 if i == (num_conv_layers - 1)
-        # else temp_conv_stride) for i in range(num_conv_layers)])
-
-        # self.lin_q = Linear(in_channels, mdl_channels)
-        # self.lin_k = Linear(in_channels, mdl_channels)
-        # self.lin_v = Linear(in_channels, mdl_channels)
-
-        self.lin_qkv = Linear(in_channels, mdl_channels * 3, bias=False)
-
-        if spatial:
-            self.multi_head_attn = SparseAttention(in_channels=mdl_channels // heads,
-                                                   attention_dropout=dropout[1])
-        else:
-            self.multi_head_attn = FullAttention(in_channels=mdl_channels // heads,
-                                                 max_position_embeddings=128,
-                                                 attention_dropout=dropout)
-
-        self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout[2])
-        self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2])
-        self.ffn = FeedForward(
-            self.mdl_channels, self.mdl_channels, self.dropout[3])
-
-        self.temp_conv = nn.ModuleList([TemporalConv(in_channels=mdl_channels,
-                                                     out_channels=mdl_channels,
-                                                     kernel_size=temp_conv_knl // 2 + 1 if i == (
-                                                             num_conv_layers - 1) else temp_conv_knl,
-                                                     stride=temp_conv_stride,
-                                                     activation=False if i == (num_conv_layers - 1) else True,
-                                                     dropout=self.dropout[0]) for i in range(num_conv_layers)])
-
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        # self.lin_k.reset_parameters()
-        # self.lin_q.reset_parameters()
-        # self.lin_v.reset_parameters()
-        self.lin_qkv.reset_parameters()
-        self.add_norm_att.reset_parameters()
-        self.add_norm_ffn.reset_parameters()
-        self.ffn.reset_parameters()
-
-    def forward(self, x, bi=None, tree_encoding=None):
-        # x = self.bn()
-        # batch norm (x)
-        f, n, c = x.shape
-        # q, k, v = x, x, x
-
-        # query = self.lin_q(x)
-        # key = self.lin_k(x)
-        # value = self.lin_v(x)
-
-        query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
-
-        # tree_pos_enc_key = self.tree_key_embedding(tree_encoding)
-        # tree_pos_enc_value = self.tree_value_embedding(tree_encoding)
-        tree_pos_enc_key = torch.matmul(tree_encoding, self.tree_key_weights)
-        tree_pos_enc_value = torch.matmul(tree_encoding, self.tree_value_weights)
-
-        key = key + tree_pos_enc_key.unsqueeze(dim=0)
-        value = value + tree_pos_enc_value.unsqueeze(dim=0)
-
-        if self.spatial:
-            attn_mask = bi
-        else:
-            attn_mask = BatchedMask(bi) if not self.spatial else None
-
-        if self.spatial:
-            query = rearrange(query, 'f n (h c) -> f n h c', h=self.heads)
-            key = rearrange(key, 'f n(h c) -> f n h c', h=self.heads)
-            value = rearrange(value, 'f n (h c) -> f n h c', h=self.heads)
-        else:
-            query = rearrange(query, 'f n (h c) -> n f h c', h=self.heads)
-            key = rearrange(key, 'f n (h c) -> n f h c', h=self.heads)
-            value = rearrange(value, 'f n (h c) -> n f h c', h=self.heads)
-
-        t = self.multi_head_attn(query, key, value, attn_mask)
-        if self.spatial:
-            t = rearrange(t, 'f n h c -> f n (h c)', h=self.heads)
-        else:
-            t = rearrange(t, 'n f h c -> f n (h c)', h=self.heads)
-
-        x = self.add_norm_att(x, t)
-        x = self.add_norm_ffn(x, self.ffn(x))
-
-        x = rearrange(x, 'f n c -> n c f')
-        for i in range(self.num_conv_layers):
-            x = self.temp_conv[i](x)
-
-        # x = rearrange(x, 'n f c -> f n c')
-        # batch norm(x)
-        x = rearrange(x, 'n c f -> f n c')
-        return x
+# class EncoderLayer(nn.Module):
+#     def __init__(self,
+#                  in_channels=6,
+#                  mdl_channels=64,
+#                  heads=8,
+#                  spatial=False,
+#                  beta=True,
+#                  dropout=0.1,
+#                  temp_conv_knl=9,
+#                  temp_conv_stride=1,
+#                  num_conv_layers=3,
+#                  num_joints=25):
+#         super(EncoderLayer, self).__init__()
+#         self.in_channels = in_channels
+#         self.mdl_channels = mdl_channels
+#         self.heads = heads
+#         self.dropout = dropout
+#         self.spatial = spatial
+#         self.beta = beta
+#         self.num_conv_layers = num_conv_layers
+#
+#         self.tree_key_weights = nn.Parameter(torch.randn(in_channels, in_channels), requires_grad=True)
+#         # self.tree_key_embedding = nn.Embedding(num_joints, in_channels, _weight=self.tree_key_weights)
+#
+#         self.tree_value_weights = nn.Parameter(torch.randn(in_channels, in_channels), requires_grad=True)
+#         # self.tree_value_embedding = nn.Embedding(num_joints, in_channels, _weight=self.tree_value_weights)
+#
+#         # self.bn = nn.BatchNorm1d(in_channels * 25)
+#         # stride=temp_conv_stride * 2 if i == (num_conv_layers - 1)
+#         # else temp_conv_stride) for i in range(num_conv_layers)])
+#
+#         # self.lin_q = Linear(in_channels, mdl_channels)
+#         # self.lin_k = Linear(in_channels, mdl_channels)
+#         # self.lin_v = Linear(in_channels, mdl_channels)
+#
+#         self.lin_qkv = Linear(in_channels, mdl_channels * 3, bias=False)
+#
+#         if spatial:
+#             self.multi_head_attn = SparseAttention(in_channels=mdl_channels // heads,
+#                                                    attention_dropout=dropout[1])
+#         else:
+#             self.multi_head_attn = FullAttention(in_channels=mdl_channels // heads,
+#                                                  max_position_embeddings=128,
+#                                                  attention_dropout=dropout)
+#
+#         self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout[2])
+#         self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2])
+#         self.ffn = FeedForward(
+#             self.mdl_channels, self.mdl_channels, self.dropout[3])
+#
+#         self.temp_conv = nn.ModuleList([TemporalConv(in_channels=mdl_channels,
+#                                                      out_channels=mdl_channels,
+#                                                      kernel_size=temp_conv_knl // 2 + 1 if i == (
+#                                                              num_conv_layers - 1) else temp_conv_knl,
+#                                                      stride=temp_conv_stride,
+#                                                      activation=False if i == (num_conv_layers - 1) else True,
+#                                                      dropout=self.dropout[0]) for i in range(num_conv_layers)])
+#
+#         self.reset_parameters()
+#
+#     def reset_parameters(self):
+#         # self.lin_k.reset_parameters()
+#         # self.lin_q.reset_parameters()
+#         # self.lin_v.reset_parameters()
+#         self.lin_qkv.reset_parameters()
+#         self.add_norm_att.reset_parameters()
+#         self.add_norm_ffn.reset_parameters()
+#         self.ffn.reset_parameters()
+#
+#     def forward(self, x, bi=None, tree_encoding=None):
+#         # x = self.bn()
+#         # batch norm (x)
+#         f, n, c = x.shape
+#         # q, k, v = x, x, x
+#
+#         # query = self.lin_q(x)
+#         # key = self.lin_k(x)
+#         # value = self.lin_v(x)
+#
+#         query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
+#
+#         # tree_pos_enc_key = self.tree_key_embedding(tree_encoding)
+#         # tree_pos_enc_value = self.tree_value_embedding(tree_encoding)
+#         tree_pos_enc_key = torch.matmul(tree_encoding, self.tree_key_weights)
+#         tree_pos_enc_value = torch.matmul(tree_encoding, self.tree_value_weights)
+#
+#         key = key + tree_pos_enc_key.unsqueeze(dim=0)
+#         value = value + tree_pos_enc_value.unsqueeze(dim=0)
+#
+#         if self.spatial:
+#             attn_mask = bi
+#         else:
+#             attn_mask = BatchedMask(bi) if not self.spatial else None
+#
+#         if self.spatial:
+#             query = rearrange(query, 'f n (h c) -> f n h c', h=self.heads)
+#             key = rearrange(key, 'f n(h c) -> f n h c', h=self.heads)
+#             value = rearrange(value, 'f n (h c) -> f n h c', h=self.heads)
+#         else:
+#             query = rearrange(query, 'f n (h c) -> n f h c', h=self.heads)
+#             key = rearrange(key, 'f n (h c) -> n f h c', h=self.heads)
+#             value = rearrange(value, 'f n (h c) -> n f h c', h=self.heads)
+#
+#         t = self.multi_head_attn(query, key, value, attn_mask)
+#         if self.spatial:
+#             t = rearrange(t, 'f n h c -> f n (h c)', h=self.heads)
+#         else:
+#             t = rearrange(t, 'n f h c -> f n (h c)', h=self.heads)
+#
+#         x = self.add_norm_att(x, t)
+#         x = self.add_norm_ffn(x, self.ffn(x))
+#
+#         x = rearrange(x, 'f n c -> n c f')
+#         for i in range(self.num_conv_layers):
+#             x = self.temp_conv[i](x)
+#
+#         # x = rearrange(x, 'n f c -> f n c')
+#         # batch norm(x)
+#         x = rearrange(x, 'n c f -> f n c')
+#         return x
 
 
 class SpatialEncoderLayer(nn.Module):
@@ -489,16 +490,19 @@ class SpatialEncoderLayer(nn.Module):
                  mdl_channels=64,
                  heads=8,
                  beta=True,
-                 dropout=0.1):
+                 dropout=None):
         super(SpatialEncoderLayer, self).__init__()
         self.in_channels = in_channels
         self.mdl_channels = mdl_channels
         self.heads = heads
-        self.dropout = dropout
         self.beta = beta
+        if dropout is None:
+            self.dropout = [0.5, 0.5, 0.5, 0.5]   # temp_conv, sparse_attention, add_norm, ffn
+        else:
+            self.dropout = dropout
 
-        self.tree_key_weights = nn.Parameter(torch.randn(in_channels, in_channels), requires_grad=True)
-        self.tree_value_weights = nn.Parameter(torch.randn(in_channels, in_channels), requires_grad=True)
+        # self.tree_key_weights = nn.Parameter(torch.randn(in_channels, in_channels), requires_grad=True)
+        # self.tree_value_weights = nn.Parameter(torch.randn(in_channels, in_channels), requires_grad=True)
 
         self.lin_qkv = Linear(in_channels, mdl_channels * 3, bias=False)
 
@@ -521,11 +525,11 @@ class SpatialEncoderLayer(nn.Module):
         f, n, c = x.shape
         query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
 
-        tree_pos_enc_key = torch.matmul(tree_encoding, self.tree_key_weights)
-        tree_pos_enc_value = torch.matmul(tree_encoding, self.tree_value_weights)
+        # tree_pos_enc_key = torch.matmul(tree_encoding, self.tree_key_weights)
+        # tree_pos_enc_value = torch.matmul(tree_encoding, self.tree_value_weights)
 
-        key = key + tree_pos_enc_key.unsqueeze(dim=0)
-        value = value + tree_pos_enc_value.unsqueeze(dim=0)
+        # key = key + tree_pos_enc_key.unsqueeze(dim=0)
+        # value = value + tree_pos_enc_value.unsqueeze(dim=0)
 
         query = rearrange(query, 'f n (h c) -> f n h c', h=self.heads)
         key = rearrange(key, 'f n(h c) -> f n h c', h=self.heads)
@@ -551,13 +555,16 @@ class TemporalEncoderLayer(nn.Module):
         self.in_channels = in_channels
         self.mdl_channels = mdl_channels
         self.heads = heads
-        self.dropout = dropout
         self.beta = beta
+        if dropout is None:
+            self.dropout = [0.5, 0.5, 0.5, 0.5]   # temp_conv, sparse_attention, add_norm, ffn
+        else:
+            self.dropout = dropout
 
         self.lin_qkv = Linear(in_channels, mdl_channels * 3, bias=False)
 
         self.multi_head_attn = LinearAttention(in_channels=mdl_channels // heads,
-                                               attention_dropout=dropout[1])
+                                               attention_dropout=self.dropout[1])
 
         self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout[2])
         self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2])

@@ -4,8 +4,6 @@ import time
 from random import shuffle
 
 import matplotlib
-
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 import numpy as np
@@ -21,6 +19,8 @@ from models.net2s import DualGraphEncoder
 from optimizer import SGD_AGC, CosineAnnealingWarmupRestarts
 from utility.helper import make_checkpoint, load_checkpoint
 from random import shuffle
+
+matplotlib.use('Agg')
 
 # import imageio
 # import adamod
@@ -53,7 +53,7 @@ def plot_grad_flow(named_parameters, path, writer, step):
                 empty_grads.append({n: p.mean().cpu().item()})
     # total_norm = total_norm ** (1. / 2)
     # print("Norm : ", total_norm)
-    # plt.tight_layout()
+    plt.tight_layout()
     plt.plot(ave_grads, alpha=0.3, color="b")
     plt.hlines(0, 0, len(ave_grads) + 1, linewidth=1.5, color="k")
     plt.xticks(np.arange(0, len(ave_grads), 1), layers, rotation="vertical", fontsize=4)
@@ -67,7 +67,7 @@ def plot_grad_flow(named_parameters, path, writer, step):
     # plt.show()
 
 
-def chunkIt(seq, num):
+def chunk_it(seq, num):
     avg = len(seq) / float(num)
     out = []
     last = 0.0
@@ -114,7 +114,7 @@ def run_epoch(data_loader,
     total_samples = 0
     start = time.time()
     total_batch = len(dataset) // args.batch_size + 1
-    gradflow_file_list = []
+    grad_flow_file_list = []
     for i, batch in tqdm(enumerate(data_loader),
                          total=total_batch,
                          desc=desc):
@@ -126,8 +126,8 @@ def run_epoch(data_loader,
             loss = loss_compute(out, label.long())
             loss_ = loss
             if is_train:
-                #l2_lambda = args.weight_decay
-                #for param in model.parameters():
+                # l2_lambda = args.weight_decay
+                # for param in model.parameters():
                 #    if param.requires_grad:
                 #        loss += l2_lambda * torch.sum(((param)) ** 2)
 
@@ -142,7 +142,7 @@ def run_epoch(data_loader,
                         os.mkdir(path)
                     plot_grad_flow(model.named_parameters(), osp.join(path, '%3d:%d.png' % (epoch_num, i)), writer,
                                    step)
-                    gradflow_file_list.append(osp.join(path, '%3d:%d.png' % (epoch_num, i)))
+                    grad_flow_file_list.append(osp.join(path, '%3d:%d.png' % (epoch_num, i)))
 
                 # plot_grad_flow(model.named_parameters(), writer, (i + 1) + total_batch * epoch_num)
                 # for name, param in model.named_parameters():
@@ -159,7 +159,6 @@ def run_epoch(data_loader,
     if not osp.exists(gif_path):
         os.mkdir(gif_path)
     # gif_grad_flow(gradflow_file_list, gif_path, str(epoch_num))
-    gradflow_file_list = []
 
     elapsed = time.time() - start
     accuracy = correct / total_samples * 100.
@@ -230,9 +229,9 @@ def main():
     # noam_opt = get_std_opt(model, args)
 
     optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
-    #optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    # optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     decay_rate = 0.97
-    #lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decay_rate)
+    # lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decay_rate)
     lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=12, cycle_mult=1.0, max_lr=0.1,
                                                  min_lr=1e-4, warmup_steps=3, gamma=0.4)
     if args.load_model:
@@ -245,7 +244,7 @@ def main():
     loss_compute = nn.CrossEntropyLoss().to(device)
     shuffled_list = [i for i in range(len(train_ds))]
     shuffle(shuffled_list)
-    kfold = chunkIt(shuffled_list, args.cross_k)
+    kfold = chunk_it(shuffled_list, args.cross_k)
 
     for epoch in trange(last_epoch, args.epoch_num + last_epoch):
         train_ds_ = []

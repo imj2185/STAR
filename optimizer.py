@@ -107,7 +107,7 @@ class SGD_AGC(Optimizer):
 
     def __init__(self, params, lr=required, momentum=0, dampening=0,
                  weight_decay=0, nesterov=False, clipping=1e-2, eps=1e-3,
-                 eta=0.3, gamma=0.55):
+                 eta=5e-5, gamma=0.55):
         if lr is not required and lr < 0.0:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if momentum < 0.0:
