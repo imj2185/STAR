@@ -564,7 +564,7 @@ class TemporalEncoderLayer(nn.Module):
         self.lin_qkv = Linear(in_channels, mdl_channels * 3, bias=False)
 
         self.multi_head_attn = LinearAttention(in_channels=mdl_channels // heads,
-                                               attention_dropout=self.dropout[1])
+                                               attention_dropout=self.dropout[0])
 
         self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout[2])
         self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2])
