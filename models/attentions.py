@@ -225,128 +225,6 @@ class TemporalConv(nn.Module):
         return self.relu(x) if self.activation else x
 
 
-# class EncoderLayer(nn.Module):
-#     def __init__(self,
-#                  in_channels=6,
-#                  mdl_channels=64,
-#                  heads=8,
-#                  spatial=False,
-#                  beta=True,
-#                  dropout=0.1,
-#                  temp_conv_knl=9,
-#                  temp_conv_stride=1,
-#                  num_conv_layers=3,
-#                  num_joints=25):
-#         super(EncoderLayer, self).__init__()
-#         self.in_channels = in_channels
-#         self.mdl_channels = mdl_channels
-#         self.heads = heads
-#         self.dropout = dropout
-#         self.spatial = spatial
-#         self.beta = beta
-#         self.num_conv_layers = num_conv_layers
-#
-#         self.tree_key_weights = nn.Parameter(torch.randn(in_channels, in_channels), requires_grad=True)
-#         # self.tree_key_embedding = nn.Embedding(num_joints, in_channels, _weight=self.tree_key_weights)
-#
-#         self.tree_value_weights = nn.Parameter(torch.randn(in_channels, in_channels), requires_grad=True)
-#         # self.tree_value_embedding = nn.Embedding(num_joints, in_channels, _weight=self.tree_value_weights)
-#
-#         # self.bn = nn.BatchNorm1d(in_channels * 25)
-#         # stride=temp_conv_stride * 2 if i == (num_conv_layers - 1)
-#         # else temp_conv_stride) for i in range(num_conv_layers)])
-#
-#         # self.lin_q = Linear(in_channels, mdl_channels)
-#         # self.lin_k = Linear(in_channels, mdl_channels)
-#         # self.lin_v = Linear(in_channels, mdl_channels)
-#
-#         self.lin_qkv = Linear(in_channels, mdl_channels * 3, bias=False)
-#
-#         if spatial:
-#             self.multi_head_attn = SparseAttention(in_channels=mdl_channels // heads,
-#                                                    attention_dropout=dropout[1])
-#         else:
-#             self.multi_head_attn = FullAttention(in_channels=mdl_channels // heads,
-#                                                  max_position_embeddings=128,
-#                                                  attention_dropout=dropout)
-#
-#         self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout[2])
-#         self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2])
-#         self.ffn = FeedForward(
-#             self.mdl_channels, self.mdl_channels, self.dropout[3])
-#
-#         self.temp_conv = nn.ModuleList([TemporalConv(in_channels=mdl_channels,
-#                                                      out_channels=mdl_channels,
-#                                                      kernel_size=temp_conv_knl // 2 + 1 if i == (
-#                                                              num_conv_layers - 1) else temp_conv_knl,
-#                                                      stride=temp_conv_stride,
-#                                                      activation=False if i == (num_conv_layers - 1) else True,
-#                                                      dropout=self.dropout[0]) for i in range(num_conv_layers)])
-#
-#         self.reset_parameters()
-#
-#     def reset_parameters(self):
-#         # self.lin_k.reset_parameters()
-#         # self.lin_q.reset_parameters()
-#         # self.lin_v.reset_parameters()
-#         self.lin_qkv.reset_parameters()
-#         self.add_norm_att.reset_parameters()
-#         self.add_norm_ffn.reset_parameters()
-#         self.ffn.reset_parameters()
-#
-#     def forward(self, x, bi=None, tree_encoding=None):
-#         # x = self.bn()
-#         # batch norm (x)
-#         f, n, c = x.shape
-#         # q, k, v = x, x, x
-#
-#         # query = self.lin_q(x)
-#         # key = self.lin_k(x)
-#         # value = self.lin_v(x)
-#
-#         query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
-#
-#         # tree_pos_enc_key = self.tree_key_embedding(tree_encoding)
-#         # tree_pos_enc_value = self.tree_value_embedding(tree_encoding)
-#         tree_pos_enc_key = torch.matmul(tree_encoding, self.tree_key_weights)
-#         tree_pos_enc_value = torch.matmul(tree_encoding, self.tree_value_weights)
-#
-#         key = key + tree_pos_enc_key.unsqueeze(dim=0)
-#         value = value + tree_pos_enc_value.unsqueeze(dim=0)
-#
-#         if self.spatial:
-#             attn_mask = bi
-#         else:
-#             attn_mask = BatchedMask(bi) if not self.spatial else None
-#
-#         if self.spatial:
-#             query = rearrange(query, 'f n (h c) -> f n h c', h=self.heads)
-#             key = rearrange(key, 'f n(h c) -> f n h c', h=self.heads)
-#             value = rearrange(value, 'f n (h c) -> f n h c', h=self.heads)
-#         else:
-#             query = rearrange(query, 'f n (h c) -> n f h c', h=self.heads)
-#             key = rearrange(key, 'f n (h c) -> n f h c', h=self.heads)
-#             value = rearrange(value, 'f n (h c) -> n f h c', h=self.heads)
-#
-#         t = self.multi_head_attn(query, key, value, attn_mask)
-#         if self.spatial:
-#             t = rearrange(t, 'f n h c -> f n (h c)', h=self.heads)
-#         else:
-#             t = rearrange(t, 'n f h c -> f n (h c)', h=self.heads)
-#
-#         x = self.add_norm_att(x, t)
-#         x = self.add_norm_ffn(x, self.ffn(x))
-#
-#         x = rearrange(x, 'f n c -> n c f')
-#         for i in range(self.num_conv_layers):
-#             x = self.temp_conv[i](x)
-#
-#         # x = rearrange(x, 'n f c -> f n c')
-#         # batch norm(x)
-#         x = rearrange(x, 'n c f -> f n c')
-#         return x
-
-
 class SpatialEncoderLayer(nn.Module):
     def __init__(self,
                  in_channels=6,
@@ -441,7 +319,7 @@ class TemporalEncoderLayer(nn.Module):
         self.add_norm_ffn.reset_parameters()
         self.ffn.reset_parameters()
 
-    def forward(self, x, bi=None, seq_encoding=None):
+    def forward(self, x, bi=None):
         f, n, c = x.shape
 
         query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
@@ -451,7 +329,6 @@ class TemporalEncoderLayer(nn.Module):
         value = rearrange(value, 'n f (h c) -> n f h c', h=self.heads)
 
         t = self.multi_head_attn(query, key, value, bi)
-        # t = rearrange(t, 'n f h c -> f n (h c)', h=self.heads)
         t = rearrange(t, 'n f h c -> n f (h c)', h=self.heads)
 
         x = self.add_norm_att(x, t)
