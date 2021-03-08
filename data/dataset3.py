@@ -34,6 +34,13 @@ def gen_bone_data(torch_data, adj):
     return torch_data
 
 
+def gen_motion_vector(torch_data):
+    f, n = torch_data.shape[:2]
+    t = torch.zeros(f, n, 3)
+    t[1:, :, :] = torch_data[1:, :, :3] - torch_data[:-1, :, :3]
+    return torch.cat([torch_data, t], dim=0)
+
+
 def torch_unit_vector(vector):
     """ Returns the unit vector of the vector.  """
     return vector / torch.linalg.norm(vector)
