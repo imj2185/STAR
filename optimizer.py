@@ -107,7 +107,7 @@ class SGD_AGC(Optimizer):
 
     def __init__(self, params, lr=required, momentum=0, dampening=0,
                  weight_decay=0, nesterov=False, clipping=1e-2, eps=1e-3,
-                 eta=5e-5, gamma=0.55):
+                 eta=5e-4, gamma=0.55):
         if lr is not required and lr < 0.0:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if momentum < 0.0:
@@ -160,7 +160,7 @@ class SGD_AGC(Optimizer):
                 max_norm = param_norm * group['clipping']
 
                 # add noise to gradients
-                normal = torch.empty(p.shape).normal_(
+                normal = torch.empty(1).normal_(  # p.shape
                     mean=0, std=math.sqrt(self.eta / ((1 + self.t) ** self.gamma))).to(p.device)
                 p.grad += normal
 

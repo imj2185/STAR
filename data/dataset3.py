@@ -11,20 +11,26 @@ from torch_geometric.data import Dataset, Data
 from torch_sparse import spspmm
 from tqdm import tqdm
 
-
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 
-def gen_bone_data(torch_data, paris, benchmark):
-    T, N = torch_data.shape[0], torch_data.shape[1]
-    bone_data = torch.zeros((T, N, 3), dtype=torch.float32)
-    for v1, v2 in paris[benchmark]:
-        if benchmark != 'kinetics':
-            v1 -= 1
-            v2 -= 1
-        bone_data[:, v1, :] = torch_data[:, v1, :] - torch_data[:, v2, :]
+# def gen_bone_data(torch_data, paris, benchmark):
+#     T, N = torch_data.shape[0], torch_data.shape[1]
+#     bone_data = torch.zeros((T, N, 3), dtype=torch.float32)
+#     for v1, v2 in paris[benchmark]:
+#         if benchmark != 'kinetics':
+#             v1 -= 1
+#             v2 -= 1
+#         bone_data[:, v1, :] = torch_data[:, v1, :] - torch_data[:, v2, :]
+#
+#     torch_data = torch.cat((torch_data, bone_data), 2)
+#     return torch_data
 
-    torch_data = torch.cat((torch_data, bone_data), 2)
+
+def gen_bone_data(torch_data, adj):
+    bone_data = torch.zeros(torch_data.shape).to(torch_data.device)
+    bone_data[:, 1:, :] = torch_data[:, adj[0], :] - torch_data[:, adj[1], :]
+    torch_data = torch.cat((torch_data, bone_data), dim=2)
     return torch_data
 
 
@@ -84,25 +90,25 @@ def rotate_joints(data, joint_i, joint_j):
 
 def pre_normalization(data, z_axis=None, x_axis=None):
     # `index` of frames that have non-zero nodes
-    #if x_axis is None:
+    # if x_axis is None:
     #    x_axis = [8, 4]
-    #if z_axis is None:
+    # if z_axis is None:
     #    z_axis = [0, 1]
-    #debug_data = data.clone()
+    # debug_data = data.clone()
     index = (data.sum(-1).sum(-1) != 0)
 
     if data.sum() == 0:
         print('empty video without skeleton information')
 
     data = data[index]
-    #v1_frame = index[:(len(index) // 2)].sum().item()
-    #v2_frame = index[(len(index) // 2):].sum().item()
+    # v1_frame = index[:(len(index) // 2)].sum().item()
+    # v2_frame = index[(len(index) // 2):].sum().item()
 
     # print('sub the center joint #1 (spine joint in ntu and neck joint in kinetics)')
     # Use the first person's body center (`1:2` along the nodes dimension)
-    #main_body_center = data[:v1_frame, 1:2, :].clone()
+    # main_body_center = data[:v1_frame, 1:2, :].clone()
     # For all `person`, compute the `mask` which is the non-zero channel dimension
-    #mask = rearrange((data.sum(-1) != 0), 'f n -> f n 1')
+    # mask = rearrange((data.sum(-1) != 0), 'f n -> f n 1')
 
     '''data[:v1_frame] = (data[:v1_frame] - main_body_center) * mask[:v1_frame]
     if v1_frame > v2_frame:
@@ -232,16 +238,17 @@ def power_adj(adj, dim, p):
 
 
 def resolve_filename(name):
-    action_class = int(name[name.find('A') + 1:name.find('A') + 4])
-    subject_id = int(name[name.find('P') + 1:name.find('P') + 4])
-    camera_id = int(name[name.find('C') + 1:name.find('C') + 4])
-    setup_id = int(name[name.find('S') + 1:name.find('S') + 4])
+    action_class = int(name[name.find('A') + 1: name.find('A') + 4])
+    subject_id = int(name[name.find('P') + 1: name.find('P') + 4])
+    camera_id = int(name[name.find('C') + 1: name.find('C') + 4])
+    setup_id = int(name[name.find('S') + 1: name.find('S') + 4])
     return action_class, subject_id, camera_id, setup_id
 
 
 def data_padding(sparse_tensor, pad_length):
     f, n, c = sparse_tensor.shape
-    return torch.cat([torch.zeros(pad_length, n, c)] + [sparse_tensor] + [torch.zeros(pad_length, n, c)], dim=0)
+    return torch.cat([torch.zeros(pad_length, n, c)] + [sparse_tensor] + [torch.zeros(pad_length, n, c)],
+                     dim=0)
 
 
 class SkeletonDataset(Dataset, ABC):
@@ -258,35 +265,42 @@ class SkeletonDataset(Dataset, ABC):
         self.sample = sample
 
         self.num_joints = 25 if 'ntu' in self.name else 18
-        #self.skeleton_ = skeleton_parts(num_joints=self.num_joints,
-        #                                dataset=self.name)
+        self.skeleton_ = skeleton_parts(num_joints=self.num_joints,
+                                       dataset=self.name)
         self.training_subjects = [1, 2, 4, 5, 8, 9, 13, 14, 15, 16, 17, 18, 19, 25, 27, 28, 31, 34, 35,
                                   38, 45, 46, 47, 49, 50, 52, 53, 54, 55, 56, 57, 58, 59, 70, 74, 78,
                                   80, 81, 82, 83, 84, 85, 86, 89, 91, 92, 93, 94, 95, 97, 98, 100, 103]
         # For Cross-View benchmark "xview"
         self.training_setup = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32]
-        self.paris = {
-            'xview': (
-                (1, 2), (2, 21), (3, 21), (4, 3), (5, 21),
-                (6, 5), (7, 6), (8, 7), (9, 21), (10, 9),
-                (11, 10), (12, 11), (13, 1), (14, 13), (15, 14),
-                (16, 15), (17, 1), (18, 17), (19, 18), (20, 19),
-                (22, 23), (21, 21), (23, 8), (24, 25), (25, 12)
-            ),  # (21, 21)?
-            'xsub': (
-                (1, 2), (2, 21), (3, 21), (4, 3), (5, 21),
-                (6, 5), (7, 6), (8, 7), (9, 21), (10, 9),
-                (11, 10), (12, 11), (13, 1), (14, 13), (15, 14),
-                (16, 15), (17, 1), (18, 17), (19, 18), (20, 19),
-                (22, 23), (21, 21), (23, 8), (24, 25), (25, 12)
-            ),
+        # self.paris = {
+        #     'xview':
+        #     # (
+        #     #     (1, 2), (2, 21), (3, 21), (4, 3), (5, 21),
+        #     #     (6, 5), (7, 6), (8, 7), (9, 21), (10, 9),
+        #     #     (11, 10), (12, 11), (13, 1), (14, 13), (15, 14),
+        #     #     (16, 15), (17, 1), (18, 17), (19, 18), (20, 19),
+        #     #     (22, 23), (21, 21), (23, 8), (24, 25), (25, 12)
+        #     # ),  # (21, 21)?
+        #         torch.tensor(
+        #             [[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24],
+        #              [1, 20, 20, 2, 20, 4, 5, 6, 20, 8, 9, 10, 0, 12, 13, 14, 0, 16, 17, 18, 22, 7, 24, 11]]),
+        #     'xsub': (
+        #         (1, 2), (2, 21), (3, 21), (4, 3), (5, 21),
+        #         (6, 5), (7, 6), (8, 7), (9, 21), (10, 9),
+        #         (11, 10), (12, 11), (13, 1), (14, 13), (15, 14),
+        #         (16, 15), (17, 1), (18, 17), (19, 18), (20, 19),
+        #         (22, 23), (21, 21), (23, 8), (24, 25), (25, 12)
+        #     ),
+        #
+        #     'kinetics': (
+        #         (0, 0), (1, 0), (2, 1), (3, 2), (4, 3), (5, 1),
+        #         (6, 5), (7, 6), (8, 2), (9, 8), (10, 9), (11, 5),
+        #         (12, 11), (13, 12), (14, 0), (15, 0), (16, 14), (17, 15)
+        #     )
+        #     # [[0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
+        #     #  [1, 1, 2, 3, 1, 5, 6, 2, 8,  9,  5, 11, 12,  0,  0, 14, 15]]
+        # }
 
-            'kinetics': (
-                (0, 0), (1, 0), (2, 1), (3, 2), (4, 3), (5, 1),
-                (6, 5), (7, 6), (8, 2), (9, 8), (10, 9), (11, 5),
-                (12, 11), (13, 12), (14, 0), (15, 0), (16, 14), (17, 15)
-            )
-        }
         self.max_body_true = 2
 
         print('processed the adjacency matrices of skeleton')
@@ -339,21 +353,21 @@ class SkeletonDataset(Dataset, ABC):
         torch_data = rearrange(torch_data, 'm f n c -> (m f) n c')  # <- always even so you can get person idx
 
         torch_data = pre_normalization(torch_data)
-        #torch_data += torch.normal(mean=0, std=0.01, size=torch_data.size())
-        #pre_data = gen_bone_data(torch_data, self.paris, self.benchmark)
+        # torch_data += torch.normal(mean=0, std=0.01, size=torch_data.size())
+        # torch_data = gen_bone_data(torch_data, self.paris, self.benchmark)
+        torch_data = gen_bone_data(torch_data, self.skeleton_)
         sparse_data = Data(x=torch_data, y=action_class - 1)
 
         return sparse_data
 
-        '''if sample == 'train':
+        ''' if sample == 'train':
             gaussian_noise = torch.normal(mean=0, std=0.01, size=torch_data.size())
             noisy_data = torch_data + gaussian_noise
             noisy_data = gen_bone_data(noisy_data, self.paris, self.benchmark)
             noisy_sparse_data = Data(x=noisy_data, y=action_class - 1)
             return sparse_data, noisy_sparse_data
         else:
-            return (sparse_data,)'''
-
+            return (sparse_data,) '''
 
     def add_noise(self, data, scale):
         t = data.x[:, :, :3]
@@ -369,7 +383,6 @@ class SkeletonDataset(Dataset, ABC):
 
         t = Data(x=t, y=y)
         return t
-
 
     def process(self):
         if self.missing_skeleton_path is not None:
@@ -417,7 +430,7 @@ class SkeletonDataset(Dataset, ABC):
                             total=len(sample_name))
 
         for data in progress_bar:
-            sparse_data_list.append(data) 
+            sparse_data_list.append(data)
 
         noisy_sparse_data_list = []
         '''if self.sample == 'train':
@@ -434,7 +447,7 @@ class SkeletonDataset(Dataset, ABC):
                 noisy_sparse_data_list.append(self.add_noise(data, scale=0.01))'''
 
         torch.save(sparse_data_list + noisy_sparse_data_list, osp.join(self.processed_dir,
-                                              self.processed_file_names))
+                                                                       self.processed_file_names))
 
     def len(self):
         if 'kinetics' in self.name:
