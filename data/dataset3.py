@@ -340,51 +340,74 @@ class SkeletonDataset(Dataset, ABC):
 
     def read_xyz(self, file, sample, max_body=4):  # 取了前两个body
         filename = osp.split(file)[-1]
-        action_class = int(filename[filename.find('A') + 1: filename.find('A') + 4])
-        seq_info = read_skeleton_filter(file)
-        # Create data tensor of shape: (# persons (M), # frames (T), # nodes (V), # channels (C))
-        data = np.zeros((max_body, seq_info['numFrame'], self.num_joints, 3), dtype=np.float32)
-        for n, f in enumerate(seq_info['frameInfo']):
-            # print("frame: ", n)
-            for m, b in enumerate(f['bodyInfo']):
-                # print("person: ", m)
-                for j, v in enumerate(b['jointInfo']):
-                    if m < max_body and j < self.num_joints:
-                        data[m, n, j, :] = [v['x'], v['y'], v['z']]
+        if 'ntu' in self.name:
+            action_class = int(filename[filename.find('A') + 1: filename.find('A') + 4])
+            seq_info = read_skeleton_filter(file)
+            # Create data tensor of shape: (# persons (M), # frames (T), # nodes (V), # channels (C))
+            data = np.zeros((max_body, seq_info['numFrame'], self.num_joints, 3), dtype=np.float32)
+            for n, f in enumerate(seq_info['frameInfo']):
+                # print("frame: ", n)
+                for m, b in enumerate(f['bodyInfo']):
+                    # print("person: ", m)
+                    for j, v in enumerate(b['jointInfo']):
+                        if m < max_body and j < self.num_joints:
+                            data[m, n, j, :] = [v['x'], v['y'], v['z']]
 
-        # select 2 max energy body
-        energy = np.array([get_nonzero_std(x) for x in data])
-        index = energy.argsort()[::-1][0:self.max_body_true]
-        data = data[index]
+            # select 2 max energy body
+            energy = np.array([get_nonzero_std(x) for x in data])
+            index = energy.argsort()[::-1][0:self.max_body_true]
+            data = data[index]
 
-        torch_data = torch.from_numpy(data)
-        del data
-        torch_data = rearrange(torch_data, 'm f n c -> (m f) n c')  # <- always even so you can get person idx
+            torch_data = torch.from_numpy(data)
+            del data
+            torch_data = rearrange(torch_data, 'm f n c -> (m f) n c')  # <- always even so you can get person idx
 
-        torch_data = pre_normalization(torch_data)
-        # torch_data += torch.normal(mean=0, std=0.01, size=torch_data.size())
-        # torch_data = gen_bone_data(torch_data, self.paris, self.benchmark)
-        bone_data = gen_bone_data(torch_data, self.sk_adj)
-        mv_data = gen_motion_vector(torch_data)
-        torch_data = torch.cat((torch_data, bone_data, mv_data), dim=-1)
-        sparse_data = Data(x=torch_data, y=action_class - 1)
-
+            torch_data = pre_normalization(torch_data)
+            # torch_data += torch.normal(mean=0, std=0.01, size=torch_data.size())
+            # torch_data = gen_bone_data(torch_data, self.paris, self.benchmark)
+            bone_data = gen_bone_data(torch_data, self.sk_adj)
+            mv_data = gen_motion_vector(torch_data)
+            torch_data = torch.cat((torch_data, bone_data, mv_data), dim=-1)
+            sparse_data = Data(x=torch_data, y=action_class - 1)
+        else:
+            import json
+            with open(file, 'r') as f:
+                video = json.load(f)
+                num_frames = len(video['data'])
+                if num_frames == 0:
+                    return None, None, None
+                num_persons = max([len(video['data'][i]['skeleton']) for i in range(num_frames)])
+                frames = torch.zeros(num_frames * num_persons, num_joints, num_features)
+                i = 0
+                for data in video['data']:
+                    for m, s in enumerate(data['skeleton']):  # m is person id, s is skeleton
+                        if len(s) == 0:
+                            continue
+                        ft = torch.tensor([s['pose'][0::2],  # x
+                                           s['pose'][1::2],  # y
+                                           s['score']])
+                        frames[i + m * num_frames] = ft.transpose(1, 0)
+                    i += 1
+                t = video['label_index']
+            sparse_data = Data(x=frames, y=t)
+            save_name = osp.join(self.processed_dir, '{}.pt'.format(file))
+            torch.save(sparse_data, save_name)
         return sparse_data
 
-        ''' if sample == 'train':
-            gaussian_noise = torch.normal(mean=0, std=0.01, size=torch_data.size())
-            noisy_data = torch_data + gaussian_noise
-            noisy_data = gen_bone_data(noisy_data, self.paris, self.benchmark)
-            noisy_sparse_data = Data(x=noisy_data, y=action_class - 1)
-            return sparse_data, noisy_sparse_data
-        else:
-            return (sparse_data,) '''
+        # if sample == 'train':
+        #     gaussian_noise = torch.normal(mean=0, std=0.01, size=torch_data.size())
+        #     noisy_data = torch_data + gaussian_noise
+        #     noisy_data = gen_bone_data(noisy_data, self.paris, self.benchmark)
+        #     noisy_sparse_data = Data(x=noisy_data, y=action_class - 1)
+        #     return sparse_data, noisy_sparse_data
+        # else:
+        #     return (sparse_data)
 
     def add_noise(self, data, scale):
         t = data.x[:, :, :3]
         y = data.y
         t += torch.normal(mean=0, std=scale, size=t.size())
-        t = gen_bone_data(t, self.paris, self.benchmark)
+        t = gen_bone_data(t, self.sk_adj)
         '''print("After gen bone data")
 
         if torch.isnan(t).sum().item() != 0:
@@ -396,6 +419,7 @@ class SkeletonDataset(Dataset, ABC):
         return t
 
     def process(self):
+        is_training = False
         if self.missing_skeleton_path is not None:
             with open(self.missing_skeleton_path, 'r') as f:
                 ignored_samples = [line.strip() + '.skeleton' for line in f.readlines()]
@@ -406,21 +430,24 @@ class SkeletonDataset(Dataset, ABC):
         sample_label = []
 
         sparse_data_list = []
-
+        action_class, subject_id, camera_id, setup_id = 0, 0, 0, 0
         for file in self.raw_file_names:
             filename = osp.split(file)[-1]
-            if filename in ignored_samples:
-                print("Found a missing skeleton!")
-                continue
+            if 'ntu' in self.name:
+                if filename in ignored_samples:
+                    print("Found a missing skeleton!")
+                    continue
 
-            action_class, subject_id, camera_id, setup_id = resolve_filename(filename)
+                action_class, subject_id, camera_id, setup_id = resolve_filename(filename)
 
-            if self.benchmark == 'xview':
-                is_training = (camera_id in self.training_view)
-            elif self.benchmark == 'xsub':
-                is_training = (subject_id in self.training_subjects)
-            else:
-                raise ValueError('Invalid benchmark provided: {}'.format(self.benchmark))
+                if self.benchmark == 'xview':
+                    is_training = (camera_id in self.training_view)
+                elif self.benchmark == 'xsub':
+                    is_training = (subject_id in self.training_subjects)
+                else:
+                    raise ValueError('Invalid benchmark provided: {}'.format(self.benchmark))
+            elif 'kinetic' in self.name:
+                pass  # TODO
 
             if self.sample == 'train':
                 is_sample = is_training
