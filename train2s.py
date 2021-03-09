@@ -140,9 +140,9 @@ def run_epoch(data_loader,
                     path = osp.join(os.getcwd(), args.gradflow_dir)
                     if not osp.exists(path):
                         os.mkdir(path)
-                    plot_grad_flow(model.named_parameters(), osp.join(path, '%3d:%d.png' % (epoch_num, i)), writer,
+                    plot_grad_flow(model.named_parameters(), osp.join(path, '%3d_%d.png' % (epoch_num, i)), writer,
                                    step)
-                    grad_flow_file_list.append(osp.join(path, '%3d:%d.png' % (epoch_num, i)))
+                    grad_flow_file_list.append(osp.join(path, '%3d_%d.png' % (epoch_num, i)))
 
                 # plot_grad_flow(model.named_parameters(), writer, (i + 1) + total_batch * epoch_num)
                 # for name, param in model.named_parameters():
@@ -194,7 +194,7 @@ def main():
                               use_motion_vector=False,
                               benchmark='xsub', sample='val')
 
-    adj = skeleton_parts().to(device)
+    adj = skeleton_parts()[0].to(device)
 
     last_train = int(len(train_ds) * 0.8)
 

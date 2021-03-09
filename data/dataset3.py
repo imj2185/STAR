@@ -30,15 +30,17 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 def gen_bone_data(torch_data, adj):
     bone_data = torch.zeros(torch_data.shape).to(torch_data.device)
     bone_data[:, 1:, :] = torch_data[:, adj[0], :] - torch_data[:, adj[1], :]
-    torch_data = torch.cat((torch_data, bone_data), dim=2)
-    return torch_data
+    #torch_data = torch.cat((torch_data, bone_data), dim=2)
+    return bone_data
 
 
 def gen_motion_vector(torch_data):
     f, n = torch_data.shape[:2]
     t = torch.zeros(f, n, 3)
-    t[1:, :, :] = torch_data[1:, :, :3] - torch_data[:-1, :, :3]
-    return torch.cat([torch_data, t], dim=0)
+    t[:-1, :, :] = torch_data[1:, :, :3] - torch_data[:-1, :, :3] #0 to f-2
+    #t[f, :, :] = torch_data[f+1, :, :] - torch_data[f, :, :] for f-1 times
+    t[f-1,:,:] = t[f-2,:,:]
+    return t
 
 
 def torch_unit_vector(vector):
@@ -232,7 +234,7 @@ def skeleton_parts(num_joints=25, dataset='ntu', cat=True):
     _, idx = cat_adj[0].sort()
     cat_adj = cat_adj[:, idx]
 
-    return cat_adj
+    return cat_adj, sk_adj
 
 
 def power_adj(adj, dim, p):
@@ -272,13 +274,14 @@ class SkeletonDataset(Dataset, ABC):
         self.sample = sample
 
         self.num_joints = 25 if 'ntu' in self.name else 18
-        self.skeleton_ = skeleton_parts(num_joints=self.num_joints,
+        self.skeleton_, self.sk_adj = skeleton_parts(num_joints=self.num_joints,
                                        dataset=self.name)
         self.training_subjects = [1, 2, 4, 5, 8, 9, 13, 14, 15, 16, 17, 18, 19, 25, 27, 28, 31, 34, 35,
                                   38, 45, 46, 47, 49, 50, 52, 53, 54, 55, 56, 57, 58, 59, 70, 74, 78,
                                   80, 81, 82, 83, 84, 85, 86, 89, 91, 92, 93, 94, 95, 97, 98, 100, 103]
         # For Cross-View benchmark "xview"
         self.training_setup = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32]
+        self.training_view = [2, 3]
         # self.paris = {
         #     'xview':
         #     # (
@@ -362,7 +365,9 @@ class SkeletonDataset(Dataset, ABC):
         torch_data = pre_normalization(torch_data)
         # torch_data += torch.normal(mean=0, std=0.01, size=torch_data.size())
         # torch_data = gen_bone_data(torch_data, self.paris, self.benchmark)
-        torch_data = gen_bone_data(torch_data, self.skeleton_)
+        bone_data = gen_bone_data(torch_data, self.sk_adj)
+        mv_data = gen_motion_vector(torch_data)
+        torch_data = torch.cat((torch_data, bone_data, mv_data), dim=-1)
         sparse_data = Data(x=torch_data, y=action_class - 1)
 
         return sparse_data
@@ -412,7 +417,7 @@ class SkeletonDataset(Dataset, ABC):
             action_class, subject_id, camera_id, setup_id = resolve_filename(filename)
 
             if self.benchmark == 'xview':
-                is_training = (setup_id in self.training_setup)
+                is_training = (camera_id in self.training_view)
             elif self.benchmark == 'xsub':
                 is_training = (subject_id in self.training_subjects)
             else:

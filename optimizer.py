@@ -160,9 +160,9 @@ class SGD_AGC(Optimizer):
                 max_norm = param_norm * group['clipping']
 
                 # add noise to gradients
-                normal = torch.empty(1).normal_(  # p.shape
+                '''normal = torch.empty(1).normal_(  # p.shape
                     mean=0, std=math.sqrt(self.eta / ((1 + self.t) ** self.gamma))).to(p.device)
-                p.grad += normal
+                p.grad += normal'''
 
                 # Gradient clipping
                 grad_norm = unitwise_norm(p.grad.detach())

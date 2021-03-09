@@ -61,7 +61,7 @@ def make_args():
                         dataset_name='NTU',
                         dataset_root=osp.join(os.getcwd()),
                         load_model=False,
-                        in_channels=3,
+                        in_channels=9,
                         num_enc_layers=5,
                         num_conv_layers=2,
                         weight_decay=4e-5,
