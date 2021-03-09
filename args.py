@@ -7,9 +7,11 @@ def make_args():
     parser = ArgumentParser()
     # general
     parser.add_argument('--dataset_name', dest='dataset_name', default='NTU',
-                        type=str, help='RND3SAT DIMACS')
+                        type=str, help='Dataset Name, e.g., NTU-RGB-D-60, NTU-RGB-D-120')
     parser.add_argument('--dataset_root', dest='dataset_root', default='dataset',
-                        type=str, help='RND3SAT DIMACS')
+                        type=str, help='Path where to access the dataset')
+    parser.add_argument('--benchmark', dest='benchmark', default='xsub',
+                        type=str, help='The cross-view or cross-subject setting')
     parser.add_argument('--loss', dest='loss', default='l2', type=str,
                         help='l2; cross_entropy')
     parser.add_argument('--gpu', dest='use_gpu', default=True, type=bool,
@@ -60,6 +62,7 @@ def make_args():
                         batch_size=32,
                         dataset_name='NTU',
                         dataset_root=osp.join(os.getcwd()),
+                        benchmark='xsub',
                         load_model=False,
                         in_channels=9,
                         num_enc_layers=5,

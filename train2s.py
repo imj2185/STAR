@@ -189,10 +189,10 @@ def main():
     # download and save the dataset
     train_ds = SkeletonDataset(args.dataset_root, name='ntu_60',
                                use_motion_vector=False,
-                               benchmark='xsub', sample='train')
+                               benchmark=args.benchmark, sample='train')
     test_ds = SkeletonDataset(args.dataset_root, name='ntu_60',
                               use_motion_vector=False,
-                              benchmark='xsub', sample='val')
+                              benchmark=args.benchmark, sample='val')
 
     adj = skeleton_parts()[0].to(device)
 
