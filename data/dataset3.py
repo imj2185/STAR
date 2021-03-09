@@ -30,16 +30,15 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 def gen_bone_data(torch_data, adj):
     bone_data = torch.zeros(torch_data.shape).to(torch_data.device)
     bone_data[:, 1:, :] = torch_data[:, adj[0], :] - torch_data[:, adj[1], :]
-    #torch_data = torch.cat((torch_data, bone_data), dim=2)
+    # torch_data = torch.cat((torch_data, bone_data), dim=2)
     return bone_data
 
 
 def gen_motion_vector(torch_data):
     f, n = torch_data.shape[:2]
     t = torch.zeros(f, n, 3)
-    t[:-1, :, :] = torch_data[1:, :, :3] - torch_data[:-1, :, :3] #0 to f-2
-    #t[f, :, :] = torch_data[f+1, :, :] - torch_data[f, :, :] for f-1 times
-    t[f-1,:,:] = t[f-2,:,:]
+    t[:-1, :, :] = torch_data[1:, :, :3] - torch_data[:-1, :, :3]
+    t[f - 1, :, :] = t[f - 2, :, :]
     return t
 
 
@@ -275,7 +274,7 @@ class SkeletonDataset(Dataset, ABC):
 
         self.num_joints = 25 if 'ntu' in self.name else 18
         self.skeleton_, self.sk_adj = skeleton_parts(num_joints=self.num_joints,
-                                       dataset=self.name)
+                                                     dataset=self.name)
         self.training_subjects = [1, 2, 4, 5, 8, 9, 13, 14, 15, 16, 17, 18, 19, 25, 27, 28, 31, 34, 35,
                                   38, 45, 46, 47, 49, 50, 52, 53, 54, 55, 56, 57, 58, 59, 70, 74, 78,
                                   80, 81, 82, 83, 84, 85, 86, 89, 91, 92, 93, 94, 95, 97, 98, 100, 103]
