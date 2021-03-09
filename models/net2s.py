@@ -99,10 +99,10 @@ class DualGraphEncoder(nn.Module, ABC):
             u = rearrange(u, 'n f c -> f n c')
             t = u + t
 
-        t = rearrange(t, 'f n c -> n f c')
+        #t = rearrange(t, 'f n c -> n f c')
         # bi_ = bi[:bi.shape[0]:2**self.num_layers]
         #t = rearrange(self.context_attention(t, batch_index=bi), 'n f c -> f (n c)')  # bi is the shrunk along the batch index
-        t = rearrange(global_mean_pool(t, bi), 'n f c -> f (n c)')
+        t = rearrange(global_mean_pool(t, bi), 'f n c -> f (n c)')
         t = self.mlp_head(t)
         # return fn.sigmoid(t)  # dimension (b, n, oc)
         return t
