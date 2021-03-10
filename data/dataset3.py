@@ -446,19 +446,17 @@ class SkeletonDataset(Dataset, ABC):
                     is_training = (subject_id in self.training_subjects)
                 else:
                     raise ValueError('Invalid benchmark provided: {}'.format(self.benchmark))
-            elif 'kinetic' in self.name:
-                pass  # TODO
 
-            if self.sample == 'train':
-                is_sample = is_training
-            elif self.sample == 'val':
-                is_sample = not is_training
-            else:
-                raise ValueError('Invalid data part provided: {}'.format(self.sample))
+                if self.sample == 'train':
+                    is_sample = is_training
+                elif self.sample == 'val':
+                    is_sample = not is_training
+                else:
+                    raise ValueError('Invalid data part provided: {}'.format(self.sample))
 
-            if is_sample:
-                sample_name.append(file)
-                sample_label.append(action_class - 1)
+                if is_sample:
+                    sample_name.append(file)
+                    sample_label.append(action_class - 1)
 
         pool = Pool(processes=num_processes())
         partial_func = partial(self.read_xyz,
