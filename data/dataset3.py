@@ -431,9 +431,9 @@ class SkeletonDataset(Dataset, ABC):
 
         sparse_data_list = []
         action_class, subject_id, camera_id, setup_id = 0, 0, 0, 0
-        for file in self.raw_file_names:
-            filename = osp.split(file)[-1]
-            if 'ntu' in self.name:
+        if 'ntu' in self.name:
+            for file in self.raw_file_names:
+                filename = osp.split(file)[-1]
                 if filename in ignored_samples:
                     print("Found a missing skeleton!")
                     continue
@@ -453,10 +453,11 @@ class SkeletonDataset(Dataset, ABC):
                     is_sample = not is_training
                 else:
                     raise ValueError('Invalid data part provided: {}'.format(self.sample))
-
                 if is_sample:
                     sample_name.append(file)
                     sample_label.append(action_class - 1)
+        else:
+            sample_name = self.raw_file_names
 
         pool = Pool(processes=num_processes())
         partial_func = partial(self.read_xyz,
