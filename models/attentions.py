@@ -73,6 +73,7 @@ class SparseAttention(nn.Module):
                            training=self.training)
         # sparse matmul, adj as indices and qk as nonzero
         v = spmm_(adj_, alpha, l, l, values)
+        v = fn.dropout(v, p=self.dropout)
         # Make sure that what we return is contiguous
         return v.contiguous()
 
@@ -128,11 +129,11 @@ class AddNorm(nn.Module):
         self.ln = nn.LayerNorm(normalized_shape, elementwise_affine=True)
         self.beta = beta
         if self.beta:
-            self.lin_beta = Linear(3 * normalized_shape, 1, bias=False)
+            self.lin_beta = Linear(3 * normalized_shape, 1, bias=True)
         self.reset_parameters()
 
     def reset_parameters(self):
-        self.ln.reset_parameters()
+        #self.ln.reset_parameters()
         if self.beta:
             self.lin_beta.reset_parameters()
 
@@ -142,7 +143,7 @@ class AddNorm(nn.Module):
             b = b.sigmoid()
             return self.ln(b * x + (1 - b) * self.dropout(y))
 
-        return self.ln(self.dropout(y) + x)
+        return self.ln(self.dropout(y) + x)#self.dropout(y) + x 
 
 
 class MLP(nn.Module):
@@ -173,7 +174,7 @@ class MLP(nn.Module):
 
 
 class FeedForward(nn.Module):
-    def __init__(self, in_channels, hidden_channels, dropout=0.):
+    def __init__(self, in_channels, hidden_channels, dropout=0., init_factor=5):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(in_channels, hidden_channels),
@@ -182,12 +183,33 @@ class FeedForward(nn.Module):
             nn.Linear(hidden_channels, in_channels),
             nn.Dropout(dropout)
         )
+        self.init_factor = init_factor
         self.reset_parameters()
 
     def reset_parameters(self):
+        temp_state_dic = {}
         for layer in self.net:
             if isinstance(layer, nn.Linear):
-                layer.reset_parameters()
+                #layer.reset_parameters()
+                nn.init.xavier_uniform_(layer.weight)
+                nn.init.constant_(layer.bias, 0.)
+        self.fixup_initialization(self.init_factor)
+
+    def fixup_initialization(self, init_factor):
+        temp_state_dic = {}
+        if init_factor:
+            for name, param in self.named_parameters():
+                if name in ["net.0.weight",
+                            "net.3.weight"
+                            ]:
+                    temp_state_dic[name] = (9 * init_factor) ** (- 1. / 4.) * param
+                elif name in ["self_attn.v_proj.weight","encoder_attn.v_proj.weight",]:
+                    temp_state_dic[name] = (9 * init_factor) ** (- 1. / 4.) * (param * (2**0.5))
+
+        for name in self.state_dict():
+            if name not in temp_state_dic:
+                temp_state_dic[name] = self.state_dict()[name]
+        self.load_state_dict(temp_state_dic)
 
     def forward(self, x):
         return self.net(x)
@@ -231,12 +253,14 @@ class SpatialEncoderLayer(nn.Module):
                  mdl_channels=64,
                  heads=8,
                  beta=True,
-                 dropout=None):
+                 dropout=None,
+                 init_factor=5):
         super(SpatialEncoderLayer, self).__init__()
         self.in_channels = in_channels
         self.mdl_channels = mdl_channels
         self.heads = heads
         self.beta = beta
+        self.prenorm=True
         if dropout is None:
             self.dropout = [0.5, 0.5, 0.5, 0.5]   # temp_conv, sparse_attention, add_norm, ffn
         else:
@@ -245,25 +269,32 @@ class SpatialEncoderLayer(nn.Module):
         # self.tree_key_weights = nn.Parameter(torch.randn(in_channels, in_channels), requires_grad=True)
         # self.tree_value_weights = nn.Parameter(torch.randn(in_channels, in_channels), requires_grad=True)
 
-        self.lin_qkv = Linear(in_channels, mdl_channels * 3, bias=False)
+        self.lin_qkv = Linear(in_channels, mdl_channels * 3, bias=True)
 
         self.multi_head_attn = SparseAttention(in_channels=mdl_channels // heads,
                                                attention_dropout=dropout[1])
 
-        self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout[2])
+        self.add_norm_att = AddNorm(self.mdl_channels, False, self.dropout[2])
         self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2])
-        self.ffn = FeedForward(self.mdl_channels, self.mdl_channels, self.dropout[3])
+        self.ffn = FeedForward(self.mdl_channels, self.mdl_channels, self.dropout[3], init_factor)
+        if self.prenorm:
+            self.ln = nn.LayerNorm(self.mdl_channels)
 
         self.reset_parameters()
 
     def reset_parameters(self):
-        self.lin_qkv.reset_parameters()
+        nn.init.xavier_uniform_(self.lin_qkv.weight, gain=1 / math.sqrt(2))
+        #nn.init.xavier_normal_(self.lin_qkv.bias)
+        nn.init.zeros_(self.lin_qkv.bias)
+        '''self.lin_qkv.reset_parameters()
         self.add_norm_att.reset_parameters()
         self.add_norm_ffn.reset_parameters()
-        self.ffn.reset_parameters()
+        self.ffn.reset_parameters()'''
 
     def forward(self, x, adj=None, tree_encoding=None):
         f, n, c = x.shape
+        if self.prenorm:
+            x = self.ln(x)
         query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
 
         # tree_pos_enc_key = torch.matmul(tree_encoding, self.tree_key_weights)
@@ -291,7 +322,8 @@ class TemporalEncoderLayer(nn.Module):
                  mdl_channels=64,
                  heads=8,
                  beta=False,
-                 dropout=0.1):
+                 dropout=0.1,
+                 init_factor=5):
         super(TemporalEncoderLayer, self).__init__()
         self.in_channels = in_channels
         self.mdl_channels = mdl_channels
@@ -302,36 +334,44 @@ class TemporalEncoderLayer(nn.Module):
         else:
             self.dropout = dropout
 
-        self.lin_qkv = Linear(in_channels, mdl_channels * 3, bias=False)
+        self.lin_qkv = Linear(in_channels, mdl_channels * 3, bias=True)
 
         self.multi_head_attn = LinearAttention(in_channels=mdl_channels // heads,
                                                attention_dropout=self.dropout[0])
 
         self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout[2])
         self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2])
-        self.ffn = FeedForward(self.mdl_channels, self.mdl_channels, self.dropout[3])
+        self.ffn = FeedForward(self.mdl_channels, self.mdl_channels, self.dropout[3], init_factor)
+        self.prenorm = True
+
+        if self.prenorm:
+            self.ln = nn.LayerNorm(self.mdl_channels)
 
         self.reset_parameters()
 
     def reset_parameters(self):
-        self.lin_qkv.reset_parameters()
-        self.add_norm_att.reset_parameters()
-        self.add_norm_ffn.reset_parameters()
-        self.ffn.reset_parameters()
+        nn.init.xavier_uniform_(self.lin_qkv.weight, gain=1 / math.sqrt(2))
+        #nn.init.xavier_normal_(self.lin_qkv.bias)
+        nn.init.zeros_(self.lin_qkv.bias)
+        #self.add_norm_att.reset_parameters()
+        #self.add_norm_ffn.reset_parameters()
+        #self.ffn.reset_parameters()
 
     def forward(self, x, bi=None):
         f, n, c = x.shape
-
+        if self.prenorm:
+            x = self.ln(x)
         query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
 
         query = rearrange(query, 'n f (h c) -> n f h c', h=self.heads)
         key = rearrange(key, 'n f (h c) -> n f h c', h=self.heads)
         value = rearrange(value, 'n f (h c) -> n f h c', h=self.heads)
-
+        #layer norm
         t = self.multi_head_attn(query, key, value, bi)
         t = rearrange(t, 'n f h c -> n f (h c)', h=self.heads)
 
         x = self.add_norm_att(x, t)
+
         x = self.add_norm_ffn(x, self.ffn(x))
 
         return x

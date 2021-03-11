@@ -8,6 +8,8 @@ from torch_geometric.nn import global_mean_pool
 
 from models.positional_encoding import SeqPosEncoding
 from .attentions import SpatialEncoderLayer, TemporalEncoderLayer
+from .layers import GlobalContextAttention
+import math
 
 
 class DualGraphEncoder(nn.Module, ABC):
@@ -36,6 +38,7 @@ class DualGraphEncoder(nn.Module, ABC):
         self.num_classes = classes
         self.dropout = drop_rate
         self.trainable_factor = trainable_factor
+        self.hidden_channels = hidden_channels
         # self.bn = nn.BatchNorm1d(hidden_channels * 25, affine=False)
         self.dn = nn.BatchNorm1d(in_channels * 25, affine=True)
         channels = [in_channels] + [hidden_channels] * (num_layers - 1) + [out_channels]
@@ -51,23 +54,33 @@ class DualGraphEncoder(nn.Module, ABC):
             SpatialEncoderLayer(in_channels=channels_[i],
                                 mdl_channels=channels_[i + 1],
                                 heads=num_heads,
-                                dropout=self.drop_rate) for i in range(num_layers)])
+                                dropout=self.drop_rate,
+                                init_factor=num_layers) for i in range(num_layers)])
 
         self.temporal_layers = nn.ModuleList([
             TemporalEncoderLayer(in_channels=channels_[i],
                                  mdl_channels=channels_[i + 1],
                                  heads=num_heads,
-                                 dropout=self.drop_rate) for i in range(num_layers)])
+                                 dropout=self.drop_rate,
+                                 init_factor=num_layers) for i in range(num_layers)])
 
-        # self.context_attention = GlobalContextAttention(in_channels=out_channels)
+        self.context_attention = GlobalContextAttention(in_channels=out_channels)
 
         self.mlp_head = nn.Sequential(
-            nn.LayerNorm(out_channels * num_joints),
+            #nn.LayerNorm(out_channels * num_joints),
             nn.Linear(out_channels * num_joints, out_channels * num_joints),
             # nn.Tanh(),
             nn.LeakyReLU(),
             nn.Linear(out_channels * num_joints, classes)
         )
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.normal_(self.lls.weight, mean=0, std=self.lls.weight.shape[-1] ** -0.5)
+        nn.init.xavier_uniform_(self.mlp_head[0].weight, gain=1 / math.sqrt(2))
+        nn.init.xavier_uniform_(self.mlp_head[2].weight, gain=1 / math.sqrt(2))
+
 
     def forward(self, t, adj, bi):  # t: tensor, adj: dataset.skeleton_
         """
@@ -97,11 +110,11 @@ class DualGraphEncoder(nn.Module, ABC):
             u = rearrange(u, 'n f c -> f n c')
             t = u + t
 
-        # t = rearrange(t, 'f n c -> n f c')
+        t = rearrange(t, 'f n c -> n f c')
         # bi_ = bi[:bi.shape[0]:2**self.num_layers]
-        # t = rearrange(self.context_attention(t, batch_index=bi),
-        # 'n f c -> f (n c)')  # bi is the shrunk along the batch index
-        t = rearrange(global_mean_pool(t, bi), 'f n c -> f (n c)')
+        t = rearrange(self.context_attention(t, batch_index=bi),
+        'n f c -> f (n c)')  # bi is the shrunk along the batch index
+        #t = rearrange(global_mean_pool(t, bi), 'f n c -> f (n c)')
         t = self.mlp_head(t)
         # return fn.sigmoid(t)  # dimension (b, n, oc)
         return t
