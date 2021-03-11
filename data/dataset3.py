@@ -192,7 +192,7 @@ def get_nonzero_std(s):
 
 
 def num_processes():
-    return os.cpu_count() - 4
+    return os.cpu_count() - 2
 
 
 def skeleton_parts(num_joints=25, dataset='ntu', cat=True):
@@ -324,7 +324,15 @@ class SkeletonDataset(Dataset, ABC):
     @property
     def processed_file_names(self):
         if 'kinetics' in self.name:
-            return [f for f in os.listdir(self.processed_dir)]
+            fp = lambda x: osp.join(self.root, 'processed', x)
+            files = [fp(f) for f in os.listdir(self.raw_dir)]
+            processed_data = []
+            for i in files:
+                processed_data.append('{}.pt'.format(i))
+            return processed_data
+            #return [f for f in os.listdir(self.processed_dir) if f !="pre_filter.pt" and f!="pre_transform.pt"]
+            #return [f for f in os.listdir(self.processed_dir)]
+            #return '{}_{}.pt'.format(self.sample, self.name)
         else:
             return '{}_{}_{}.pt'.format(self.benchmark, self.sample, self.name)
 
@@ -377,7 +385,7 @@ class SkeletonDataset(Dataset, ABC):
                 if num_frames == 0:
                     return None, None, None
                 num_persons = max([len(video['data'][i]['skeleton']) for i in range(num_frames)])
-                frames = torch.zeros(num_frames * num_persons, num_joints, num_features)
+                frames = torch.zeros(num_frames * num_persons, self.num_joints, 3)
                 i = 0
                 for data in video['data']:
                     for m, s in enumerate(data['skeleton']):  # m is person id, s is skeleton
@@ -390,7 +398,7 @@ class SkeletonDataset(Dataset, ABC):
                     i += 1
                 t = video['label_index']
             sparse_data = Data(x=frames, y=t)
-            save_name = osp.join(self.processed_dir, '{}.pt'.format(file))
+            save_name = osp.join(self.processed_dir, '{}.pt'.format(filename))
             torch.save(sparse_data, save_name)
         return sparse_data
 
@@ -460,14 +468,15 @@ class SkeletonDataset(Dataset, ABC):
             sample_name = self.raw_file_names
 
         pool = Pool(processes=num_processes())
+
         partial_func = partial(self.read_xyz,
                                sample=self.sample, max_body=4)
 
         progress_bar = tqdm(pool.imap(func=partial_func, iterable=sample_name),
                             total=len(sample_name))
-
         for data in progress_bar:
-            sparse_data_list.append(data)
+            if 'ntu' in self.name:
+                sparse_data_list.append(data)
 
         noisy_sparse_data_list = []
         '''if self.sample == 'train':
@@ -483,7 +492,8 @@ class SkeletonDataset(Dataset, ABC):
             for data in sparse_data_list:
                 noisy_sparse_data_list.append(self.add_noise(data, scale=0.01))'''
 
-        torch.save(sparse_data_list + noisy_sparse_data_list, osp.join(self.processed_dir,
+        if 'ntu' in self.name:
+            torch.save(sparse_data_list + noisy_sparse_data_list, osp.join(self.processed_dir,
                                                                        self.processed_file_names))
 
     def len(self):
@@ -493,12 +503,14 @@ class SkeletonDataset(Dataset, ABC):
             return len(self.data)
 
     def get(self, idx):
+
         if 'kinetics' in self.name:
             if isinstance(idx, int):
                 return torch.load(osp.join(self.processed_dir,
-                                           self.processed_file_names[idx]))
+                                          self.processed_file_names[idx]))
             return [torch.load(osp.join(self.processed_dir,
                                         self.processed_file_names[i])) for i in idx]
+
         return self.data[idx]
 
 
@@ -507,17 +519,18 @@ def test():
     from torch_geometric.data import DataLoader
     parser = ArgumentParser()
     parser.add_argument('--root', dest='root',
-                        default=osp.join(os.getcwd(), 'dataset', 'ntu_60'),
+                        default=osp.join(os.getcwd(), 'dataset', 'kinetics'),
                         type=str, help='Dataset')
     parser.add_argument('--dataset', dest='dataset', default='ntu_60',
                         type=str, help='Dataset')
     args = parser.parse_args()
-    ds = SkeletonDataset(root=os.getcwd(),
-                         name='ntu_60_test',
+    ds = SkeletonDataset(root='/Users/harold/Desktop/APBGCN/kinetics_test',
+                         name='kinetics_test',
                          benchmark='xsub',
                          sample='val')
     loader = DataLoader(ds[0: 8], batch_size=4)
     for b in loader:
+        print(b)
         print(b.x.shape)
 
 
