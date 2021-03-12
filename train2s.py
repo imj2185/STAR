@@ -150,7 +150,7 @@ def run_epoch(data_loader,
                     path = osp.join(os.getcwd(), args.gradflow_dir)
                     if not osp.exists(path):
                         os.mkdir(path)
-                    plot_grad_flow(model.named_parameters(), osp.join(path, '%3d_%d.png' % (epoch_num, i)), writer,
+                    plot_grad_flow(model.named_parameters(), osp.join(path, 'ep%d_it%d.png' % (epoch_num, i)), writer,
                                    step)
 
             # statistics
