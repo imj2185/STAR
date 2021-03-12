@@ -218,8 +218,8 @@ def main():
     # optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     decay_rate = 0.97
     # lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decay_rate)
-    lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=6, cycle_mult=1.0, max_lr=0.2,
-                                                 min_lr=1e-4, warmup_steps=3, gamma=0.3)
+    lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=8, cycle_mult=1.0, max_lr=0.15,
+                                                 min_lr=1e-4, warmup_steps=3, gamma=0.4)
     if args.load_model:
         last_epoch = args.load_epoch
         last_epoch, loss = load_checkpoint(osp.join(args.save_root,
