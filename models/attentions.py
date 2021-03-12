@@ -244,7 +244,7 @@ class SpatialEncoderLayer(nn.Module):
         self.mdl_channels = mdl_channels
         self.heads = heads
         self.beta = beta
-        self.prenorm = True
+        self.prenorm = False
         if dropout is None:
             self.dropout = [0.5, 0.5, 0.5, 0.5]  # temp_conv, sparse_attention, add_norm, ffn
         else:
@@ -326,7 +326,7 @@ class TemporalEncoderLayer(nn.Module):
         self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout[2])
         self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2])
         self.ffn = FeedForward(self.mdl_channels, self.mdl_channels, self.dropout[3], init_factor)
-        self.prenorm = True
+        self.prenorm = False
 
         if self.prenorm:
             self.ln = nn.LayerNorm(self.mdl_channels)
