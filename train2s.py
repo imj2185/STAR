@@ -29,7 +29,7 @@ def plot_grad_flow(named_parameters, path, writer, step):
     empty_grads = []
     # total_norm = 0
     for n, p in named_parameters:
-        if p.requires_grad and not (("bias" in n) or ("norm" in n) or ("bn" in n) or ("gain" in n)):
+        if p.requires_grad and not (("bias" in n) or ("norm" in n) or ("bn" in n) or ("gain" in n) or ("dn" in n)):
             if p.grad is not None:
                 # writer.add_scalar('gradients/' + n, p.grad.norm(2).item(), step)
                 # writer.add_histogram('gradients/' + n, p.grad, step)
@@ -159,15 +159,11 @@ def run_epoch(data_loader,
             total_samples += label.size(0)
             corr = (pred == label)
             correct += corr.double().sum().item()
-            if do_statistics:
+            if not is_train and do_statistics:
                 for j in range(len(label)):
                     gt_list[label[j].item()] += 1
                     cr_list[label[j].item()] += corr[j].item()
                     wr_list[label[j].item()] += not (corr[j].item())
-
-    gif_path = osp.join(os.getcwd(), 'gif_gradlow')
-    if not osp.exists(gif_path):
-        os.mkdir(gif_path)
 
     elapsed = time.time() - start
     accuracy = correct / total_samples * 100.
@@ -222,7 +218,7 @@ def main():
     # optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     decay_rate = 0.97
     # lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decay_rate)
-    lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=6, cycle_mult=1.0, max_lr=0.1,
+    lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=6, cycle_mult=1.0, max_lr=0.2,
                                                  min_lr=1e-4, warmup_steps=3, gamma=0.3)
     if args.load_model:
         last_epoch = args.load_epoch
