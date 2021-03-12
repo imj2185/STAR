@@ -22,6 +22,7 @@ from random import shuffle
 
 matplotlib.use('Agg')
 
+
 def plot_grad_flow(named_parameters, path, writer, step):
     ave_grads = []
     layers = []
@@ -52,6 +53,7 @@ def plot_grad_flow(named_parameters, path, writer, step):
     # plt.close()
     # plt.show()
 
+
 def plot_distribution(gt_list, cr_list, wr_list, path):
     labels = [i for i in range(60)]
     x = np.arange(len(labels))  # the label locations
@@ -59,9 +61,9 @@ def plot_distribution(gt_list, cr_list, wr_list, path):
     width = 0.2  # the width of the bars
 
     fig, ax = plt.subplots()
-    rects1 = ax.bar(x-0.2, gt_list, width, label='gt_list')
+    rects1 = ax.bar(x - 0.2, gt_list, width, label='gt_list')
     rects2 = ax.bar(x, cr_list, width, label='cr_list')
-    rects3 = ax.bar(x+0.2, wr_list, width, label='wr_list')
+    rects3 = ax.bar(x + 0.2, wr_list, width, label='wr_list')
 
     # Add some text for labels, title and custom x-axis tick labels, etc.
     ax.set_ylabel('number of samples')
@@ -233,11 +235,11 @@ def main():
     shuffled_list = [i for i in range(len(train_ds))]
     shuffle(shuffled_list)
     k_fold = chunk_it(shuffled_list, args.cross_k)
-  
+
     for epoch in trange(last_epoch, args.epoch_num + last_epoch):
-        gt_list = [0 for _ in range(60)]
-        cr_list = [0 for _ in range(60)]  
-        wr_list = [0 for _ in range(60)]  
+        gt_list = list(range(args.num_classes))
+        cr_list = list(range(args.num_classes))
+        wr_list = list(range(args.num_classes))
 
         train_ds_ = []
         for i in range(args.cross_k):
@@ -257,7 +259,8 @@ def main():
         writer.add_scalar('params/lr', lr, epoch)
 
         loss, accuracy = run_epoch(train_loader, model, optimizer,
-                                   loss_compute, train_ds_, device, gt_list=gt_list, cr_list=cr_list, wr_list=wr_list, is_train=True, do_statistics=False,
+                                   loss_compute, train_ds_, device, gt_list=gt_list, cr_list=cr_list, wr_list=wr_list,
+                                   is_train=True, do_statistics=False,
                                    desc="Train Epoch {}".format(epoch + 1), args=args, writer=writer, epoch_num=epoch,
                                    adj=adj)
         print('Epoch: {} Evaluating...'.format(epoch + 1))
@@ -272,7 +275,8 @@ def main():
         # Validation
         model.eval()
         loss, accuracy = run_epoch(valid_loader, model, optimizer,
-                                   loss_compute, valid_ds_, device, gt_list=gt_list, cr_list=cr_list, wr_list=wr_list, is_train=False, do_statistics=False,
+                                   loss_compute, valid_ds_, device, gt_list=gt_list, cr_list=cr_list, wr_list=wr_list,
+                                   is_train=False, do_statistics=False,
                                    desc="Valid Epoch {}".format(epoch + 1), args=args, writer=writer, epoch_num=epoch,
                                    adj=adj)
 
@@ -285,12 +289,14 @@ def main():
         if (epoch + 1) % 5 == 0:
             model.eval()
             loss, accuracy = run_epoch(test_loader, model, optimizer,
-                                       loss_compute, test_ds, device, gt_list=gt_list, cr_list=cr_list, wr_list=wr_list, is_train=False, do_statistics=True,
+                                       loss_compute, test_ds, device, gt_list=gt_list, cr_list=cr_list, wr_list=wr_list,
+                                       is_train=False, do_statistics=True,
                                        desc="Final test: ", args=args, writer=writer, epoch_num=epoch, adj=adj)
 
             writer.add_scalar('test/test_loss', loss, epoch + 1)
             writer.add_scalar('test/test_overall_acc', accuracy, epoch + 1)
-            plot_distribution(gt_list=gt_list, cr_list=cr_list, wr_list=wr_list, path=osp.join(os.getcwd(), 'distribution', str(epoch+1) + '.png'))
+            plot_distribution(gt_list=gt_list, cr_list=cr_list, wr_list=wr_list,
+                              path=osp.join(os.getcwd(), 'distribution', str(epoch + 1) + '.png'))
 
     writer.export_scalars_to_json(osp.join(args.log_dir, "all_scalars.json"))
     writer.close()

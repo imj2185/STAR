@@ -10,6 +10,8 @@ def make_args():
                         type=str, help='Dataset Name, e.g., NTU-RGB-D-60, NTU-RGB-D-120')
     parser.add_argument('--dataset_root', dest='dataset_root', default='dataset',
                         type=str, help='Path where to access the dataset')
+    parser.add_argument('--num_classes', dest='num_classes', default=60,
+                        type=int, help='Number of classes')
     parser.add_argument('--benchmark', dest='benchmark', default='xsub',
                         type=str, help='The cross-view or cross-subject setting')
     parser.add_argument('--loss', dest='loss', default='l2', type=str,
@@ -61,6 +63,7 @@ def make_args():
     parser.set_defaults(gpu=True,
                         batch_size=32,
                         dataset_name='NTU',
+                        num_classes=60,
                         dataset_root=osp.join(os.getcwd()),
                         benchmark='xsub',
                         load_model=False,
@@ -69,8 +72,8 @@ def make_args():
                         num_conv_layers=2,
                         weight_decay=4e-5,
                         drop_rate=[0.6, 0.6, 0.6, 0.7],  # linear_attention, sparse_attention, add_norm, ffn
-                        hid_channels=64,
-                        out_channels=64,
+                        hid_channels=32,
+                        out_channels=32,
                         heads=8,
                         data_parallel=False,
                         cross_k=5)
