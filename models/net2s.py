@@ -67,10 +67,10 @@ class DualGraphEncoder(nn.Module, ABC):
 
         self.mlp_head = nn.Sequential(
             nn.LayerNorm(out_channels * num_joints),
-            nn.Linear(out_channels * num_joints, out_channels * num_joints),
+            nn.Linear(out_channels * num_joints, out_channels * num_joints, bias=True),
             # nn.Tanh(),
             nn.LeakyReLU(),
-            nn.Linear(out_channels * num_joints, classes)
+            nn.Linear(out_channels * num_joints, classes, bias=True)
         )
 
         self.reset_parameters()
@@ -80,6 +80,7 @@ class DualGraphEncoder(nn.Module, ABC):
         for layer in self.mlp_head:
             if isinstance(layer, nn.Linear):
                 nn.init.xavier_uniform_(layer.weight, gain=1 / math.sqrt(2))
+                nn.init.constant_(layer.bias, 0.)
 
     def forward(self, t, adj, bi):  # t: tensor, adj: dataset.skeleton_
         """

@@ -219,8 +219,8 @@ class FeedForward(nn.Module):
                             "net.3.weight"
                             ]:
                     temp_state_dic[name] = (9 * init_factor) ** (- 1. / 4.) * param
-                elif name in ["self_attn.v_proj.weight", "encoder_attn.v_proj.weight", ]:
-                    temp_state_dic[name] = (9 * init_factor) ** (- 1. / 4.) * (param * (2 ** 0.5))
+                # elif name in ["self_attn.v_proj.weight", "encoder_attn.v_proj.weight", ]:
+                #     temp_state_dic[name] = (9 * init_factor) ** (- 1. / 4.) * (param * (2 ** 0.5))
 
         for name in self.state_dict():
             if name not in temp_state_dic:
@@ -244,7 +244,7 @@ class SpatialEncoderLayer(nn.Module):
         self.mdl_channels = mdl_channels
         self.heads = heads
         self.beta = beta
-        self.prenorm = False
+        self.pre_norm = False
         if dropout is None:
             self.dropout = [0.5, 0.5, 0.5, 0.5]  # temp_conv, sparse_attention, add_norm, ffn
         else:
@@ -261,7 +261,7 @@ class SpatialEncoderLayer(nn.Module):
         self.add_norm_att = AddNorm(self.mdl_channels, False, self.dropout[2])
         self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2])
         self.ffn = FeedForward(self.mdl_channels, self.mdl_channels, self.dropout[3], init_factor)
-        if self.prenorm:
+        if self.pre_norm:
             self.ln = nn.LayerNorm(self.mdl_channels)
 
         self.reset_parameters()
@@ -275,9 +275,9 @@ class SpatialEncoderLayer(nn.Module):
         self.add_norm_ffn.reset_parameters()
         self.ffn.reset_parameters()'''
 
-    def forward(self, x, adj=None, tree_encoding=None):
+    def forward(self, x, adj=None):  # , tree_encoding=None):
         f, n, c = x.shape
-        if self.prenorm:
+        if self.pre_norm:
             x = self.ln(x)
         query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
 
