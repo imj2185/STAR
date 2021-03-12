@@ -106,7 +106,7 @@ class DualGraphEncoder(nn.Module, ABC):
             u = rearrange(u, 'f n c -> n f c')
             u = self.temporal_layers[i](u, bi)
             u = rearrange(u, 'n f c -> f n c')
-            t = self.cas[i](u + t)
+            t = self.cas[i](u + t, bi)
 
         t = rearrange(t, 'f n c -> n f c')
         # bi_ = bi[:bi.shape[0]:2**self.num_layers]
