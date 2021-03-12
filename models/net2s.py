@@ -77,8 +77,9 @@ class DualGraphEncoder(nn.Module, ABC):
 
     def reset_parameters(self):
         nn.init.normal_(self.lls.weight, mean=0, std=self.lls.weight.shape[-1] ** -0.5)
-        nn.init.xavier_uniform_(self.mlp_head[0].weight, gain=1 / math.sqrt(2))
-        nn.init.xavier_uniform_(self.mlp_head[2].weight, gain=1 / math.sqrt(2))
+        for layer in self.mlp_head:
+            if isinstance(layer, nn.Linear):
+                nn.init.xavier_uniform_(layer.weight, gain=1 / math.sqrt(2))
 
     def forward(self, t, adj, bi):  # t: tensor, adj: dataset.skeleton_
         """
