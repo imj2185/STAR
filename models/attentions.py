@@ -9,7 +9,7 @@ from torch.nn import Linear
 from utility.linalg import BatchedMask, softmax_, spmm_
 from .layers import WSConv1d
 from fast_transformers.feature_maps import elu_feature_map
-from torch_scatter import scatter_sum
+from torch_scatter import scatter_sum, scatter_mean
 
 
 class SparseAttention(nn.Module):
@@ -113,13 +113,55 @@ class LinearAttention(nn.Module):
             q = rearrange(q, 'n l h d -> n h l d')
             k = rearrange(k, 'n l h d -> n h l d')
             kv = torch.matmul(rearrange(k, 'n h l d -> n h l d 1'),
-                              rearrange(values, 'n l h d -> n h l 1 d'))     # N H L D1 D2
+                              rearrange(values, 'n l h d -> n h l 1 d'))  # N H L D1 D2
             kv = scatter_sum(kv, bi, dim=-3).index_select(dim=-3, index=bi)  # N H (L) D1 D2
             k_ = scatter_sum(k, bi, dim=-2).index_select(dim=-2, index=bi)
             z = 1 / torch.sum(q * k_, dim=-1)
             v = torch.matmul(rearrange(q, 'n h l d -> n h l 1 d'),
                              kv).squeeze(dim=-2) * z.unsqueeze(-1)
         return rearrange(v, 'n h l d -> n l h d').contiguous()
+
+
+class GlobalContextAttention(nn.Module):
+    def __init__(self, in_channels):
+        super(GlobalContextAttention, self).__init__()
+        self.in_channels = in_channels
+        self.weight = nn.Parameter(torch.FloatTensor(in_channels, in_channels))
+        nn.init.xavier_normal_(self.weight)
+
+    def forward(self, x, batch_index):
+        """
+        :param x: tensor(joints, frames, channels)
+        :param batch_index: batch index
+        :return: reduced tensor
+        """
+        # Global context
+        gc = torch.matmul(scatter_mean(x, batch_index, dim=1), self.weight)
+        # extended according to batch index
+        gc = torch.tanh(gc).index_select(dim=-2, index=batch_index)  # [..., batch_index, :]
+        gc_ = torch.sigmoid(torch.sum(torch.mul(x, gc), dim=-1, keepdim=True))
+        return scatter_mean(gc_ * x, index=batch_index, dim=1)
+
+
+class ContextAttention(nn.Module):
+    def __init__(self, in_channels):
+        super(ContextAttention, self).__init__()
+        self.in_channels = in_channels
+        self.weight = nn.Parameter(torch.FloatTensor(in_channels, in_channels))
+        nn.init.xavier_normal_(self.weight)
+
+    def forward(self, x, batch_index):
+        """
+        :param x: tensor(joints, frames, channels)
+        :param batch_index: batch index
+        :return: reduced tensor
+        """
+        # Global context
+        gc = torch.matmul(scatter_mean(x, batch_index, dim=0), self.weight)
+        # extended according to batch index
+        gc = torch.tanh(gc).index_select(dim=0, index=batch_index)
+        gc_ = torch.sigmoid(torch.sum(torch.mul(x, gc), dim=-1, keepdim=True))
+        return gc_ * x
 
 
 class AddNorm(nn.Module):
@@ -133,7 +175,7 @@ class AddNorm(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        #self.ln.reset_parameters()
+        # self.ln.reset_parameters()
         if self.beta:
             self.lin_beta.reset_parameters()
 
@@ -143,34 +185,7 @@ class AddNorm(nn.Module):
             b = b.sigmoid()
             return self.ln(b * x + (1 - b) * self.dropout(y))
 
-        return self.ln(self.dropout(y) + x)#self.dropout(y) + x 
-
-
-class MLP(nn.Module):
-    def __init__(self,
-                 in_channels,
-                 out_channels,
-                 hid_channels,
-                 num_layers=2,
-                 bias=True):
-        super(MLP, self).__init__()
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.num_layers = num_layers
-        channels = [in_channels] + \
-                   [hid_channels] * (num_layers - 1) + \
-                   [out_channels]  # [64, 64, 64]
-
-        self.layers = nn.ModuleList([
-            nn.Linear(in_features=channels[i],
-                      out_features=channels[i + 1],
-                      bias=bias) for i in range(num_layers)
-        ])  # weight initialization is done in Linear()
-
-    def forward(self, x):
-        for i in range(self.num_layers - 1):
-            x = fn.relu(self.layers[i](x))
-        return self.layers[-1](x)
+        return self.ln(self.dropout(y) + x)  # self.dropout(y) + x
 
 
 class FeedForward(nn.Module):
@@ -190,7 +205,7 @@ class FeedForward(nn.Module):
         temp_state_dic = {}
         for layer in self.net:
             if isinstance(layer, nn.Linear):
-                #layer.reset_parameters()
+                # layer.reset_parameters()
                 nn.init.xavier_uniform_(layer.weight)
                 nn.init.constant_(layer.bias, 0.)
         self.fixup_initialization(self.init_factor)
@@ -203,8 +218,8 @@ class FeedForward(nn.Module):
                             "net.3.weight"
                             ]:
                     temp_state_dic[name] = (9 * init_factor) ** (- 1. / 4.) * param
-                elif name in ["self_attn.v_proj.weight","encoder_attn.v_proj.weight",]:
-                    temp_state_dic[name] = (9 * init_factor) ** (- 1. / 4.) * (param * (2**0.5))
+                elif name in ["self_attn.v_proj.weight", "encoder_attn.v_proj.weight", ]:
+                    temp_state_dic[name] = (9 * init_factor) ** (- 1. / 4.) * (param * (2 ** 0.5))
 
         for name in self.state_dict():
             if name not in temp_state_dic:
@@ -213,38 +228,6 @@ class FeedForward(nn.Module):
 
     def forward(self, x):
         return self.net(x)
-
-
-class TemporalConv(nn.Module):
-    def __init__(self,
-                 in_channels,
-                 out_channels,
-                 kernel_size,
-                 stride=1,
-                 activation=False,
-                 dropout=0.,
-                 bias=True):
-        super(TemporalConv, self).__init__()
-        pad = int((kernel_size - 1) / 2)
-
-        self.conv = WSConv1d(  # nn.Conv1d
-            in_channels,
-            out_channels,
-            kernel_size=kernel_size,
-            padding=pad,
-            stride=stride,
-            bias=bias)
-
-        self.bn = nn.BatchNorm1d(out_channels)
-        self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(dropout, inplace=True)
-        self.activation = activation
-
-    def forward(self, x):
-        x = self.dropout(x)
-        x = self.bn(self.conv(x))  # B * M, C, T, V
-        # x = self.conv(x)
-        return self.relu(x) if self.activation else x
 
 
 class SpatialEncoderLayer(nn.Module):
@@ -260,9 +243,9 @@ class SpatialEncoderLayer(nn.Module):
         self.mdl_channels = mdl_channels
         self.heads = heads
         self.beta = beta
-        self.prenorm=True
+        self.prenorm = True
         if dropout is None:
-            self.dropout = [0.5, 0.5, 0.5, 0.5]   # temp_conv, sparse_attention, add_norm, ffn
+            self.dropout = [0.5, 0.5, 0.5, 0.5]  # temp_conv, sparse_attention, add_norm, ffn
         else:
             self.dropout = dropout
 
@@ -284,7 +267,7 @@ class SpatialEncoderLayer(nn.Module):
 
     def reset_parameters(self):
         nn.init.xavier_uniform_(self.lin_qkv.weight, gain=1 / math.sqrt(2))
-        #nn.init.xavier_normal_(self.lin_qkv.bias)
+        # nn.init.xavier_normal_(self.lin_qkv.bias)
         nn.init.zeros_(self.lin_qkv.bias)
         '''self.lin_qkv.reset_parameters()
         self.add_norm_att.reset_parameters()
@@ -330,7 +313,7 @@ class TemporalEncoderLayer(nn.Module):
         self.heads = heads
         self.beta = beta
         if dropout is None:
-            self.dropout = [0.5, 0.5, 0.5, 0.5]   # temp_conv, sparse_attention, add_norm, ffn
+            self.dropout = [0.5, 0.5, 0.5, 0.5]  # temp_conv, sparse_attention, add_norm, ffn
         else:
             self.dropout = dropout
 
@@ -351,11 +334,11 @@ class TemporalEncoderLayer(nn.Module):
 
     def reset_parameters(self):
         nn.init.xavier_uniform_(self.lin_qkv.weight, gain=1 / math.sqrt(2))
-        #nn.init.xavier_normal_(self.lin_qkv.bias)
+        # nn.init.xavier_normal_(self.lin_qkv.bias)
         nn.init.zeros_(self.lin_qkv.bias)
-        #self.add_norm_att.reset_parameters()
-        #self.add_norm_ffn.reset_parameters()
-        #self.ffn.reset_parameters()
+        # self.add_norm_att.reset_parameters()
+        # self.add_norm_ffn.reset_parameters()
+        # self.ffn.reset_parameters()
 
     def forward(self, x, bi=None):
         f, n, c = x.shape
@@ -366,7 +349,7 @@ class TemporalEncoderLayer(nn.Module):
         query = rearrange(query, 'n f (h c) -> n f h c', h=self.heads)
         key = rearrange(key, 'n f (h c) -> n f h c', h=self.heads)
         value = rearrange(value, 'n f (h c) -> n f h c', h=self.heads)
-        #layer norm
+        # layer norm
         t = self.multi_head_attn(query, key, value, bi)
         t = rearrange(t, 'n f h c -> n f (h c)', h=self.heads)
 

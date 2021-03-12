@@ -1,15 +1,12 @@
+import math
 from abc import ABC
 
 import torch
 import torch.nn as nn
-# from third_party.performer import SelfAttention
 from einops import rearrange
-from torch_geometric.nn import global_mean_pool
 
 from models.positional_encoding import SeqPosEncoding
-from .attentions import SpatialEncoderLayer, TemporalEncoderLayer
-from .layers import GlobalContextAttention
-import math
+from .attentions import SpatialEncoderLayer, TemporalEncoderLayer, GlobalContextAttention, ContextAttention
 
 
 class DualGraphEncoder(nn.Module, ABC):
@@ -63,11 +60,13 @@ class DualGraphEncoder(nn.Module, ABC):
                                  heads=num_heads,
                                  dropout=self.drop_rate,
                                  init_factor=num_layers) for i in range(num_layers)])
+        self.cas = nn.ModuleList([
+            ContextAttention(in_channels=channels_[i + 1]) for i in range(num_layers)])
 
         self.context_attention = GlobalContextAttention(in_channels=out_channels)
 
         self.mlp_head = nn.Sequential(
-            #nn.LayerNorm(out_channels * num_joints),
+            # nn.LayerNorm(out_channels * num_joints),
             nn.Linear(out_channels * num_joints, out_channels * num_joints),
             # nn.Tanh(),
             nn.LeakyReLU(),
@@ -80,7 +79,6 @@ class DualGraphEncoder(nn.Module, ABC):
         nn.init.normal_(self.lls.weight, mean=0, std=self.lls.weight.shape[-1] ** -0.5)
         nn.init.xavier_uniform_(self.mlp_head[0].weight, gain=1 / math.sqrt(2))
         nn.init.xavier_uniform_(self.mlp_head[2].weight, gain=1 / math.sqrt(2))
-
 
     def forward(self, t, adj, bi):  # t: tensor, adj: dataset.skeleton_
         """
@@ -108,13 +106,13 @@ class DualGraphEncoder(nn.Module, ABC):
             u = rearrange(u, 'f n c -> n f c')
             u = self.temporal_layers[i](u, bi)
             u = rearrange(u, 'n f c -> f n c')
-            t = u + t
+            t = self.cas[i](u + t)
 
         t = rearrange(t, 'f n c -> n f c')
         # bi_ = bi[:bi.shape[0]:2**self.num_layers]
         t = rearrange(self.context_attention(t, batch_index=bi),
-        'n f c -> f (n c)')  # bi is the shrunk along the batch index
-        #t = rearrange(global_mean_pool(t, bi), 'f n c -> f (n c)')
+                      'n f c -> f (n c)')  # bi is the shrunk along the batch index
+        # t = rearrange(global_mean_pool(t, bi), 'f n c -> f (n c)')
         t = self.mlp_head(t)
         # return fn.sigmoid(t)  # dimension (b, n, oc)
         return t

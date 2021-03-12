@@ -11,9 +11,7 @@ from torch.nn import Parameter, Linear
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.nn.inits import glorot, zeros
 from torch_geometric.utils import remove_self_loops, add_self_loops
-from torch_scatter import scatter_mean
 
-# from models.attentions import SeqPosEncoding
 from utility.linalg import batched_spmm, batched_transpose, softmax_
 
 
@@ -179,7 +177,7 @@ class HGAConv(MessagePassing):
             return_attention_weights (bool, optional): If set to :obj:`True`,
                 will additionally return the tuple
                 :obj:`(adj, attention_weights)`, holding the computed
-                attention weights for each edge. (default: :obj:`None`)
+                attention weight for each edge. (default: :obj:`None`)
         """
         h, c = self.heads, self.out_channels
         # assert (not isinstance(adj, Tensor)) and h == len(adj), 'Number of heads is number of adjacency matrices'
@@ -269,34 +267,36 @@ class HGAConv(MessagePassing):
                                              self.out_channels, self.heads)
 
 
-class GlobalContextAttention(nn.Module):
-    def __init__(self, in_channels):
-        super(GlobalContextAttention, self).__init__()
-        self.in_channels = in_channels
-        self.weights = nn.Parameter(torch.FloatTensor(in_channels, in_channels))
-        nn.init.xavier_normal_(self.weights)
+class TemporalConv(nn.Module):
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 kernel_size,
+                 stride=1,
+                 activation=False,
+                 dropout=0.,
+                 bias=True):
+        super(TemporalConv, self).__init__()
+        pad = int((kernel_size - 1) / 2)
 
-    def forward(self, x, batch_index):
-        """
-        :param x: tensor(joints, frames, channels)
-        :param batch_index: batch index
-        :return: reduced tensor
-        """
-        # Global context
-        gc = torch.matmul(scatter_mean(x, batch_index, dim=1), self.weights)
-        gc = torch.tanh(gc)[..., batch_index, :]  # extended according to batch index
-        gc_ = torch.sigmoid(torch.sum(torch.mul(x, gc), dim=-1, keepdim=True))
-        return scatter_mean(gc_ * x, index=batch_index, dim=1)
+        self.conv = WSConv1d(  # nn.Conv1d
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            padding=pad,
+            stride=stride,
+            bias=bias)
 
+        self.bn = nn.BatchNorm1d(out_channels)
+        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(dropout, inplace=True)
+        self.activation = activation
 
-class AddNorm(nn.Module):
-    def __init__(self, normalized_shape, dropout, **kwargs):
-        super(AddNorm, self).__init__(**kwargs)
-        self.dropout = nn.Dropout(dropout)
-        self.ln = nn.LayerNorm(normalized_shape)
-
-    def forward(self, x, y):
-        return self.ln(self.dropout(y) + x)
+    def forward(self, x):
+        x = self.dropout(x)
+        x = self.bn(self.conv(x))  # B * M, C, T, V
+        # x = self.conv(x)
+        return self.relu(x) if self.activation else x
 
 
 class MLP(nn.Module):
@@ -420,14 +420,14 @@ class WSConv1d(nn.Conv1d):
                         \times (\text{kernel\_size} - 1) - 1}{\text{stride}} + 1\right\rfloor
 
     Attributes:
-        weight (Tensor): the learnable weights of the module of shape
+        weight (Tensor): the learnable weight of the module of shape
             :math:`(\text{out\_channels},
             \frac{\text{in\_channels}}{\text{groups}}, \text{kernel\_size})`.
-            The values of these weights are sampled from
+            The values of these weight are sampled from
             :math:`\mathcal{U}(-\sqrt{k}, \sqrt{k})` where
             :math:`k = \frac{groups}{C_\text{in} * \text{kernel\_size}}`
         bias (Tensor):   the learnable bias of the module of shape
-            (out_channels). If :attr:`bias` is ``True``, then the values of these weights are
+            (out_channels). If :attr:`bias` is ``True``, then the values of these weight are
             sampled from :math:`\mathcal{U}(-\sqrt{k}, \sqrt{k})` where
             :math:`k = \frac{groups}{C_\text{in} * \text{kernel\_size}}`
 
@@ -460,6 +460,6 @@ class WSConv1d(nn.Conv1d):
         shift = mean * scale
         return self.weight * scale - shift
 
-    def forward(self, input, eps=1e-4):
+    def forward(self, x, eps=1e-4):
         weight = self.standardize_weight(eps)
-        return fn.conv1d(input, weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
+        return fn.conv1d(x, weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
