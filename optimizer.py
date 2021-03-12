@@ -127,7 +127,7 @@ class SGD_AGC(Optimizer):
                 "Nesterov momentum requires a momentum and zero dampening")
 
         # Annealed Gaussian noise hyper-parameters t, eta, and gamma
-        self.t = 0
+        # self.t = 0
         self.eta = eta
         self.gamma = gamma
 
@@ -174,7 +174,7 @@ class SGD_AGC(Optimizer):
                                           torch.tensor(1e-6).to(grad_norm.device)))
                 p.grad.detach().copy_(torch.where(trigger, clipped_grad, p.grad))
 
-        self.t += 1
+        # self.t += 1
 
         for group in self.param_groups:
             weight_decay = group['weight_decay']
@@ -185,6 +185,8 @@ class SGD_AGC(Optimizer):
             for p in group['params']:
                 if p.grad is None:
                     continue
+                if torch.min(p.grad) < 1e-5:
+                    p.grad += 5e-6
                 d_p = p.grad
                 if weight_decay != 0:
                     d_p = d_p.add(p, alpha=weight_decay)
