@@ -64,7 +64,7 @@ def make_args():
                         batch_size=32,
                         dataset_name='NTU',
                         num_classes=60,
-                        dataset_root=osp.join(os.getcwd()),
+                        dataset_root=osp.join(os.getcwd(), 'dataset/ntu60'),
                         benchmark='xsub',
                         load_model=False,
                         in_channels=9,
