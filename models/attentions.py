@@ -211,7 +211,8 @@ class FeedForward(nn.Module):
         self.fixup_initialization(self.init_factor)
 
     def fixup_initialization(self, init_factor):
-        temp_state_dic = {}
+        import collections
+        temp_state_dic = collections.OrderedDict()
         if init_factor:
             for name, param in self.named_parameters():
                 if name in ["net.0.weight",
