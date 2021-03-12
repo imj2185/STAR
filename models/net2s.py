@@ -104,7 +104,7 @@ class DualGraphEncoder(nn.Module, ABC):
         # Core pipeline
         for i in range(self.num_layers):
             u = t  # branch
-            t = self.spatial_layers[i](t, adj, tree_encoding=self.tree_encoding)
+            t = self.spatial_layers[i](t, adj)  # , tree_encoding=self.tree_encoding)
             u = rearrange(u, 'f n c -> n f c')
             u = self.temporal_layers[i](u, bi)
             u = rearrange(u, 'n f c -> f n c')
