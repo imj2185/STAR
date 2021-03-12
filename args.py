@@ -12,6 +12,8 @@ def make_args():
                         type=str, help='Path where to access the dataset')
     parser.add_argument('--num_classes', dest='num_classes', default=60,
                         type=int, help='Number of classes')
+    parser.add_argument('--num_joints', dest='num_joints', default=60,
+                        type=int, help='Number of joints')
     parser.add_argument('--benchmark', dest='benchmark', default='xsub',
                         type=str, help='The cross-view or cross-subject setting')
     parser.add_argument('--loss', dest='loss', default='l2', type=str,
@@ -64,6 +66,7 @@ def make_args():
                         batch_size=32,
                         dataset_name='NTU',
                         num_classes=60,
+                        num_joints=25,
                         dataset_root=osp.join(os.getcwd()),
                         benchmark='xsub',
                         load_model=False,
