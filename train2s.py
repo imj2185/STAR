@@ -96,7 +96,7 @@ def run_epoch(data_loader,
               cr_list,
               wr_list,
               is_train=True,
-              is_test=False,
+              do_statistics=False,
               desc=None,
               args=None,
               writer=None,
@@ -104,6 +104,10 @@ def run_epoch(data_loader,
               adj=None):
     """Standard Training and Logging Function
 
+        :param do_statistics:
+        :param wr_list:
+        :param cr_list:
+        :param gt_list:
         :param adj:
         :param data_loader:
         :param model:
@@ -146,7 +150,6 @@ def run_epoch(data_loader,
                         os.mkdir(path)
                     plot_grad_flow(model.named_parameters(), osp.join(path, '%3d_%d.png' % (epoch_num, i)), writer,
                                    step)
-                
 
             # statistics
             running_loss += loss_.item()
@@ -154,11 +157,11 @@ def run_epoch(data_loader,
             total_samples += label.size(0)
             corr = (pred == label)
             correct += corr.double().sum().item()
-            if is_test:
-                for i in range(len(label)):
-                    gt_list[label[i].item()] += 1
-                    cr_list[label[i].item()] += corr[i].item()
-                    wr_list[label[i].item()] += not (corr[i].item())
+            if do_statistics:
+                for j in range(len(label)):
+                    gt_list[label[j].item()] += 1
+                    cr_list[label[j].item()] += corr[j].item()
+                    wr_list[label[j].item()] += not (corr[j].item())
 
     gif_path = osp.join(os.getcwd(), 'gif_gradlow')
     if not osp.exists(gif_path):
@@ -189,17 +192,10 @@ def main():
 
     adj = skeleton_parts()[0].to(device)
 
-    last_train = int(len(train_ds) * 0.8)
-
-    # randomly split into around 80% train, 10% val and 10% train
-    # train_loader = DataLoader(train_ds.data,
-    #                          batch_size=args.batch_size,
-    #                          shuffle=True)
     test_loader = DataLoader(test_ds,
                              batch_size=args.batch_size,
                              shuffle=True)
 
-    # criterion = LabelSmoothing(V, padding_idx=dataset.pad_id, smoothing=0.1)
     # make_model black box
     last_epoch = 0
     model = DualGraphEncoder(in_channels=args.in_channels,
@@ -219,7 +215,6 @@ def main():
 
     model = model.to(device)
     print(sum(p.numel() for p in model.parameters()))
-    # noam_opt = get_std_opt(model, args)
 
     optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
     # optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
@@ -237,7 +232,7 @@ def main():
     loss_compute = nn.CrossEntropyLoss().to(device)
     shuffled_list = [i for i in range(len(train_ds))]
     shuffle(shuffled_list)
-    kfold = chunk_it(shuffled_list, args.cross_k)
+    k_fold = chunk_it(shuffled_list, args.cross_k)
   
     for epoch in trange(last_epoch, args.epoch_num + last_epoch):
         gt_list = [0 for _ in range(60)]
@@ -247,8 +242,8 @@ def main():
         train_ds_ = []
         for i in range(args.cross_k):
             if i != epoch % args.cross_k:
-                train_ds_ += train_ds[kfold[i]]
-        valid_ds_ = train_ds[kfold[epoch % args.cross_k]]
+                train_ds_ += train_ds[k_fold[i]]
+        valid_ds_ = train_ds[k_fold[epoch % args.cross_k]]
 
         train_loader = DataLoader(train_ds_,
                                   batch_size=args.batch_size,
@@ -262,7 +257,7 @@ def main():
         writer.add_scalar('params/lr', lr, epoch)
 
         loss, accuracy = run_epoch(train_loader, model, optimizer,
-                                   loss_compute, train_ds_, device, gt_list=gt_list, cr_list=cr_list, wr_list=wr_list, is_train=True, is_test=False,
+                                   loss_compute, train_ds_, device, gt_list=gt_list, cr_list=cr_list, wr_list=wr_list, is_train=True, do_statistics=False,
                                    desc="Train Epoch {}".format(epoch + 1), args=args, writer=writer, epoch_num=epoch,
                                    adj=adj)
         print('Epoch: {} Evaluating...'.format(epoch + 1))
@@ -277,7 +272,7 @@ def main():
         # Validation
         model.eval()
         loss, accuracy = run_epoch(valid_loader, model, optimizer,
-                                   loss_compute, valid_ds_, device, gt_list=gt_list, cr_list=cr_list, wr_list=wr_list, is_train=False, is_test=False,
+                                   loss_compute, valid_ds_, device, gt_list=gt_list, cr_list=cr_list, wr_list=wr_list, is_train=False, do_statistics=False,
                                    desc="Valid Epoch {}".format(epoch + 1), args=args, writer=writer, epoch_num=epoch,
                                    adj=adj)
 
@@ -290,13 +285,12 @@ def main():
         if (epoch + 1) % 5 == 0:
             model.eval()
             loss, accuracy = run_epoch(test_loader, model, optimizer,
-                                       loss_compute, test_ds, device, gt_list=gt_list, cr_list=cr_list, wr_list=wr_list, is_train=False, is_test=True,
+                                       loss_compute, test_ds, device, gt_list=gt_list, cr_list=cr_list, wr_list=wr_list, is_train=False, do_statistics=True,
                                        desc="Final test: ", args=args, writer=writer, epoch_num=epoch, adj=adj)
 
             writer.add_scalar('test/test_loss', loss, epoch + 1)
             writer.add_scalar('test/test_overall_acc', accuracy, epoch + 1)
             plot_distribution(gt_list=gt_list, cr_list=cr_list, wr_list=wr_list, path=osp.join(os.getcwd(), 'distribution', str(epoch+1) + '.png'))
-
 
     writer.export_scalars_to_json(osp.join(args.log_dir, "all_scalars.json"))
     writer.close()
