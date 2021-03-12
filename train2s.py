@@ -295,6 +295,8 @@ def main():
 
             writer.add_scalar('test/test_loss', loss, epoch + 1)
             writer.add_scalar('test/test_overall_acc', accuracy, epoch + 1)
+            if not os.path.exists(osp.join(os.getcwd(), 'distribution')):
+                os.mkdir(osp.join(os.getcwd(), 'distribution'))
             plot_distribution(gt_list=gt_list, cr_list=cr_list, wr_list=wr_list,
                               path=osp.join(os.getcwd(), 'distribution', str(epoch + 1) + '.png'))
 
