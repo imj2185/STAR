@@ -67,7 +67,7 @@ def make_args():
                         dataset_name='NTU',
                         num_classes=60,
                         num_joints=25,
-                        dataset_root=osp.join(os.getcwd(), 'raw_kinetics'),
+                        dataset_root=osp.join(os.getcwd()),
                         benchmark='xsub',
                         load_model=False,
                         in_channels=9,

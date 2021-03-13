@@ -53,7 +53,7 @@ def plot_grad_flow(named_parameters, path, writer, step):
     # plt.show()
 
 def plot_distribution(gt_list, cr_list, wr_list, path):
-    labels = [i for i in range(60)]
+    labels = [i+1 for i in range(60)]
     x = np.arange(len(labels))  # the label locations
 
     width = 0.2  # the width of the bars
@@ -67,7 +67,7 @@ def plot_distribution(gt_list, cr_list, wr_list, path):
     ax.set_ylabel('number of samples')
     ax.set_title('Data distribution')
     ax.set_xticks(x)
-    ax.set_xticklabels(labels, rotation="vertical", Fontsize=5)
+    ax.set_xticklabels(labels, rotation="Vertical", Fontsize=5)
     ax.legend()
 
     plt.savefig(path, dpi=300)
@@ -164,10 +164,10 @@ def main():
     # device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     # download and save the dataset
-    train_ds = SkeletonDataset(osp.join(args.dataset_root, 'kinetics_train'), name='kinetics',
+    train_ds = SkeletonDataset(args.dataset_root, name='ntu_60',
                                use_motion_vector=False,
                                benchmark=args.benchmark, sample='train')
-    test_ds = SkeletonDataset(osp.join(args.dataset_root, 'kinetics_val'), name='kinetics',
+    test_ds = SkeletonDataset(args.dataset_root, name='ntu_60',
                               use_motion_vector=False,
                               benchmark=args.benchmark, sample='val')
 
