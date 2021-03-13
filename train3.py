@@ -67,7 +67,7 @@ def plot_distribution(gt_list, cr_list, wr_list, path):
     ax.set_ylabel('number of samples')
     ax.set_title('Data distribution')
     ax.set_xticks(x)
-    ax.set_xticklabels(labels, rotation="Vertical", Fontsize=5)
+    ax.set_xticklabels(labels, rotation="vertical", fontsize=5)
     ax.legend()
 
     plt.savefig(path, dpi=300)
@@ -119,7 +119,7 @@ def run_epoch(data_loader,
         batch = batch.to(device)
         sample, label, bi = batch.x, batch.y, batch.batch
 
-        with torch.set_grad_enabled(is_train):
+        with torch.set_grad_enabled(is_train) and torch.autograd.set_detect_anomaly(True):
             out = model(sample, adj=adj, bi=bi)
             loss = loss_compute(out, label.long())
             loss_ = loss
