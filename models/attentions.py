@@ -68,9 +68,10 @@ class SparseAttention(nn.Module):
             qk = qk[idx]"""
 
         # Compute the attention and the weighted average, adj[0] is cols idx in the same row
-        alpha = fn.dropout(softmax_(softmax_temp * qk, adj[0]),
+        '''alpha = fn.dropout(softmax_(softmax_temp * qk, adj[0]),
                            p=self.dropout,
-                           training=self.training)
+                           training=self.training)'''
+        alpha = softmax_(softmax_temp * qk, adj[0])
         # sparse matmul, adj as indices and qk as nonzero
         v = spmm_(adj_, alpha, l, l, values)
         v = fn.dropout(v, p=self.dropout)
@@ -119,7 +120,9 @@ class LinearAttention(nn.Module):
             z = 1 / torch.sum(q * k_, dim=-1)
             v = torch.matmul(rearrange(q, 'n h l d -> n h l 1 d'),
                              kv).squeeze(dim=-2) * z.unsqueeze(-1)
-        return rearrange(v, 'n h l d -> n l h d').contiguous()
+        #return rearrange(v, 'n h l d -> n l h d').contiguous()
+            v = fn.dropout(rearrange(v, 'n h l d -> n l h d'), p=self.dropout)
+        return v.contiguous()
 
 
 class GlobalContextAttention(nn.Module):

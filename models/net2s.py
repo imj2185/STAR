@@ -67,7 +67,7 @@ class DualGraphEncoder(nn.Module, ABC):
 
         self.mlp_head = nn.Sequential(
             nn.LayerNorm(out_channels * num_joints),
-            nn.Linear(out_channels * num_joints, out_channels * num_joints, bias=True),
+            nn.Linear(out_channels * num_joints, (out_channels * num_joints) // 2, bias=True),
             # nn.Tanh(),
             nn.LeakyReLU(),
             nn.Linear(out_channels * num_joints, classes, bias=True)
@@ -109,6 +109,7 @@ class DualGraphEncoder(nn.Module, ABC):
             u = self.temporal_layers[i](u, bi)
             u = rearrange(u, 'n f c -> f n c')
             # t = self.cas[i](u + t, bi)
+            t = u + t
 
         t = rearrange(t, 'f n c -> n f c')
         # bi_ = bi[:bi.shape[0]:2**self.num_layers]
