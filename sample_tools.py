@@ -22,7 +22,7 @@ def auto_padding(t, size, random_pad=True):
         start = torch.randint(size - t.shape[0], size=[1]) if random_pad else 0
         t_ = torch.zeros([size] + list(t.shape[1:]))
         t_[start: start + t.shape[0], ...] = t
-        return t_
+        return t_.contiguous()
     else:
         return t
 
@@ -35,5 +35,6 @@ def random_choose(t, size, auto_pad=True):
         return t if not auto_pad else auto_padding(t, size, True)
     else:
         start = torch.randint(f - size)
-        return t[start: start + size, ...]
+        return t[start: start + size, ...].contiguous()
+
 
