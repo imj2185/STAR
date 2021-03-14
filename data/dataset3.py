@@ -259,6 +259,14 @@ def data_padding(sparse_tensor, pad_length):
                      dim=0)
 
 
+def sort_by_score(t, num_person_out):  # (T, M, V, C) vs. (C T V M)
+    sort_index = (-t[..., 2].sum(dim=0)).argsort(dim=0)
+    for f, s in enumerate(sort_index):  # f for frame, s for person
+        t[f, ...] = t[f, s, ...]   # .transpose((1, 2, 0))
+    t = t[:, :num_person_out, ...]
+    pass
+
+
 class SkeletonDataset(Dataset, ABC):
     def __init__(self,
                  root,
@@ -355,20 +363,26 @@ class SkeletonDataset(Dataset, ABC):
                 video = json.load(f)
                 num_frames = len(video['data'])
                 if num_frames == 0:
-                    return None, None, None
-                num_persons = max([len(video['data'][i]['skeleton']) for i in range(num_frames)])
-                frames = torch.zeros(num_frames * num_persons, self.num_joints, 3)
-                i = 0
-                for data in video['data']:
-                    for m, s in enumerate(data['skeleton']):  # m is person id, s is skeleton
+                    return None
+                num_persons = min(max_body, max([len(video['data'][i]['skeleton']) for i in range(num_frames)]))
+                frames = torch.zeros(num_frames, num_persons, self.num_joints, 3)
+                n = 0
+                for k, data in enumerate(video['data']):  # for each frame
+                    num_persons = len(data['skeleton'])
+                    if num_persons >= max_body:   # skip frames with more than max_body persons
+                        continue
+                    for m, s in enumerate(data['skeleton']):  # m is person id, s is its skeleton
                         if len(s) == 0:
                             continue
                         ft = torch.tensor([s['pose'][0::2],  # x
                                            s['pose'][1::2],  # y
                                            s['score']])
-                        frames[i + m * num_frames] = ft.transpose(1, 0)
-                    i += 1
+                        frames[n, m, ...] = ft.transpose(1, 0)
+                    n += 1  # k is not equal to n if frame has been skipped (too many persons)
                 t = video['label_index']
+            frames = frames[:n, ...]   # remove empty (skipped) frames
+            frames = sort_by_score(frames)
+            frames = rearrange(frames, 'f m n c -> (m f) n c')
             sparse_data = Data(x=frames, y=t)
             save_name = osp.join(self.processed_dir, '{}.pt'.format(filename))
             torch.save(sparse_data, save_name)
@@ -403,7 +417,7 @@ class SkeletonDataset(Dataset, ABC):
         sample_label = []
 
         sparse_data_list = []
-        action_class, subject_id, camera_id, setup_id = 0, 0, 0, 0
+
         if 'ntu' in self.name:
             is_training = False
             if self.missing_skeleton_path is not None:
@@ -442,7 +456,8 @@ class SkeletonDataset(Dataset, ABC):
         pool = Pool(processes=num_processes())
 
         partial_func = partial(self.read_xyz,
-                               sample=self.sample, max_body=4)
+                               sample=self.sample,
+                               max_body=(4 if 'ntu' in self.name else 5))
 
         progress_bar = tqdm(pool.imap(func=partial_func, iterable=sample_name),
                             total=len(sample_name))

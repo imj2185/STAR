@@ -295,3 +295,27 @@ class CosineAnnealingWarmupRestarts(_LRScheduler):
         self.last_epoch = math.floor(epoch)
         for param_group, lr in zip(self.optimizer.param_groups, self.get_lr()):
             param_group['lr'] = lr
+
+            
+class ZeroOneClipper(object):
+
+    def __init__(self, frequency=5):
+        self.frequency = frequency
+
+    def __call__(self, module):
+        # filter the variables to get the ones you want
+        if hasattr(module, 'weight'):
+            w = module.weight.data
+            w.sub_(torch.min(w)).div_(torch.max(w) - torch.min(w))
+
+
+class MaxOneClipper(object):
+
+    def __init__(self, frequency=1):
+        self.frequency = frequency
+
+    def __call__(self, module):
+        # filter the variables to get the ones you want
+        if hasattr(module, 'weight'):
+            w = module.weight.data
+            w = nn.functional.softmax(w, dim=-1)

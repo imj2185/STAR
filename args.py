@@ -75,9 +75,9 @@ def make_args():
                         num_conv_layers=2,
                         weight_decay=4e-5,
                         drop_rate=[0.6, 0.6, 0.6, 0.7],  # linear_attention, sparse_attention, add_norm, ffn
-                        hid_channels=32,
-                        out_channels=32,
-                        heads=8,
+                        hid_channels=48,
+                        out_channels=48,
+                        heads=6,
                         data_parallel=False,
                         cross_k=5)
 

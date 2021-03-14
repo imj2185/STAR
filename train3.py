@@ -16,7 +16,7 @@ from tqdm import tqdm, trange
 from args import make_args
 from data.dataset3 import SkeletonDataset, skeleton_parts
 from models.net2s import DualGraphEncoder
-from optimizer import SGD_AGC, CosineAnnealingWarmupRestarts
+from optimizer import SGD_AGC, CosineAnnealingWarmupRestarts, ZeroOneClipper, MaxOneClipper
 from utility.helper import make_checkpoint, load_checkpoint
 from random import shuffle
 
@@ -206,6 +206,10 @@ def main():
     # lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decay_rate)
     lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=12, cycle_mult=1.0, max_lr=0.1,
                                                  min_lr=1e-4, warmup_steps=3, gamma=0.4)
+
+    #weight_clipper = ZeroOneClipper()
+    weight_clipper = MaxOneClipper()
+
     if args.load_model:
         last_epoch = args.load_epoch
         last_epoch, loss = load_checkpoint(osp.join(args.save_root,
@@ -214,7 +218,7 @@ def main():
         print("Load Model: ", last_epoch)
 
     loss_compute = nn.CrossEntropyLoss().to(device)
-  
+
     for epoch in trange(last_epoch, args.epoch_num + last_epoch):
         gt_list = [0 for _ in range(60)]
         cr_list = [0 for _ in range(60)]  
@@ -224,32 +228,39 @@ def main():
         lr = optimizer.state_dict()['param_groups'][0]['lr']
         writer.add_scalar('params/lr', lr, epoch)
 
-        loss, accuracy = run_epoch(train_loader, model, optimizer,
+        train_loss, train_accuracy = run_epoch(train_loader, model, optimizer,
                                    loss_compute, train_ds, device, gt_list=gt_list, cr_list=cr_list, wr_list=wr_list, is_train=True, is_test=False,
                                    desc="Train Epoch {}".format(epoch + 1), args=args, writer=writer, epoch_num=epoch,
                                    adj=adj)
         print('Epoch: {} Evaluating...'.format(epoch + 1))
 
         # TODO Save model
-        writer.add_scalar('train/train_loss', loss, epoch + 1)
-        writer.add_scalar('train/train_overall_acc', accuracy, epoch + 1)
+        writer.add_scalar('train/train_loss', train_loss, epoch + 1)
+        writer.add_scalar('train/train_overall_acc', train_accuracy, epoch + 1)
 
         if epoch % args.epoch_save == 0:
-            make_checkpoint(args.save_root, args.save_name, epoch, model, optimizer, loss)
+            make_checkpoint(args.save_root, args.save_name, epoch, model, optimizer, train_loss)
 
         # Validation
         model.eval()
-        loss, accuracy = run_epoch(test_loader, model, optimizer,
+        test_loss, test_accuracy = run_epoch(test_loader, model, optimizer,
                                     loss_compute, test_ds, device, gt_list=gt_list, cr_list=cr_list, wr_list=wr_list, is_train=False, is_test=True,
                                     desc="Final test: ", args=args, writer=writer, epoch_num=epoch, adj=adj)
 
-        writer.add_scalar('test/test_loss', loss, epoch + 1)
-        writer.add_scalar('test/test_overall_acc', accuracy, epoch + 1)
+        writer.add_scalar('test/test_loss', test_loss, epoch + 1)
+        writer.add_scalar('test/test_overall_acc', test_accuracy, epoch + 1)
         plot_distribution(gt_list=gt_list, cr_list=cr_list, wr_list=wr_list, path=osp.join(os.getcwd(), 'distribution', str(epoch+1) + '.png'))
 
         # if epoch > 15:
-        lr_scheduler.step()
 
+        lr_scheduler.step()
+        if train_accuracy - 10 > test_accuracy:
+            #model.apply(weight_clipper)
+            #model.mlp_head[1].apply(weight_clipper)
+            #model.mlp_head[3].apply(weight_clipper)
+            for name, module in model.named_modules():
+                if ('ffn' in name or 'mlp_head'in name) and isinstance(module, nn.Linear):
+                    module.apply(weight_clipper)
 
     writer.export_scalars_to_json(osp.join(args.log_dir, "all_scalars.json"))
     writer.close()
