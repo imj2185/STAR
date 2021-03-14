@@ -209,6 +209,7 @@ def main():
 
     #weight_clipper = ZeroOneClipper()
     weight_clipper = MaxOneClipper()
+
     if args.load_model:
         last_epoch = args.load_epoch
         last_epoch, loss = load_checkpoint(osp.join(args.save_root,
@@ -255,9 +256,11 @@ def main():
         lr_scheduler.step()
         if train_accuracy - 10 > test_accuracy:
             #model.apply(weight_clipper)
-            model.mlp_head[1].apply(weight_clipper)
-            model.mlp_head[3].apply(weight_clipper)
-
+            #model.mlp_head[1].apply(weight_clipper)
+            #model.mlp_head[3].apply(weight_clipper)
+            for name, module in model.named_modules():
+                if ('ffn' in name or 'mlp_head'in name) and isinstance(module, nn.Linear):
+                    module.apply(weight_clipper)
 
     writer.export_scalars_to_json(osp.join(args.log_dir, "all_scalars.json"))
     writer.close()

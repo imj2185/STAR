@@ -318,4 +318,4 @@ class MaxOneClipper(object):
         # filter the variables to get the ones you want
         if hasattr(module, 'weight'):
             w = module.weight.data
-            w = nn.functional.softmax(w)
+            w = nn.functional.softmax(w, dim=-1)
