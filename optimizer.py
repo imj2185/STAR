@@ -185,8 +185,8 @@ class SGD_AGC(Optimizer):
             for p in group['params']:
                 if p.grad is None:
                     continue
-                if torch.min(p.grad) < 1e-5:
-                    p.grad += 5e-6
+                #if torch.min(p.grad) < 1e-5:
+                #    p.grad += 5e-6
                 d_p = p.grad
                 if weight_decay != 0:
                     d_p = d_p.add(p, alpha=weight_decay)

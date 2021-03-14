@@ -168,11 +168,13 @@ class ContextAttention(nn.Module):
 
 
 class AddNorm(nn.Module):
-    def __init__(self, normalized_shape, beta, dropout, **kwargs):
+    def __init__(self, normalized_shape, beta, dropout, post_norm, **kwargs):
         super(AddNorm, self).__init__(**kwargs)
         self.dropout = nn.Dropout(dropout)
-        self.ln = nn.LayerNorm(normalized_shape, elementwise_affine=True)
         self.beta = beta
+        self.post_norm = post_norm
+        if self.post_norm:
+            self.ln = nn.LayerNorm(normalized_shape, elementwise_affine=True)
         if self.beta:
             self.lin_beta = Linear(3 * normalized_shape, 1, bias=True)
         self.reset_parameters()
@@ -188,7 +190,10 @@ class AddNorm(nn.Module):
             b = b.sigmoid()
             return self.ln(b * x + (1 - b) * self.dropout(y))
 
-        return self.ln(self.dropout(y) + x)  # self.dropout(y) + x
+        if self.post_norm:
+            return self.ln(self.dropout(y) + x)  # self.dropout(y) + x
+
+        return self.dropout(y) + x
 
 
 class FeedForward(nn.Module):
@@ -241,13 +246,16 @@ class SpatialEncoderLayer(nn.Module):
                  heads=8,
                  beta=True,
                  dropout=None,
-                 init_factor=5):
+                 init_factor=5,
+                 pre_norm=False,
+                 post_norm=True):
         super(SpatialEncoderLayer, self).__init__()
         self.in_channels = in_channels
         self.mdl_channels = mdl_channels
         self.heads = heads
         self.beta = beta
-        self.pre_norm = False
+        self.pre_norm = pre_norm
+        self.post_norm = post_norm
         if dropout is None:
             self.dropout = [0.5, 0.5, 0.5, 0.5]  # temp_conv, sparse_attention, add_norm, ffn
         else:
@@ -261,11 +269,12 @@ class SpatialEncoderLayer(nn.Module):
         self.multi_head_attn = SparseAttention(in_channels=mdl_channels // heads,
                                                attention_dropout=dropout[1])
 
-        self.add_norm_att = AddNorm(self.mdl_channels, False, self.dropout[2])
-        self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2])
+        self.add_norm_att = AddNorm(self.mdl_channels, False, self.dropout[2], self.post_norm)
+        self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2], self.post_norm)
         self.ffn = FeedForward(self.mdl_channels, self.mdl_channels, self.dropout[3], init_factor)
         if self.pre_norm:
-            self.ln = nn.LayerNorm(self.mdl_channels)
+            self.ln_att = nn.LayerNorm(self.mdl_channels)
+            self.ln_ffn = nn.LayerNorm(self.mdl_channels)
 
         self.reset_parameters()
 
@@ -281,7 +290,7 @@ class SpatialEncoderLayer(nn.Module):
     def forward(self, x, adj=None):  # , tree_encoding=None):
         f, n, c = x.shape
         if self.pre_norm:
-            x = self.ln(x)
+            x = self.ln_att(x)
         query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
 
         # tree_pos_enc_key = torch.matmul(tree_encoding, self.tree_key_weights)
@@ -291,13 +300,15 @@ class SpatialEncoderLayer(nn.Module):
         # value = value + tree_pos_enc_value.unsqueeze(dim=0)
 
         query = rearrange(query, 'f n (h c) -> f n h c', h=self.heads)
-        key = rearrange(key, 'f n(h c) -> f n h c', h=self.heads)
+        key = rearrange(key, 'f n (h c) -> f n h c', h=self.heads)
         value = rearrange(value, 'f n (h c) -> f n h c', h=self.heads)
 
         t = self.multi_head_attn(query, key, value, adj)
         t = rearrange(t, 'f n h c -> f n (h c)', h=self.heads)
 
         x = self.add_norm_att(x, t)
+        if self.pre_norm:
+            x = self.ln_ffn(x)
         x = self.add_norm_ffn(x, self.ffn(x))
 
         return x
@@ -310,12 +321,16 @@ class TemporalEncoderLayer(nn.Module):
                  heads=8,
                  beta=False,
                  dropout=0.1,
-                 init_factor=5):
+                 init_factor=5,
+                 pre_norm=False,
+                 post_norm=True):
         super(TemporalEncoderLayer, self).__init__()
         self.in_channels = in_channels
         self.mdl_channels = mdl_channels
         self.heads = heads
         self.beta = beta
+        self.pre_norm = pre_norm
+        self.post_norm = post_norm
         if dropout is None:
             self.dropout = [0.5, 0.5, 0.5, 0.5]  # temp_conv, sparse_attention, add_norm, ffn
         else:
@@ -326,13 +341,13 @@ class TemporalEncoderLayer(nn.Module):
         self.multi_head_attn = LinearAttention(in_channels=mdl_channels // heads,
                                                attention_dropout=self.dropout[0])
 
-        self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout[2])
-        self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2])
+        self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout[2], self.post_norm)
+        self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2], self.post_norm)
         self.ffn = FeedForward(self.mdl_channels, self.mdl_channels, self.dropout[3], init_factor)
-        self.prenorm = False
 
-        if self.prenorm:
-            self.ln = nn.LayerNorm(self.mdl_channels)
+        if self.pre_norm:
+            self.ln_att = nn.LayerNorm(self.mdl_channels)
+            self.ln_ffn = nn.LayerNorm(self.mdl_channels)
 
         self.reset_parameters()
 
@@ -346,19 +361,20 @@ class TemporalEncoderLayer(nn.Module):
 
     def forward(self, x, bi=None):
         f, n, c = x.shape
-        if self.prenorm:
-            x = self.ln(x)
+        if self.pre_norm:
+            x = self.ln_att(x)
         query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
 
         query = rearrange(query, 'n f (h c) -> n f h c', h=self.heads)
         key = rearrange(key, 'n f (h c) -> n f h c', h=self.heads)
         value = rearrange(value, 'n f (h c) -> n f h c', h=self.heads)
-        # layer norm
+
         t = self.multi_head_attn(query, key, value, bi)
         t = rearrange(t, 'n f h c -> n f (h c)', h=self.heads)
 
         x = self.add_norm_att(x, t)
-
+        if self.pre_norm:
+            x = self.ln_ffn(x)
         x = self.add_norm_ffn(x, self.ffn(x))
 
         return x

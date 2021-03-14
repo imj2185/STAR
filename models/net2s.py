@@ -70,7 +70,7 @@ class DualGraphEncoder(nn.Module, ABC):
             nn.Linear(out_channels * num_joints, (out_channels * num_joints) // 2, bias=True),
             # nn.Tanh(),
             nn.LeakyReLU(),
-            nn.Linear(out_channels * num_joints, classes, bias=True)
+            nn.Linear((out_channels * num_joints) // 2, classes, bias=True)
         )
 
         self.reset_parameters()
