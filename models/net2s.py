@@ -46,20 +46,25 @@ class DualGraphEncoder(nn.Module, ABC):
         self.positional_encoding = SeqPosEncoding(model_dim=hidden_channels)
 
         self.lls = nn.Linear(in_features=channels[0], out_features=channels[1])
+        pre = True
 
         self.spatial_layers = nn.ModuleList([
             SpatialEncoderLayer(in_channels=channels_[i],
                                 mdl_channels=channels_[i + 1],
                                 heads=num_heads,
                                 dropout=self.drop_rate,
-                                init_factor=num_layers) for i in range(num_layers)])
+                                init_factor=num_layers,
+                                pre_norm=pre,
+                                post_norm=(not pre)) for i in range(num_layers)])
 
         self.temporal_layers = nn.ModuleList([
             TemporalEncoderLayer(in_channels=channels_[i],
                                  mdl_channels=channels_[i + 1],
                                  heads=num_heads,
                                  dropout=self.drop_rate,
-                                 init_factor=num_layers) for i in range(num_layers)])
+                                 init_factor=num_layers,
+                                 pre_norm=pre,
+                                 post_norm=(not pre)) for i in range(num_layers)])
         # self.cas = nn.ModuleList([
         #     ContextAttention(in_channels=channels_[i + 1]) for i in range(num_layers)])
 
