@@ -259,6 +259,14 @@ def data_padding(sparse_tensor, pad_length):
                      dim=0)
 
 
+def sort_by_score(t, num_person_out):  # (T, M, V, C) vs. (C T V M)
+    sort_index = (-t[..., 2].sum(dim=0)).argsort(dim=0)
+    for f, s in enumerate(sort_index):  # f for frame, s for person
+        t[f, ...] = t[f, s, ...]   # .transpose((1, 2, 0))
+    t = t[:, :num_person_out, ...]
+    pass
+
+
 class SkeletonDataset(Dataset, ABC):
     def __init__(self,
                  root,
@@ -372,7 +380,9 @@ class SkeletonDataset(Dataset, ABC):
                         frames[n, m, ...] = ft.transpose(1, 0)
                     n += 1  # k is not equal to n if frame has been skipped (too many persons)
                 t = video['label_index']
-            frames = rearrange(frames[:n, ...], 'f m n c -> (m f) n c')
+            frames = frames[:n, ...]   # remove empty (skipped) frames
+            frames = sort_by_score(frames)
+            frames = rearrange(frames, 'f m n c -> (m f) n c')
             sparse_data = Data(x=frames, y=t)
             save_name = osp.join(self.processed_dir, '{}.pt'.format(filename))
             torch.save(sparse_data, save_name)
