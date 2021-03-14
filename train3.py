@@ -171,7 +171,7 @@ def main():
                               use_motion_vector=False,
                               benchmark=args.benchmark, sample='val')
 
-    adj = skeleton_parts()[0].to(device)
+    adj = skeleton_parts(dataset=args.dataset_name)[0].to(device)
 
     train_loader = DataLoader(train_ds.data,
                              batch_size=args.batch_size,
