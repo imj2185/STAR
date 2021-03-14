@@ -361,9 +361,9 @@ class SkeletonDataset(Dataset, ABC):
                 n = 0
                 for k, data in enumerate(video['data']):  # for each frame
                     num_persons = len(data['skeleton'])
-                    if num_persons >= max_body:
+                    if num_persons >= max_body:   # skip frames with more than max_body persons
                         continue
-                    for m, s in enumerate(data['skeleton']):  # m is person id, s is skeleton
+                    for m, s in enumerate(data['skeleton']):  # m is person id, s is its skeleton
                         if len(s) == 0:
                             continue
                         ft = torch.tensor([s['pose'][0::2],  # x
