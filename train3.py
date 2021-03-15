@@ -107,7 +107,6 @@ def run_epoch(data_loader,
     """
     # torch.autograd.set_detect_anomaly(True)
     running_loss = 0.
-    accuracy = 0.
     correct = 0
     total_samples = 0
     start = time.time()
