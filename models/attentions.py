@@ -4,12 +4,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as fn
 from einops import rearrange
-from torch.nn import Linear
-
-from utility.linalg import BatchedMask, softmax_, spmm_
-from .layers import WSConv1d
 from fast_transformers.feature_maps import elu_feature_map
+from torch.nn import Linear
+# from torch_geometric.nn.norm import LayerNorm
+from .layers import LayerNorm
 from torch_scatter import scatter_sum, scatter_mean
+
+from utility.linalg import softmax_, spmm_
 
 
 class SparseAttention(nn.Module):
@@ -120,7 +121,7 @@ class LinearAttention(nn.Module):
             z = 1 / torch.sum(q * k_, dim=-1)
             v = torch.matmul(rearrange(q, 'n h l d -> n h l 1 d'),
                              kv).squeeze(dim=-2) * z.unsqueeze(-1)
-        #return rearrange(v, 'n h l d -> n l h d').contiguous()
+            # return rearrange(v, 'n h l d -> n l h d').contiguous()
             v = fn.dropout(rearrange(v, 'n h l d -> n l h d'), p=self.dropout)
         return v.contiguous()
 
@@ -174,7 +175,7 @@ class AddNorm(nn.Module):
         self.beta = beta
         self.post_norm = post_norm
         if self.post_norm:
-            self.ln = nn.LayerNorm(normalized_shape, elementwise_affine=True)
+            self.ln = LayerNorm(normalized_shape, affine=True)
         if self.beta:
             self.lin_beta = Linear(3 * normalized_shape, 1, bias=True)
         self.reset_parameters()
@@ -184,14 +185,14 @@ class AddNorm(nn.Module):
         if self.beta:
             self.lin_beta.reset_parameters()
 
-    def forward(self, x, y):
+    def forward(self, x, y, bi=None):
         if self.beta:
             b = self.lin_beta(torch.cat([y, x, y - x], dim=-1))
             b = b.sigmoid()
             return self.ln(b * x + (1 - b) * self.dropout(y))
 
         if self.post_norm:
-            return self.ln(self.dropout(y) + x)  # self.dropout(y) + x
+            return self.ln(self.dropout(y) + x, batch=bi)  # self.dropout(y) + x
 
         return self.dropout(y) + x
 
@@ -346,8 +347,8 @@ class TemporalEncoderLayer(nn.Module):
         self.ffn = FeedForward(self.mdl_channels, self.mdl_channels, self.dropout[3], init_factor)
 
         if self.pre_norm:
-            self.ln_att = nn.LayerNorm(self.mdl_channels)
-            self.ln_ffn = nn.LayerNorm(self.mdl_channels)
+            self.ln_att = LayerNorm(self.mdl_channels)
+            self.ln_ffn = LayerNorm(self.mdl_channels)
 
         self.reset_parameters()
 
@@ -365,16 +366,16 @@ class TemporalEncoderLayer(nn.Module):
             x = self.ln_att(x)
         query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
 
-        query = rearrange(query, 'n f (h c) -> n f h c', h=self.heads)
-        key = rearrange(key, 'n f (h c) -> n f h c', h=self.heads)
-        value = rearrange(value, 'n f (h c) -> n f h c', h=self.heads)
+        query = rearrange(query, 'f n (h c) -> n f h c', h=self.heads)
+        key = rearrange(key, 'f n (h c) -> n f h c', h=self.heads)
+        value = rearrange(value, 'f n (h c) -> n f h c', h=self.heads)
 
         t = self.multi_head_attn(query, key, value, bi)
-        t = rearrange(t, 'n f h c -> n f (h c)', h=self.heads)
+        t = rearrange(t, 'n f h c -> f n (h c)', h=self.heads)
 
-        x = self.add_norm_att(x, t)
+        x = self.add_norm_att(x, t, bi)
         if self.pre_norm:
-            x = self.ln_ffn(x)
-        x = self.add_norm_ffn(x, self.ffn(x))
+            x = self.ln_ffn(x, bi)
+        x = self.add_norm_ffn(x, self.ffn(x), bi)
 
         return x
