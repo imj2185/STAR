@@ -22,6 +22,7 @@ from random import shuffle
 
 matplotlib.use('Agg')
 
+
 def plot_grad_flow(named_parameters, path, writer, step):
     ave_grads = []
     layers = []
@@ -52,16 +53,17 @@ def plot_grad_flow(named_parameters, path, writer, step):
     # plt.close()
     # plt.show()
 
+
 def plot_distribution(gt_list, cr_list, wr_list, path):
-    labels = [i+1 for i in range(60)]
+    labels = [i + 1 for i in range(60)]
     x = np.arange(len(labels))  # the label locations
 
     width = 0.2  # the width of the bars
 
     fig, ax = plt.subplots()
-    rects1 = ax.bar(x-0.2, gt_list, width, label='gt_list')
+    rects1 = ax.bar(x - 0.2, gt_list, width, label='gt_list')
     rects2 = ax.bar(x, cr_list, width, label='cr_list')
-    rects3 = ax.bar(x+0.2, wr_list, width, label='wr_list')
+    rects3 = ax.bar(x + 0.2, wr_list, width, label='wr_list')
 
     # Add some text for labels, title and custom x-axis tick labels, etc.
     ax.set_ylabel('number of samples')
@@ -134,7 +136,7 @@ def run_epoch(data_loader,
                         os.mkdir(path)
                     plot_grad_flow(model.named_parameters(), osp.join(path, '%3d_%d.png' % (epoch_num, i)), writer,
                                    step)
-                
+
             # statistics
             running_loss += loss_.item()
             pred = torch.max(out, 1)[1]
@@ -174,8 +176,8 @@ def main():
     adj = skeleton_parts(dataset=args.dataset_name)[0].to(device)
 
     train_loader = DataLoader(train_ds.data,
-                             batch_size=args.batch_size,
-                             shuffle=True)
+                              batch_size=args.batch_size,
+                              shuffle=True)
     test_loader = DataLoader(test_ds,
                              batch_size=args.batch_size,
                              shuffle=True)
@@ -204,10 +206,10 @@ def main():
     # optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     decay_rate = 0.96
     lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decay_rate)
-    #lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=12, cycle_mult=1.0, max_lr=0.1,
+    # lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=12, cycle_mult=1.0, max_lr=0.1,
     #                                             min_lr=1e-4, warmup_steps=3, gamma=0.4)
 
-    #weight_clipper = ZeroOneClipper()
+    # weight_clipper = ZeroOneClipper()
     weight_clipper = MaxOneClipper()
 
     if args.load_model:
@@ -221,17 +223,19 @@ def main():
 
     for epoch in trange(last_epoch, args.epoch_num + last_epoch):
         gt_list = [0 for _ in range(60)]
-        cr_list = [0 for _ in range(60)]  
-        wr_list = [0 for _ in range(60)]  
+        cr_list = [0 for _ in range(60)]
+        wr_list = [0 for _ in range(60)]
 
         model.train(True)
         lr = optimizer.state_dict()['param_groups'][0]['lr']
         writer.add_scalar('params/lr', lr, epoch)
 
         train_loss, train_accuracy = run_epoch(train_loader, model, optimizer,
-                                   loss_compute, train_ds, device, gt_list=gt_list, cr_list=cr_list, wr_list=wr_list, is_train=True, is_test=False,
-                                   desc="Train Epoch {}".format(epoch + 1), args=args, writer=writer, epoch_num=epoch,
-                                   adj=adj)
+                                               loss_compute, train_ds, device, gt_list=gt_list, cr_list=cr_list,
+                                               wr_list=wr_list, is_train=True, is_test=False,
+                                               desc="Train Epoch {}".format(epoch + 1), args=args, writer=writer,
+                                               epoch_num=epoch,
+                                               adj=adj)
         print('Epoch: {} Evaluating...'.format(epoch + 1))
 
         # TODO Save model
@@ -244,12 +248,14 @@ def main():
         # Validation
         model.eval()
         test_loss, test_accuracy = run_epoch(test_loader, model, optimizer,
-                                    loss_compute, test_ds, device, gt_list=gt_list, cr_list=cr_list, wr_list=wr_list, is_train=False, is_test=True,
-                                    desc="Final test: ", args=args, writer=writer, epoch_num=epoch, adj=adj)
+                                             loss_compute, test_ds, device, gt_list=gt_list, cr_list=cr_list,
+                                             wr_list=wr_list, is_train=False, is_test=True,
+                                             desc="Final test: ", args=args, writer=writer, epoch_num=epoch, adj=adj)
 
         writer.add_scalar('test/test_loss', test_loss, epoch + 1)
         writer.add_scalar('test/test_overall_acc', test_accuracy, epoch + 1)
-        plot_distribution(gt_list=gt_list, cr_list=cr_list, wr_list=wr_list, path=osp.join(os.getcwd(), 'distribution', str(epoch+1) + '.png'))
+        plot_distribution(gt_list=gt_list, cr_list=cr_list, wr_list=wr_list,
+                          path=osp.join(os.getcwd(), 'distribution', str(epoch + 1) + '.png'))
 
         # if epoch > 15:
 
