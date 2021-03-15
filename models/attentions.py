@@ -6,10 +6,11 @@ import torch.nn.functional as fn
 from einops import rearrange
 from fast_transformers.feature_maps import elu_feature_map
 from torch.nn import Linear
+# from torch_geometric.nn.norm import LayerNorm
+from .layers import LayerNorm
 from torch_scatter import scatter_sum, scatter_mean
 
 from utility.linalg import softmax_, spmm_
-from torch_geometric.nn.conv import LayerNorm
 
 
 class SparseAttention(nn.Module):
@@ -120,7 +121,7 @@ class LinearAttention(nn.Module):
             z = 1 / torch.sum(q * k_, dim=-1)
             v = torch.matmul(rearrange(q, 'n h l d -> n h l 1 d'),
                              kv).squeeze(dim=-2) * z.unsqueeze(-1)
-        #return rearrange(v, 'n h l d -> n l h d').contiguous()
+            # return rearrange(v, 'n h l d -> n l h d').contiguous()
             v = fn.dropout(rearrange(v, 'n h l d -> n l h d'), p=self.dropout)
         return v.contiguous()
 
@@ -365,7 +366,7 @@ class TemporalEncoderLayer(nn.Module):
             x = self.ln_att(x)
         query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
 
-        query = rearrange(query,  'f n (h c) -> n f h c', h=self.heads)
+        query = rearrange(query, 'f n (h c) -> n f h c', h=self.heads)
         key = rearrange(key, 'f n (h c) -> n f h c', h=self.heads)
         value = rearrange(value, 'f n (h c) -> n f h c', h=self.heads)
 
