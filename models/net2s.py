@@ -72,10 +72,10 @@ class DualGraphEncoder(nn.Module, ABC):
 
         self.mlp_head = nn.Sequential(
             nn.LayerNorm(out_channels * num_joints),
-            nn.Linear(out_channels * num_joints, (out_channels * num_joints) // 2, bias=True),
+            nn.Linear(out_channels * num_joints, out_channels, bias=True),
             # nn.Tanh(),
             nn.LeakyReLU(),
-            nn.Linear((out_channels * num_joints) // 2, classes, bias=True)
+            nn.Linear(out_channels, classes, bias=True)
         )
 
         self.reset_parameters()
