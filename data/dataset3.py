@@ -259,12 +259,11 @@ def data_padding(sparse_tensor, pad_length):
                      dim=0)
 
 
-def sort_by_score(t, num_person_out):  # (T, M, V, C) vs. (C T V M)
-    sort_index = (-t[..., 2].sum(dim=0)).argsort(dim=0)
-    for f, s in enumerate(sort_index):  # f for frame, s for person
-        t[f, ...] = t[f, s, ...]   # .transpose((1, 2, 0))
-    t = t[:, :num_person_out, ...]
-    pass
+def highest_by_score(t, num_person_out):  # (T, M, V, C) vs. (C T V M)
+    sort_index = (-t[..., -1].sum(dim=0).sum(dim=-1)).argsort(dim=0)
+    # for m, s in enumerate(sort_index):  # m for person, s for person
+    #     t[:, m, ...] = t[:, m, s, ...]   # TODO .transpose((1, 2, 0))
+    return t[:, sort_index[0: num_person_out], ...]
 
 
 class SkeletonDataset(Dataset, ABC):
@@ -381,7 +380,7 @@ class SkeletonDataset(Dataset, ABC):
                     n += 1  # k is not equal to n if frame has been skipped (too many persons)
                 t = video['label_index']
             frames = frames[:n, ...]   # remove empty (skipped) frames
-            frames = sort_by_score(frames)
+            frames = highest_by_score(frames)
             frames = rearrange(frames, 'f m n c -> (m f) n c')
             sparse_data = Data(x=frames, y=t)
             save_name = osp.join(self.processed_dir, '{}.pt'.format(filename))
