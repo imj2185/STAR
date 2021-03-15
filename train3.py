@@ -254,8 +254,8 @@ def main():
 
         writer.add_scalar('test/test_loss', test_loss, epoch + 1)
         writer.add_scalar('test/test_overall_acc', test_accuracy, epoch + 1)
-        plot_distribution(gt_list=gt_list, cr_list=cr_list, wr_list=wr_list,
-                          path=osp.join(os.getcwd(), 'distribution', str(epoch + 1) + '.png'))
+        # plot_distribution(gt_list=gt_list, cr_list=cr_list, wr_list=wr_list,
+        #                   path=osp.join(os.getcwd(), 'distribution', str(epoch + 1) + '.png'))
 
         # if epoch > 15:
 

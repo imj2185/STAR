@@ -170,8 +170,8 @@ class SGD_AGC(Optimizer):
                 trigger = grad_norm > max_norm  # TODO: not working if "grad_norm < max_norm"
 
                 clipped_grad = p.grad * \
-                    (max_norm / torch.max(grad_norm,
-                                          torch.tensor(1e-6).to(grad_norm.device)))
+                               (max_norm / torch.max(grad_norm,
+                                                     torch.tensor(1e-6).to(grad_norm.device)))
                 p.grad.detach().copy_(torch.where(trigger, clipped_grad, p.grad))
 
         # self.t += 1
@@ -185,8 +185,6 @@ class SGD_AGC(Optimizer):
             for p in group['params']:
                 if p.grad is None:
                     continue
-                #if torch.min(p.grad) < 1e-5:
-                #    p.grad += 5e-6
                 d_p = p.grad
                 if weight_decay != 0:
                     d_p = d_p.add(p, alpha=weight_decay)
@@ -296,7 +294,7 @@ class CosineAnnealingWarmupRestarts(_LRScheduler):
         for param_group, lr in zip(self.optimizer.param_groups, self.get_lr()):
             param_group['lr'] = lr
 
-            
+
 class ZeroOneClipper(object):
 
     def __init__(self, frequency=5):
