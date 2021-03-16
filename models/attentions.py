@@ -363,7 +363,7 @@ class TemporalEncoderLayer(nn.Module):
     def forward(self, x, bi=None):
         f, n, c = x.shape
         if self.pre_norm:
-            x = self.ln_att(x)
+            x = self.ln_att(x, bi)
         query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
 
         query = rearrange(query, 'f n (h c) -> n f h c', h=self.heads)

@@ -517,7 +517,6 @@ class LayerNorm(torch.nn.Module):
 
         else:
             batch_size = int(batch.max()) + 1
-
             norm = degree(batch, batch_size, dtype=x.dtype).clamp_(min=1)
             if len(x.shape) == 2:
                 norm = norm.mul_(x.size()[-1]).view(-1, 1)
@@ -525,13 +524,10 @@ class LayerNorm(torch.nn.Module):
                 norm = norm.mul_(x.size()[-1]).view(-1, 1, 1)
 
             mean = scatter_sum(x, batch, dim=0).sum(dim=-1, keepdim=True) / norm
-
             x = x - mean[batch]
-
             var = scatter_sum(x * x, batch, dim=0, dim_size=batch_size
                               ).sum(dim=-1, keepdim=True)
             var = var / norm
-
             out = x / (var.sqrt()[batch] + self.eps)
 
         if self.weight is not None and self.bias is not None:

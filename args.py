@@ -64,7 +64,7 @@ def make_args():
 
     parser.set_defaults(gpu=True,
                         batch_size=32,
-                        dataset_name='NTU',
+                        dataset_name='kinetics',
                         num_classes=60,
                         num_joints=25,
                         dataset_root=osp.join(os.getcwd()),

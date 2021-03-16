@@ -1,9 +1,11 @@
 import os
 import os.path as osp
 import time
+from random import shuffle
 
 import matplotlib
 import matplotlib.pyplot as plt
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -14,8 +16,9 @@ from tqdm import tqdm, trange
 from args import make_args
 from data.dataset3 import SkeletonDataset, skeleton_parts
 from models.net2s import DualGraphEncoder
-from optimizer import SGD_AGC, CosineAnnealingWarmupRestarts, MaxOneClipper
+from optimizer import SGD_AGC, CosineAnnealingWarmupRestarts, ZeroOneClipper, MaxOneClipper
 from utility.helper import make_checkpoint, load_checkpoint
+from random import shuffle
 
 matplotlib.use('Agg')
 
@@ -107,6 +110,7 @@ def run_epoch(data_loader,
     """
     # torch.autograd.set_detect_anomaly(True)
     running_loss = 0.
+    accuracy = 0.
     correct = 0
     total_samples = 0
     start = time.time()
@@ -169,7 +173,7 @@ def main():
                               use_motion_vector=False,
                               benchmark=args.benchmark, sample='val')
 
-    adj = skeleton_parts()[0].to(device)
+    adj = skeleton_parts(dataset=args.dataset_name)[0].to(device)
 
     train_loader = DataLoader(train_ds.data,
                               batch_size=args.batch_size,
@@ -200,10 +204,10 @@ def main():
 
     optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
     # optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    decay_rate = 0.97
-    # lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decay_rate)
-    lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=12, cycle_mult=1.0, max_lr=0.1,
-                                                 min_lr=1e-4, warmup_steps=3, gamma=0.4)
+    decay_rate = 0.96
+    lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decay_rate)
+    # lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=12, cycle_mult=1.0, max_lr=0.1,
+    #                                             min_lr=1e-4, warmup_steps=3, gamma=0.4)
 
     # weight_clipper = ZeroOneClipper()
     weight_clipper = MaxOneClipper()
@@ -250,19 +254,19 @@ def main():
 
         writer.add_scalar('test/test_loss', test_loss, epoch + 1)
         writer.add_scalar('test/test_overall_acc', test_accuracy, epoch + 1)
-        plot_distribution(gt_list=gt_list, cr_list=cr_list, wr_list=wr_list,
-                          path=osp.join(os.getcwd(), 'distribution', str(epoch + 1) + '.png'))
+        # plot_distribution(gt_list=gt_list, cr_list=cr_list, wr_list=wr_list,
+        #                   path=osp.join(os.getcwd(), 'distribution', str(epoch + 1) + '.png'))
 
         # if epoch > 15:
 
         lr_scheduler.step()
-        if train_accuracy - 10 > test_accuracy:
-            # model.apply(weight_clipper)
-            # model.mlp_head[1].apply(weight_clipper)
-            # model.mlp_head[3].apply(weight_clipper)
-            for name, module in model.named_modules():
-                if ('ffn' in name or 'mlp_head' in name) and isinstance(module, nn.Linear):
-                    module.apply(weight_clipper)
+        # if train_accuracy - 10 > test_accuracy:
+        #     model.apply(weight_clipper)
+        #     model.mlp_head[1].apply(weight_clipper)
+        #     model.mlp_head[3].apply(weight_clipper)
+        #     for name, module in model.named_modules():
+        #         if ('ffn' in name or 'mlp_head'in name) and isinstance(module, nn.Linear):
+        #             module.apply(weight_clipper)
 
     writer.export_scalars_to_json(osp.join(args.log_dir, "all_scalars.json"))
     writer.close()
