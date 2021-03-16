@@ -42,6 +42,13 @@ def random_choose(t, size, auto_pad=True):
         return t[start: start + size, ...].contiguous()
 
 
+def choice(t, num_samples, p=None):
+    if p is None:
+        p = torch.ones(t.shape[0]) / t.shape[0]
+    idx = torch.multinomial(p, num_samples)
+    return t[idx]
+
+
 def random_move(t,
                 angle_candidate=None,
                 scale_candidate=None,
@@ -60,5 +67,6 @@ def random_move(t,
     mt = random.choice(move_time_candidate)  # move time
     node = torch.cat([torch.arange(0, f, f * 1. / mt).round().int(), torch.tensor([f])])
     num_nodes = node.shape[0]
-
+    angles = choice(angle_candidate, num_nodes)
+    scales = choice(scale_candidate, num_nodes)
     return
