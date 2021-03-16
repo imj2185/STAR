@@ -32,7 +32,7 @@ def plot_grad_flow(named_parameters, path, writer, step):
         if p.requires_grad and not (("bias" in n) or ("dn" in n) or ("ln" in n) or ("gain" in n)):
             if p.grad is not None:
                 # writer.add_scalar('gradients/' + n, p.grad.norm(2).item(), step)
-                # writer.add_histogram('gradients/' + n, p.grad, step)
+                writer.add_histogram('weights/' + n, p, step)
                 # total_norm += p.grad.data.norm(2).item()
                 layers.append(n)
                 ave_grads.append(p.grad.abs().mean().cpu().item())
@@ -91,7 +91,8 @@ def run_epoch(data_loader,
               args=None,
               writer=None,
               epoch_num=0,
-              adj=None):
+              adj=None,
+              l1_penalty=False):
     """Standard Training and Logging Function
 
         :param adj:
@@ -126,6 +127,13 @@ def run_epoch(data_loader,
             loss = loss_compute(out, label.long())
             loss_ = loss
             if is_train:
+                if l1_penalty:
+                    l1p = torch.nn.L1Loss(size_average=False)
+                    l1_loss = 0
+                    for param in model.parameters():
+                        l1_loss += l1p(param)
+                    factor = 0.9
+                    loss += l1_loss * factor                    #l1_regularization
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
@@ -221,6 +229,7 @@ def main():
         print("Load Model: ", last_epoch)
 
     loss_compute = nn.CrossEntropyLoss().to(device)
+    l1_penalty = False
 
     for epoch in trange(last_epoch, args.epoch_num + last_epoch):
         gt_list = [0 for _ in range(60)]
@@ -236,7 +245,8 @@ def main():
                                                wr_list=wr_list, is_train=True, is_test=False,
                                                desc="Train Epoch {}".format(epoch + 1), args=args, writer=writer,
                                                epoch_num=epoch,
-                                               adj=adj)
+                                               adj=adj,
+                                               l1_penalty=l1_penalty)
         print('Epoch: {} Evaluating...'.format(epoch + 1))
 
         # TODO Save model
@@ -251,7 +261,7 @@ def main():
         test_loss, test_accuracy = run_epoch(test_loader, model, optimizer,
                                              loss_compute, test_ds, device, gt_list=gt_list, cr_list=cr_list,
                                              wr_list=wr_list, is_train=False, is_test=True,
-                                             desc="Final test: ", args=args, writer=writer, epoch_num=epoch, adj=adj)
+                                             desc="Final test: ", args=args, writer=writer, epoch_num=epoch, adj=adj, l1_penalty=l1_penalty)
 
         writer.add_scalar('test/test_loss', test_loss, epoch + 1)
         writer.add_scalar('test/test_overall_acc', test_accuracy, epoch + 1)
@@ -261,7 +271,8 @@ def main():
         # if epoch > 15:
 
         lr_scheduler.step()
-        # if train_accuracy - 10 > test_accuracy:
+        if train_accuracy - 10 > test_accuracy:
+            l1_penalty=True
         #     model.apply(weight_clipper)
         #     model.mlp_head[1].apply(weight_clipper)
         #     model.mlp_head[3].apply(weight_clipper)
