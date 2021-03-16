@@ -102,3 +102,58 @@ def random_move(t,
         new_xy[..., 1] += t_y[i]
         t[i, ..., 0: 2] = new_xy.reshape(-1, 2)
     return t
+
+def random_shift(t):
+    f, n, c = t.shape
+    data_shift = torch.zeros(t.shape)
+    idx = torch.nonzero(((t != 0.).sum(-1).sum(-1) > 0) + 0)
+    size = idx[-1]-idx[0]
+    bias = torch.randint(0, f-size)
+    data_shift[bias:bias+size, ...] = t[idx[0]:idx[-1], ...]
+    return data_shift
+
+
+def openpose_match(t):
+    #C, T, V, M = t.shape
+    t = rearrange('f, m, n, c -> c, f, n, m')
+    c, f, n, m = t.shape
+    assert (c == 3)
+    score = t[2, :, :, :].sum(1)
+    # the rank of body confidence in each frame (shape: T-1, M)
+    rank = (-score[0:f - 1]).argsort(0).reshape(f - 1, m)
+
+    # data of frame 1
+    xy1 = t[0:2, 0:f-1, ...].unsqueeze(-1)
+    # data of frame 2
+    xy2 = t[0:2, 1:f, ...].unsqueeze(-2)
+    # square of distance between frame 1&2 (shape: T-1, M, M)
+    distance = ((xy2 - xy1)**2).sum(axis=2).sum(axis=0)
+
+    # match pose
+    forward_map = torch.zeros((f, m), dtype=int) - 1
+    forward_map[0] = range(m)
+    for p in range(m):
+        choose = (rank == p)
+        forward = distance[choose].argmin(axis=1)
+        for s in range(f - 1):
+            distance[s, :, forward[s]] = torch.inf
+        forward_map[1:][choose] = forward
+    assert (torch.all(forward_map >= 0))
+
+    # string data
+    for s in range(f - 1):
+        forward_map[s + 1] = forward_map[s + 1][forward_map[s]]
+
+    # generate data
+    new_data_torch = torch.zeros(t.shape)
+    for s in range(t):
+        new_data_torch[:, s, :, :] = t[:, s, :, forward_map[
+            s]].transpose(1, 2, 0)
+    t = new_data_torch
+
+    # score sort
+    trace_score = t[2, :, :, :].sum(axis=1).sum(axis=0)
+    rank = (-trace_score).argsort()
+    t = t[:, :, :, rank]
+
+    return rearrange(t, 'c, f, n, m -> f, m, n, c')
