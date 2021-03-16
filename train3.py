@@ -29,7 +29,7 @@ def plot_grad_flow(named_parameters, path, writer, step):
     empty_grads = []
     # total_norm = 0
     for n, p in named_parameters:
-        if p.requires_grad and not (("bias" in n) or ("norm" in n) or ("ln" in n) or ("gain" in n)):
+        if p.requires_grad and not (("bias" in n) or ("dn" in n) or ("ln" in n) or ("gain" in n)):
             if p.grad is not None:
                 # writer.add_scalar('gradients/' + n, p.grad.norm(2).item(), step)
                 # writer.add_histogram('gradients/' + n, p.grad, step)
