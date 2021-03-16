@@ -29,7 +29,7 @@ def plot_grad_flow(named_parameters, path, writer, step):
     empty_grads = []
     # total_norm = 0
     for n, p in named_parameters:
-        if p.requires_grad and not (("bias" in n) or ("norm" in n) or ("bn" in n) or ("gain" in n)):
+        if p.requires_grad and not (("bias" in n) or ("dn" in n) or ("ln" in n) or ("gain" in n)):
             if p.grad is not None:
                 # writer.add_scalar('gradients/' + n, p.grad.norm(2).item(), step)
                 writer.add_histogram('weights/' + n, p, step)
@@ -186,6 +186,7 @@ def main():
     model = DualGraphEncoder(in_channels=args.in_channels,
                              hidden_channels=args.hid_channels,
                              out_channels=args.out_channels,
+                             mlp_head_hidden=args.mlp_head_hidden,
                              num_layers=args.num_enc_layers,
                              num_heads=args.heads,
                              sequential=False,
@@ -204,10 +205,10 @@ def main():
 
     optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
     # optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    decay_rate = 0.96
-    lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decay_rate)
-    # lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=12, cycle_mult=1.0, max_lr=0.1,
-    #                                             min_lr=1e-4, warmup_steps=3, gamma=0.4)
+    # decay_rate = 0.96
+    # lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decay_rate)
+    lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=12, cycle_mult=1.0, max_lr=0.1,
+                                                 min_lr=1e-4, warmup_steps=3, gamma=0.4)
 
     # weight_clipper = ZeroOneClipper()
     weight_clipper = MaxOneClipper()

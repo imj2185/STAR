@@ -43,7 +43,8 @@ def make_args():
     parser.add_argument('--in_channels', dest='in_channels', default=6, type=int)
     parser.add_argument('--hid_channels', dest='hid_channels', default=32, type=int)
     parser.add_argument('--out_channels', dest='out_channels', default=32, type=int)
-    parser.add_argument('--heads', dest='heads', default=32, type=int)
+    parser.add_argument('--mlp_head_hidden', dest='mlp_head_hidden', default=32, type=int)
+    parser.add_argument('--heads', dest='heads', default=8, type=int)
 
     # Training Setting up
     parser.add_argument('--lr', dest='lr', default=0.1, type=float)
@@ -63,8 +64,8 @@ def make_args():
     parser.add_argument('--alpha', dest='alpha', default=0.01, type=float)
 
     parser.set_defaults(gpu=True,
-                        batch_size=32,
-                        dataset_name='kinetics',
+                        batch_size=16,
+                        dataset_name='ntu',
                         num_classes=60,
                         num_joints=25,
                         dataset_root=osp.join(os.getcwd()),
@@ -74,9 +75,10 @@ def make_args():
                         num_enc_layers=5,
                         num_conv_layers=2,
                         weight_decay=4e-5,
-                        drop_rate=[0.6, 0.6, 0.6, 0.7],  # linear_attention, sparse_attention, add_norm, ffn
+                        drop_rate=[0.6, 0.6, 0.6, 0.6],  # linear_attention, sparse_attention, add_norm, ffn
                         hid_channels=48,
                         out_channels=48,
+                        mlp_head_hidden=32,
                         heads=6,
                         data_parallel=False,
                         cross_k=5)
