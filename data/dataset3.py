@@ -91,6 +91,8 @@ def rotate_joints(data, joint_i, joint_j):
         data = torch.matmul(data, rotate_mat.float().transpose(1, 0))  # batched matrix multiplication
     except RuntimeError:
         print("double")
+
+    return data
     # for i_f, frame in enumerate(data):
     #     for i_j, joint in enumerate(frame):
     #         try:
@@ -106,27 +108,27 @@ def pre_normalization(data, z_axis=None, x_axis=None):
     if x_axis is None:
         x_axis = [8, 4]
 
-    index = (data.sum(-1).sum(-1) != 0)  # index of non-zero frames
+    index = (data[:,:,:3].sum(-1).sum(-1) != 0)  # index of non-zero frames
 
     if data.sum() == 0:
         print('empty video without skeleton information')
 
     # print('sub the center joint #1 (spine joint in ntu and neck joint in kinetics)')
     # Use the first person's body center (`1:2` along the nodes dimension)
-    main_body_center = data[: data.shape[0] // 2, 1:2, :].clone()   # (F, V, C) where F = M * T
+    main_body_center = data[: data.shape[0] // 2, 1:2, :3].clone()   # (F, V, C) where F = M * T
     main_body_center = torch.cat([main_body_center] * 2)
-    data -= main_body_center
+    data[...,:3] -= main_body_center
 
     # print('parallel the bone between hip (joint 0) and spine (joint 1) of the first person to the z axis')
-    joint_bottom = data[0, z_axis[0]]
-    joint_top = data[0, z_axis[1]]
-    rotate_joints(data, joint_top, joint_bottom)
+    joint_bottom = data[0, z_axis[0], :3]
+    joint_top = data[0, z_axis[1], :3]
+    data[..., :3] = rotate_joints(data[..., :3], joint_top, joint_bottom)
 
     # print('parallel the bone between right shoulder(joint 8) and
     # left shoulder(joint 4) of the first person to the x axis')
-    joint_r_shoulder = data[0, x_axis[0]]  # (F, N, C) ->
-    joint_l_shoulder = data[0, x_axis[1]]
-    rotate_joints(data, joint_r_shoulder, joint_l_shoulder)
+    joint_r_shoulder = data[0, x_axis[0], :3]  # (F, N, C) ->
+    joint_l_shoulder = data[0, x_axis[1], :3]
+    data[...,:3] = rotate_joints(data[..., :3], joint_r_shoulder, joint_l_shoulder)
 
     return data[index]  # only non-zero frames are returned
 
@@ -171,6 +173,7 @@ def read_skeleton_filter(file):
 def get_nonzero_std(s):
     # `s` has shape (T, V, C)
     # Select valid frames where sum of all nodes is nonzero
+    s = s[:,:,:3]
     s = s[s.sum((1, 2)) != 0]
     if len(s) != 0:
         # Compute sum of standard deviation for all 3 channels as `energy`
@@ -324,14 +327,14 @@ class SkeletonDataset(Dataset, ABC):
             action_class = int(filename[filename.find('A') + 1: filename.find('A') + 4])
             seq_info = read_skeleton_filter(file)
             # Create data tensor of shape: (# persons (M), # frames (T), # nodes (V), # channels (C))
-            data = np.zeros((max_body, seq_info['numFrame'], self.num_joints, 3), dtype=np.float32)
+            data = np.zeros((max_body, seq_info['numFrame'], self.num_joints, 6), dtype=np.float32)
             for n, f in enumerate(seq_info['frameInfo']):
                 # print("frame: ", n)
                 for m, b in enumerate(f['bodyInfo']):
                     # print("person: ", m)
                     for j, v in enumerate(b['jointInfo']):
                         if m < max_body and j < self.num_joints:
-                            data[m, n, j, :] = [v['x'], v['y'], v['z']]
+                            data[m, n, j, :] = [v['x'], v['y'], v['z'], v['orientationX'], v['orientationY'], v['orientationZ']]
 
             # select 2 max energy body
             energy = np.array([get_nonzero_std(x) for x in data])
@@ -345,8 +348,8 @@ class SkeletonDataset(Dataset, ABC):
             torch_data = pre_normalization(torch_data)
             # torch_data += torch.normal(mean=0, std=0.01, size=torch_data.size())
             # torch_data = gen_bone_data(torch_data, self.paris, self.benchmark)
-            bone_data = gen_bone_data(torch_data, self.sk_adj)
-            mv_data = gen_motion_vector(torch_data)
+            bone_data = gen_bone_data(torch_data[...,:3], self.sk_adj)
+            mv_data = gen_motion_vector(torch_data[...,:3])
             torch_data = torch.cat((torch_data, bone_data, mv_data), dim=-1)
             sparse_data = Data(x=torch_data, y=action_class - 1)
         else:
@@ -499,13 +502,13 @@ def test():
     from torch_geometric.data import DataLoader
     parser = ArgumentParser()
     parser.add_argument('--root', dest='root',
-                        default=osp.join(os.getcwd(), 'dataset', 'kinetics'),
+                        default=osp.join(os.getcwd()),
                         type=str, help='Dataset')
     parser.add_argument('--dataset', dest='dataset', default='ntu_60',
                         type=str, help='Dataset')
     args = parser.parse_args()
-    ds = SkeletonDataset(root='/home/feng/Workspace/dataset/kinetics_val',
-                         name='kinetics',
+    ds = SkeletonDataset(root=args.root,
+                         name='ntu',
                          benchmark='xsub',
                          sample='val')
     loader = DataLoader(ds[0: 8], batch_size=4)
