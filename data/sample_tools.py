@@ -1,3 +1,4 @@
+import math
 import random
 
 import torch
@@ -69,4 +70,35 @@ def random_move(t,
     num_nodes = node.shape[0]
     angles = choice(angle_candidate, num_nodes)
     scales = choice(scale_candidate, num_nodes)
-    return
+    transform_x = choice(transform_candidate, num_nodes)
+    transform_y = choice(transform_candidate, num_nodes)
+
+    a = torch.zeros(f)
+    s = torch.zeros(f)
+    t_x = torch.zeros(f)
+    t_y = torch.zeros(f)
+    pi = torch.tensor([math.pi])
+    for i in range(num_nodes - 1):
+        a[node[i]: node[i + 1]] = torch.linspace(angles[i],
+                                                 angles[i + 1],
+                                                 node[i + 1] - node[i]) * pi / 180
+        s[node[i]: node[i + 1]] = torch.linspace(scales[i],
+                                                 scales[i + 1],
+                                                 node[i + 1] - node[i])
+        t_x[node[i]: node[i + 1]] = torch.linspace(transform_x[i],
+                                                   transform_x[i + 1],
+                                                   node[i + 1] - node[i])
+        t_y[node[i]: node[i + 1]] = torch.linspace(transform_y[i],
+                                                   transform_y[i + 1],
+                                                   node[i + 1] - node[i])
+    theta = torch.tensor([[torch.cos(a) * s, -torch.sin(a) * s],
+                          [torch.sin(a) * s, torch.cos(a) * s]]).permute(2, 0, 1)
+
+    # perform transformation
+    for i in range(f):
+        xy = t[i, ..., 0:2]
+        new_xy = torch.dot(theta[..., i], xy.transpose(-1, -2))
+        new_xy[..., 0] += t_x[i]
+        new_xy[..., 1] += t_y[i]
+        t[i, ..., 0: 2] = new_xy.reshape(-1, 2)
+    return t
