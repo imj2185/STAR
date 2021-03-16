@@ -296,6 +296,11 @@ class SkeletonDataset(Dataset, ABC):
         if 'ntu' in self.name:
             path = osp.join(self.processed_dir, self.processed_file_names)
             self.data = torch.load(path)
+        elif 'kinetic' in self.name:
+            if self.cached_processed_file_names is None:
+                self.cached_processed_file_names = self.processed_file_names
+        else:
+            raise RuntimeError("Not supported")
 
     @property
     def processed_file_names(self):
