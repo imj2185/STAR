@@ -108,16 +108,16 @@ def pre_normalization(data, z_axis=None, x_axis=None):
     if x_axis is None:
         x_axis = [8, 4]
 
-    index = (data[:,:,:3].sum(-1).sum(-1) != 0)  # index of non-zero frames
+    index = (data[:, :, :3].sum(-1).sum(-1) != 0)  # index of non-zero frames
 
     if data.sum() == 0:
         print('empty video without skeleton information')
 
     # print('sub the center joint #1 (spine joint in ntu and neck joint in kinetics)')
     # Use the first person's body center (`1:2` along the nodes dimension)
-    main_body_center = data[: data.shape[0] // 2, 1:2, :3].clone()   # (F, V, C) where F = M * T
+    main_body_center = data[: data.shape[0] // 2, 1:2, :3].clone()  # (F, V, C) where F = M * T
     main_body_center = torch.cat([main_body_center] * 2)
-    data[...,:3] -= main_body_center
+    data[..., :3] -= main_body_center
 
     # print('parallel the bone between hip (joint 0) and spine (joint 1) of the first person to the z axis')
     joint_bottom = data[0, z_axis[0], :3]
@@ -128,7 +128,7 @@ def pre_normalization(data, z_axis=None, x_axis=None):
     # left shoulder(joint 4) of the first person to the x axis')
     joint_r_shoulder = data[0, x_axis[0], :3]  # (F, N, C) ->
     joint_l_shoulder = data[0, x_axis[1], :3]
-    data[...,:3] = rotate_joints(data[..., :3], joint_r_shoulder, joint_l_shoulder)
+    data[..., :3] = rotate_joints(data[..., :3], joint_r_shoulder, joint_l_shoulder)
 
     return data[index]  # only non-zero frames are returned
 
@@ -173,7 +173,7 @@ def read_skeleton_filter(file):
 def get_nonzero_std(s):
     # `s` has shape (T, V, C)
     # Select valid frames where sum of all nodes is nonzero
-    s = s[:,:,:3]
+    s = s[:, :, :3]
     s = s[s.sum((1, 2)) != 0]
     if len(s) != 0:
         # Compute sum of standard deviation for all 3 channels as `energy`
@@ -255,7 +255,7 @@ def data_padding(sparse_tensor, pad_length):
                      dim=0)
 
 
-def highest_by_score(t, num_person_out):  # (T, M, V, C) vs. (C T V M)
+def highest_by_score(t, num_person_out=2):  # (T, M, V, C) vs. (C T V M)
     sort_index = (-t[..., -1].sum(dim=0).sum(dim=-1)).argsort(dim=0)
     # for m, s in enumerate(sort_index):  # m for person, s for person
     #     t[:, m, ...] = t[:, m, s, ...]   # TODO .transpose((1, 2, 0))
@@ -317,8 +317,8 @@ class SkeletonDataset(Dataset, ABC):
     @property
     def raw_file_names(self):
         if self.cached_raw_file_names is None:
-            fp = lambda x: osp.join(self.root, 'raw', x)
-            self.cached_raw_file_names = [fp(f) for f in os.listdir(self.raw_dir)]  # if osp.isfile(fp(f))]
+            p = (lambda x: osp.join(self.root, 'raw', x))
+            self.cached_raw_file_names = [p(f) for f in os.listdir(self.raw_dir)]  # if osp.isfile(fp(f))]
         return self.cached_raw_file_names
 
     @property
@@ -339,7 +339,8 @@ class SkeletonDataset(Dataset, ABC):
                     # print("person: ", m)
                     for j, v in enumerate(b['jointInfo']):
                         if m < max_body and j < self.num_joints:
-                            data[m, n, j, :] = [v['x'], v['y'], v['z'], v['orientationX'], v['orientationY'], v['orientationZ']]
+                            data[m, n, j, :] = [v['x'], v['y'], v['z'], v['orientationX'], v['orientationY'],
+                                                v['orientationZ']]
 
             # select 2 max energy body
             energy = np.array([get_nonzero_std(x) for x in data])
@@ -353,8 +354,8 @@ class SkeletonDataset(Dataset, ABC):
             torch_data = pre_normalization(torch_data)
             # torch_data += torch.normal(mean=0, std=0.01, size=torch_data.size())
             # torch_data = gen_bone_data(torch_data, self.paris, self.benchmark)
-            bone_data = gen_bone_data(torch_data[...,:3], self.sk_adj)
-            mv_data = gen_motion_vector(torch_data[...,:3])
+            bone_data = gen_bone_data(torch_data[..., :3], self.sk_adj)
+            mv_data = gen_motion_vector(torch_data[..., :3])
             torch_data = torch.cat((torch_data, bone_data, mv_data), dim=-1)
             sparse_data = Data(x=torch_data, y=action_class - 1)
         else:
@@ -369,7 +370,7 @@ class SkeletonDataset(Dataset, ABC):
                 n = 0
                 for k, data in enumerate(video['data']):  # for each frame
                     num_persons = len(data['skeleton'])
-                    if num_persons >= max_body:   # skip frames with more than max_body persons
+                    if num_persons >= max_body:  # skip frames with more than max_body persons
                         continue
                     for m, s in enumerate(data['skeleton']):  # m is person id, s is its skeleton
                         if len(s) == 0:
@@ -380,8 +381,8 @@ class SkeletonDataset(Dataset, ABC):
                         frames[n, m, ...] = ft.transpose(1, 0)
                     n += 1  # k is not equal to n if frame has been skipped (too many persons)
                 t = video['label_index']
-            frames = frames[:n, ...]   # remove empty (skipped) frames
-            frames = highest_by_score(frames)
+            frames = frames[:n, ...]  # remove empty (skipped) frames
+            frames = highest_by_score(frames, num_person_out=2)
             frames = rearrange(frames, 'f m n c -> (m f) n c')
             sparse_data = Data(x=frames, y=t)
             save_name = osp.join(self.processed_dir, '{}.pt'.format(filename))

@@ -39,7 +39,7 @@ def random_choose(t, size, auto_pad=True):
     elif f < size:
         return t if not auto_pad else auto_padding(t, size, True)
     else:
-        s = torch.randint(f - size, (1, ))
+        s = torch.randint(f - size, (1,))
         return t[s: s + size, ...].contiguous()
 
 
@@ -50,7 +50,7 @@ def choice(t, num_samples, p=None):
     return t[idx]
 
 
-def random_move(t,
+def random_move(t,  # tensor(F, M, N, C)
                 angle_candidate=None,
                 scale_candidate=None,
                 transform_candidate=None,
@@ -64,44 +64,48 @@ def random_move(t,
     if angle_candidate is None:
         angle_candidate = [-10., -5., 0., 5., 10.]
     # input dimension
-    f, n, c = t.shape
+    if len(t.shape) == 3:
+        t = rearrange(t, '(m f) n c -> m n f c', m=2)
+    else:
+        t = rearrange(t, 'f m n c -> m n f c')
+    m, n, f, c = t.shape  # we need to treat f and c dimensions
     mt = random.choice(move_time_candidate)  # move time
-    node = torch.cat([torch.arange(0, f, f * 1. / mt).round().int(), torch.tensor([f])])
-    num_nodes = node.shape[0]
-    angles = choice(angle_candidate, num_nodes)
-    scales = choice(scale_candidate, num_nodes)
-    transform_x = choice(transform_candidate, num_nodes)
-    transform_y = choice(transform_candidate, num_nodes)
+    nodes = torch.cat([torch.arange(0, f, f * 1. / mt).round().int(), torch.tensor([f])])
+    num_nodes = nodes.shape[0]
+    angles = choice(torch.tensor(angle_candidate), num_nodes)
+    scales = choice(torch.tensor(scale_candidate), num_nodes)
+    transform_x = choice(torch.tensor(transform_candidate), num_nodes)
+    transform_y = choice(torch.tensor(transform_candidate), num_nodes)
 
     a = torch.zeros(f)
     s = torch.zeros(f)
     t_x = torch.zeros(f)
     t_y = torch.zeros(f)
     pi = torch.tensor([math.pi])
+
     for i in range(num_nodes - 1):
-        a[node[i]: node[i + 1]] = torch.linspace(angles[i],
-                                                 angles[i + 1],
-                                                 node[i + 1] - node[i]) * pi / 180
-        s[node[i]: node[i + 1]] = torch.linspace(scales[i],
-                                                 scales[i + 1],
-                                                 node[i + 1] - node[i])
-        t_x[node[i]: node[i + 1]] = torch.linspace(transform_x[i],
-                                                   transform_x[i + 1],
-                                                   node[i + 1] - node[i])
-        t_y[node[i]: node[i + 1]] = torch.linspace(transform_y[i],
-                                                   transform_y[i + 1],
-                                                   node[i + 1] - node[i])
+        a[nodes[i]: nodes[i + 1]] = torch.linspace(angles[i],
+                                                   angles[i + 1],
+                                                   nodes[i + 1] - nodes[i]) * pi / 180
+        s[nodes[i]: nodes[i + 1]] = torch.linspace(scales[i],
+                                                   scales[i + 1],
+                                                   nodes[i + 1] - nodes[i])
+        t_x[nodes[i]: nodes[i + 1]] = torch.linspace(transform_x[i],
+                                                     transform_x[i + 1],
+                                                     nodes[i + 1] - nodes[i])
+        t_y[nodes[i]: nodes[i + 1]] = torch.linspace(transform_y[i],
+                                                     transform_y[i + 1],
+                                                     nodes[i + 1] - nodes[i])
+    # theta dimension: (c', c, f) -> (f, c, c')
     theta = torch.tensor([[torch.cos(a) * s, -torch.sin(a) * s],
-                          [torch.sin(a) * s, torch.cos(a) * s]]).permute(2, 0, 1)
+                          [torch.sin(a) * s, torch.cos(a) * s]]).permute(2, 1, 0)
 
     # perform transformation
-    for i in range(f):
-        xy = t[i, ..., 0:2]
-        new_xy = torch.dot(theta[..., i], xy.transpose(-1, -2))
-        new_xy[..., 0] += t_x[i]
-        new_xy[..., 1] += t_y[i]
-        t[i, ..., 0: 2] = new_xy.reshape(-1, 2)
-    return t
+    xy = torch.matmul(t[..., :2].unsqueeze(-2), theta)  # (m, n, f, 1, c) \times (f, c, c')
+    xy = xy.squeeze(-2)  # ('m, n, f, 1, c -> m, n, f, c')
+    t[..., 0:2] = xy + torch.stack([t_x, t_y]).transpose(1, 0)  # (2, f) -> (f, 2)
+
+    return t.permute(2, 0, 1, 3)  # tensor(M, N, F, C) -> (F, M, N, C)
 
 
 def random_shift(t):
@@ -109,7 +113,7 @@ def random_shift(t):
     data_shift = torch.zeros(t.shape)
     idx = torch.nonzero(((t != 0.).sum(-1).sum(-1) > 0) + 0)
     size = idx[-1] - idx[0]
-    bias = torch.randint(f - size, (1, ))
+    bias = torch.randint(f - size, (1,))
     data_shift[bias: bias + size, ...] = t[idx[0]: idx[-1], ...]
     return data_shift
 
