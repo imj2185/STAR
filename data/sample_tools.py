@@ -77,25 +77,14 @@ def random_move(t,  # tensor(F, M, N, C)
     transform_x = choice(torch.tensor(transform_candidate), num_nodes)
     transform_y = choice(torch.tensor(transform_candidate), num_nodes)
 
-    a = torch.zeros(f)
-    s = torch.zeros(f)
-    t_x = torch.zeros(f)
-    t_y = torch.zeros(f)
+    a, s, t_x, t_y = torch.zeros(f), torch.zeros(f), torch.zeros(f), torch.zeros(f)
     pi = torch.tensor([math.pi])
 
     for i in range(num_nodes - 1):
-        a[nodes[i]: nodes[i + 1]] = torch.linspace(angles[i],
-                                                   angles[i + 1],
-                                                   nodes[i + 1] - nodes[i]) * pi / 180
-        s[nodes[i]: nodes[i + 1]] = torch.linspace(scales[i],
-                                                   scales[i + 1],
-                                                   nodes[i + 1] - nodes[i])
-        t_x[nodes[i]: nodes[i + 1]] = torch.linspace(transform_x[i],
-                                                     transform_x[i + 1],
-                                                     nodes[i + 1] - nodes[i])
-        t_y[nodes[i]: nodes[i + 1]] = torch.linspace(transform_y[i],
-                                                     transform_y[i + 1],
-                                                     nodes[i + 1] - nodes[i])
+        a[nodes[i]: nodes[i + 1]] = torch.linspace(angles[i], angles[i + 1], nodes[i + 1] - nodes[i]) * pi / 180
+        s[nodes[i]: nodes[i + 1]] = torch.linspace(scales[i], scales[i + 1], nodes[i + 1] - nodes[i])
+        t_x[nodes[i]: nodes[i + 1]] = torch.linspace(transform_x[i], transform_x[i + 1], nodes[i + 1] - nodes[i])
+        t_y[nodes[i]: nodes[i + 1]] = torch.linspace(transform_y[i], transform_y[i + 1], nodes[i + 1] - nodes[i])
     # theta dimension: (c', c, f) -> (f, c, c')
     theta = torch.tensor([[torch.cos(a) * s, -torch.sin(a) * s],
                           [torch.sin(a) * s, torch.cos(a) * s]]).permute(2, 1, 0)
