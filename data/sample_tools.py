@@ -39,8 +39,8 @@ def random_choose(t, size, auto_pad=True):
     elif f < size:
         return t if not auto_pad else auto_padding(t, size, True)
     else:
-        start = torch.randint(f - size)
-        return t[start: start + size, ...].contiguous()
+        s = torch.randint(f - size, (1, ))
+        return t[s: s + size, ...].contiguous()
 
 
 def choice(t, num_samples, p=None):
@@ -109,19 +109,19 @@ def random_shift(t):
     data_shift = torch.zeros(t.shape)
     idx = torch.nonzero(((t != 0.).sum(-1).sum(-1) > 0) + 0)
     size = idx[-1] - idx[0]
-    bias = torch.randint(0, f - size)
+    bias = torch.randint(f - size, (1, ))
     data_shift[bias: bias + size, ...] = t[idx[0]: idx[-1], ...]
     return data_shift
 
 
 def openpose_match(t):
     # C, T, V, M = t.shape
-    t = rearrange('f, m, n, c -> c, f, n, m')
+    t = rearrange(t, 'f, m, n, c -> c, f, n, m')
     c, f, n, m = t.shape
     assert (c == 3)
     score = t[2, :, :, :].sum(1)
     # the rank of body confidence in each frame (shape: T-1, M)
-    rank = (-score[0:f - 1]).argsort(0).reshape(f - 1, m)
+    rank = (-score[0: f - 1]).argsort(0).reshape(f - 1, m)
 
     # data of frame 1
     xy1 = t[0:2, 0:f - 1, ...].unsqueeze(-1)
