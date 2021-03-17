@@ -64,7 +64,7 @@ def make_args():
     parser.add_argument('--alpha', dest='alpha', default=0.01, type=float)
 
     parser.set_defaults(gpu=True,
-                        batch_size=16,
+                        batch_size=32,
                         dataset_name='ntu',
                         num_classes=60,
                         num_joints=25,
@@ -72,13 +72,13 @@ def make_args():
                         benchmark='xsub',
                         load_model=False,
                         in_channels=9,
-                        num_enc_layers=5,
+                        num_enc_layers=7,
                         num_conv_layers=2,
                         weight_decay=4e-5,
-                        drop_rate=[0.6, 0.6, 0.6, 0.6],  # linear_attention, sparse_attention, add_norm, ffn
+                        drop_rate=[0.5, 0.5, 0.5, 0.5],  # linear_attention, sparse_attention, add_norm, ffn
                         hid_channels=48,
                         out_channels=48,
-                        mlp_head_hidden=32,
+                        mlp_head_hidden=48,
                         heads=6,
                         data_parallel=False,
                         cross_k=5)

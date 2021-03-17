@@ -16,7 +16,7 @@ from tqdm import tqdm, trange
 from args import make_args
 from data.dataset3 import SkeletonDataset, skeleton_parts
 from models.net2s import DualGraphEncoder
-from optimizer import SGD_AGC, CosineAnnealingWarmupRestarts, ZeroOneClipper, MaxOneClipper
+from optimizer import SGD_AGC, CosineAnnealingWarmupRestarts, ZeroOneClipper, MaxOneClipper, LabelSmoothingCrossEntropy
 from utility.helper import make_checkpoint, load_checkpoint
 from random import shuffle
 
@@ -228,7 +228,7 @@ def main():
                                            model, optimizer)
         print("Load Model: ", last_epoch)
 
-    loss_compute = nn.CrossEntropyLoss().to(device)
+    loss_compute = LabelSmoothingCrossEntropy().to(device)
     l1_penalty = False
 
     for epoch in trange(last_epoch, args.epoch_num + last_epoch):
