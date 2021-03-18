@@ -272,7 +272,7 @@ class SpatialEncoderLayer(nn.Module):
 
         self.add_norm_att = AddNorm(self.mdl_channels, False, self.dropout[2], self.post_norm)
         self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2], self.post_norm)
-        self.ffn = FeedForward(self.mdl_channels, self.mdl_channels, self.dropout[3], init_factor)
+        self.ffn = FeedForward(self.mdl_channels, self.mdl_channels // 2, self.dropout[3], init_factor)
         if self.pre_norm:
             self.ln_att = nn.LayerNorm(self.mdl_channels)
             self.ln_ffn = nn.LayerNorm(self.mdl_channels)
@@ -344,7 +344,7 @@ class TemporalEncoderLayer(nn.Module):
 
         self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout[2], self.post_norm)
         self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2], self.post_norm)
-        self.ffn = FeedForward(self.mdl_channels, self.mdl_channels, self.dropout[3], init_factor)
+        self.ffn = FeedForward(self.mdl_channels, self.mdl_channels // 2, self.dropout[3], init_factor)
 
         if self.pre_norm:
             self.ln_att = LayerNorm(self.mdl_channels)

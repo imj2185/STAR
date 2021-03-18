@@ -271,7 +271,7 @@ def main():
         # if epoch > 15:
 
         lr_scheduler.step()
-        if train_accuracy - 10 > test_accuracy:
+        if train_accuracy - 5 > test_accuracy:
             l1_penalty=True
         #     model.apply(weight_clipper)
         #     model.mlp_head[1].apply(weight_clipper)

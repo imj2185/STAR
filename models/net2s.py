@@ -8,6 +8,8 @@ from einops import rearrange
 from models.positional_encoding import SeqPosEncoding
 from .attentions import SpatialEncoderLayer, TemporalEncoderLayer, GlobalContextAttention, ContextAttention
 
+from .layers import LayerNorm
+
 
 class DualGraphEncoder(nn.Module, ABC):
     def __init__(self,
@@ -47,7 +49,8 @@ class DualGraphEncoder(nn.Module, ABC):
         self.positional_encoding = SeqPosEncoding(model_dim=hidden_channels)
 
         self.lls = nn.Linear(in_features=channels[0], out_features=channels[1])
-        pre = True
+        pre = False
+        post = False
 
         self.spatial_layers = nn.ModuleList([
             SpatialEncoderLayer(in_channels=channels_[i],
@@ -56,7 +59,7 @@ class DualGraphEncoder(nn.Module, ABC):
                                 dropout=self.drop_rate,
                                 init_factor=num_layers,
                                 pre_norm=pre,
-                                post_norm=(not pre)) for i in range(num_layers)])
+                                post_norm=post) for i in range(num_layers)])
 
         self.temporal_layers = nn.ModuleList([
             TemporalEncoderLayer(in_channels=channels_[i],
@@ -65,9 +68,10 @@ class DualGraphEncoder(nn.Module, ABC):
                                  dropout=self.drop_rate,
                                  init_factor=num_layers,
                                  pre_norm=pre,
-                                 post_norm=(not pre)) for i in range(num_layers)])
+                                 post_norm=post) for i in range(num_layers)])
         # self.cas = nn.ModuleList([
         #     ContextAttention(in_channels=channels_[i + 1]) for i in range(num_layers)])
+        self.lns = nn.ModuleList([LayerNorm(in_channels=channels_[i + 1]) for i in range(num_layers)])
 
         self.context_attention = GlobalContextAttention(in_channels=out_channels)
 
@@ -114,6 +118,8 @@ class DualGraphEncoder(nn.Module, ABC):
             u = self.temporal_layers[i](u, bi)
             # t = self.cas[i](u + t, bi)
             t = u + t
+            t = self.lns[i](t, bi)
+            
 
         t = rearrange(t, 'f n c -> n f c')
         # bi_ = bi[:bi.shape[0]:2**self.num_layers]
