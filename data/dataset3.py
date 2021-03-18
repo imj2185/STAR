@@ -317,7 +317,7 @@ class SkeletonDataset(Dataset, ABC):
     @property
     def raw_file_names(self):
         if self.cached_raw_file_names is None:
-            fp = lambda x: osp.join(self.root, 'raw', x)
+            fp = (lambda x: osp.join(self.root, 'raw', x))
             self.cached_raw_file_names = [fp(f) for f in os.listdir(self.raw_dir)]  # if osp.isfile(fp(f))]
         return self.cached_raw_file_names
 
@@ -495,11 +495,10 @@ class SkeletonDataset(Dataset, ABC):
 
     def get(self, idx):
         if 'kinetics' in self.name:
+            fs = (lambda f: osp.join(self.processed_dir, self.processed_file_names[f]))
             if isinstance(idx, int):
-                return torch.load(osp.join(self.processed_dir,
-                                           self.processed_file_names[idx]))
-            return [torch.load(osp.join(self.processed_dir,
-                                        self.processed_file_names[i])) for i in idx]
+                return torch.load(fs(idx))
+            return [fs(i) for i in idx]
 
         return self.data[idx]
 
