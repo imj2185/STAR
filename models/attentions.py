@@ -98,10 +98,6 @@ class LinearAttention(nn.Module):
         self.gaussian_feature = partial(gaussian_orthogonal_random_matrix,
                                         nb_columns=in_channels) if use_gaussian_feature else None
         self.use_generalized_kernel = use_generalized_kernel
-        # self.feature_map = partial(generalized_kernel,
-        #                            projection_matrix=self.gaussian_feature,
-        #                            kernel_fn=torch.nn.ELU()) if use_generalized_kernel else \
-        #     partial(softmax_kernel, )
 
     def forward(self, queries, keys, values, bi=None):
         n, l, h, e = queries.shape  # batch, n_heads, length, depth
