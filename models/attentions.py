@@ -105,11 +105,8 @@ class LinearAttention(nn.Module):
 
     def forward(self, queries, keys, values, bi=None):
         n, l, h, e = queries.shape  # batch, n_heads, length, depth
-        nb_features = int(e * math.log(e))
+        nb_features = int(e * math.log(e)) if l < e else l
         gaussian_feature = self.gaussian_feature(nb_features=nb_features, device=queries.device)
-        # _, _, s, d = values.shape
-        softmax_temp = self.softmax_temp or (e ** -0.25)  # TODO: how to use this?
-        (queries, keys) = map(lambda x: x * softmax_temp, (queries, keys))
         feature_map = partial(generalized_kernel,
                               projection_matrix=gaussian_feature,
                               kernel_fn=torch.nn.ELU()) if self.use_generalized_kernel \
