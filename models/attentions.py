@@ -1,4 +1,5 @@
 import math
+from functools import partial
 
 import torch
 import torch.nn as nn
@@ -8,6 +9,7 @@ from fast_transformers.feature_maps import elu_feature_map
 from torch.nn import Linear
 # from torch_geometric.nn.norm import LayerNorm
 from .layers import LayerNorm
+from .kernels import generalized_kernel, softmax_kernel, gaussian_orthogonal_random_matrix
 from torch_scatter import scatter_sum, scatter_mean
 
 from utility.linalg import softmax_, spmm_
@@ -84,7 +86,8 @@ class LinearAttention(nn.Module):
     def __init__(self,
                  in_channels,
                  softmax_temp=None,
-                 feature_map=None,
+                 use_generalized_kernel=False,
+                 use_gaussian_feature=False,
                  eps=1e-6,
                  attention_dropout=0.1):
         super(LinearAttention, self).__init__()
@@ -92,19 +95,27 @@ class LinearAttention(nn.Module):
         self.softmax_temp = softmax_temp
         self.dropout = attention_dropout
         self.eps = eps
-        self.feature_map = (
-            feature_map(in_channels) if feature_map else
-            elu_feature_map(query_dims=in_channels)
-        )
+        self.gaussian_feature = partial(gaussian_orthogonal_random_matrix,
+                                        nb_columns=in_channels) if use_gaussian_feature else None
+        self.use_generalized_kernel = use_generalized_kernel
+        # self.feature_map = partial(generalized_kernel,
+        #                            projection_matrix=self.gaussian_feature,
+        #                            kernel_fn=torch.nn.ELU()) if use_generalized_kernel else \
+        #     partial(softmax_kernel, )
 
     def forward(self, queries, keys, values, bi=None):
         n, l, h, e = queries.shape  # batch, n_heads, length, depth
+        nb_features = int(e * math.log(e))
+        gaussian_feature = self.gaussian_feature(nb_features=nb_features, device=queries.device)
         # _, _, s, d = values.shape
         softmax_temp = self.softmax_temp or (e ** -0.25)  # TODO: how to use this?
         (queries, keys) = map(lambda x: x * softmax_temp, (queries, keys))
-        self.feature_map.new_feature_map(queries.device)
-        q = self.feature_map.forward_queries(queries)
-        k = self.feature_map.forward_keys(keys)
+        feature_map = partial(generalized_kernel,
+                              projection_matrix=gaussian_feature,
+                              kernel_fn=torch.nn.ELU()) if self.use_generalized_kernel \
+            else partial(softmax_kernel, projection_matrix=gaussian_feature)
+        q = feature_map(queries)
+        k = feature_map(keys)
 
         if bi is None:
             kv = torch.einsum("nshd, nshm -> nhmd", k, values)
