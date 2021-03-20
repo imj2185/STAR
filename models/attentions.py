@@ -87,7 +87,7 @@ class LinearAttention(nn.Module):
                  in_channels,
                  softmax_temp=None,
                  use_generalized_kernel=False,
-                 use_gaussian_feature=False,
+                 use_gaussian_feature=True,
                  eps=1e-6,
                  attention_dropout=0.1):
         super(LinearAttention, self).__init__()
@@ -101,14 +101,14 @@ class LinearAttention(nn.Module):
 
     def forward(self, queries, keys, values, bi=None):
         n, l, h, e = queries.shape  # batch, n_heads, length, depth
-        nb_features = int(e * math.log(e)) if l < e else l
-        gaussian_feature = self.gaussian_feature(nb_features=nb_features, device=queries.device)
+        nb_features = int(e * math.log(e)) if 64 < e else 64
+        gaussian_feature = self.gaussian_feature(nb_rows=nb_features, device=queries.device)
         feature_map = partial(generalized_kernel,
                               projection_matrix=gaussian_feature,
                               kernel_fn=torch.nn.ELU()) if self.use_generalized_kernel \
             else partial(softmax_kernel, projection_matrix=gaussian_feature)
-        q = feature_map(queries)
-        k = feature_map(keys)
+        q = feature_map(queries) if self.use_generalized_kernel else feature_map(queries, is_query=True)
+        k = feature_map(keys) if self.use_generalized_kernel else feature_map(keys, is_query=False)
 
         if bi is None:
             kv = torch.einsum("nshd, nshm -> nhmd", k, values)
