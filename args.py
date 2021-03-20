@@ -39,6 +39,7 @@ def make_args():
                         type=int)  # implemented via accumulating gradient
     parser.add_argument('--num_enc_layers', dest='num_enc_layers', default=6, type=int)
     parser.add_argument('--num_conv_layers', dest='num_conv_layers', default=3, type=int)
+    parser.add_argument('--num_features', dest='num_features', default=16, type=int)
     parser.add_argument('--activation', dest='activation', default='relu', type=str)
     parser.add_argument('--in_channels', dest='in_channels', default=6, type=int)
     parser.add_argument('--hid_channels', dest='hid_channels', default=32, type=int)
@@ -64,7 +65,7 @@ def make_args():
     parser.add_argument('--alpha', dest='alpha', default=0.01, type=float)
 
     parser.set_defaults(gpu=True,
-                        batch_size=32,
+                        batch_size=16,
                         dataset_name='ntu',
                         num_classes=60,
                         num_joints=25,
@@ -72,13 +73,14 @@ def make_args():
                         benchmark='xsub',
                         load_model=False,
                         in_channels=9,
-                        num_enc_layers=7,
+                        num_enc_layers=5,
                         num_conv_layers=2,
+                        num_features=8,
                         weight_decay=4e-5,
                         drop_rate=[0.5, 0.5, 0.5, 0.5],  # linear_attention, sparse_attention, add_norm, ffn
                         hid_channels=96,
                         out_channels=96,
-                        mlp_head_hidden=64,
+                        mlp_head_hidden=128,
                         heads=8,
                         data_parallel=False,
                         cross_k=5)

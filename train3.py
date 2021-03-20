@@ -197,6 +197,7 @@ def main():
                              mlp_head_hidden=args.mlp_head_hidden,
                              num_layers=args.num_enc_layers,
                              num_heads=args.heads,
+                             num_features=args.num_features,
                              sequential=False,
                              num_conv_layers=args.num_conv_layers,
                              drop_rate=args.drop_rate)

@@ -19,6 +19,7 @@ class DualGraphEncoder(nn.Module, ABC):
                  mlp_head_hidden,
                  num_layers,
                  num_heads=8,
+                 num_features=8,
                  num_joints=25,
                  classes=60,
                  drop_rate=None,
@@ -35,6 +36,7 @@ class DualGraphEncoder(nn.Module, ABC):
         self.num_layers = num_layers
         self.num_conv_layers = num_conv_layers
         self.num_joints = num_joints
+        self.num_features = num_features
         self.num_classes = classes
         self.dropout = drop_rate
         self.trainable_factor = trainable_factor
@@ -65,6 +67,7 @@ class DualGraphEncoder(nn.Module, ABC):
             TemporalEncoderLayer(in_channels=channels_[i],
                                  mdl_channels=channels_[i + 1],
                                  heads=num_heads,
+                                 num_features=num_features,
                                  dropout=self.drop_rate,
                                  init_factor=num_layers,
                                  pre_norm=pre,

@@ -89,12 +89,14 @@ class LinearAttention(nn.Module):
                  softmax_temp=None,
                  use_generalized_kernel=False,
                  use_gaussian_feature=True,
+                 num_features=16,
                  eps=1e-6,
                  attention_dropout=0.1):
         super(LinearAttention, self).__init__()
         self.in_channels = in_channels
         self.softmax_temp = softmax_temp
         self.dropout = attention_dropout
+        self.num_features = num_features
         self.eps = eps
         self.use_generalized_kernel = use_generalized_kernel
         if not use_generalized_kernel:
@@ -104,7 +106,7 @@ class LinearAttention(nn.Module):
 
     def forward(self, queries, keys, values, bi=None):
         n, l, h, e = queries.shape  # batch, n_heads, length, depth
-        nb_features = int(e * math.log(e)) if e < 64 else 64
+        nb_features = int(e * math.log(e)) if e < self.num_features else self.num_features
         gaussian_feature = self.gaussian_feature(nb_rows=nb_features, device=queries.device)
         feature_map = partial(generalized_kernel,
                               projection_matrix=gaussian_feature,
@@ -327,6 +329,7 @@ class TemporalEncoderLayer(nn.Module):
                  in_channels=6,
                  mdl_channels=64,
                  heads=8,
+                 num_features=8,
                  beta=False,
                  dropout=0.1,
                  init_factor=5,
@@ -336,6 +339,7 @@ class TemporalEncoderLayer(nn.Module):
         self.in_channels = in_channels
         self.mdl_channels = mdl_channels
         self.heads = heads
+        self.num_features = num_features
         self.beta = beta
         self.pre_norm = pre_norm
         self.post_norm = post_norm
@@ -347,7 +351,8 @@ class TemporalEncoderLayer(nn.Module):
         self.lin_qkv = Linear(in_channels, mdl_channels * 3, bias=True)
 
         self.multi_head_attn = LinearAttention(in_channels=mdl_channels // heads,
-                                               attention_dropout=self.dropout[0])
+                                               attention_dropout=self.dropout[0],
+                                               num_features=num_features)
 
         self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout[2], self.post_norm)
         self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2], self.post_norm)
