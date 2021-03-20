@@ -95,9 +95,11 @@ class LinearAttention(nn.Module):
         self.softmax_temp = softmax_temp
         self.dropout = attention_dropout
         self.eps = eps
+        self.use_generalized_kernel = use_generalized_kernel
+        if not use_generalized_kernel:
+            use_gaussian_feature = True
         self.gaussian_feature = partial(gaussian_orthogonal_random_matrix,
                                         nb_columns=in_channels) if use_gaussian_feature else None
-        self.use_generalized_kernel = use_generalized_kernel
 
     def forward(self, queries, keys, values, bi=None):
         n, l, h, e = queries.shape  # batch, n_heads, length, depth
