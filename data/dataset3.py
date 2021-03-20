@@ -327,7 +327,7 @@ class SkeletonDataset(Dataset, ABC):
         pass
 
     def read_xyz(self, file, sample, max_body=4,
-                 use_bone=False, use_motion=True):  # 取了前两个body
+                 use_bone=True, use_motion=True):  # 取了前两个body
         filename = osp.split(file)[-1]
         if 'ntu' in self.name:
             action_class = int(filename[filename.find('A') + 1: filename.find('A') + 4])
