@@ -58,7 +58,8 @@ class SparseAttention(nn.Module):
         # Compute the un-normalized sparse attention according to adjacency matrix indices
         if isinstance(adj, torch.Tensor):
             adj_ = adj
-            qk = torch.sum(queries.index_select(dim=-3, index=adj[0]) * keys.index_select(dim=-3, index=adj[1]), dim=-1)
+            qk = torch.sum(queries.index_select(dim=-3, index=adj[0]) *
+                           keys.index_select(dim=-3, index=adj[1]), dim=-1)
 
         else:
             qk = adj_ = None
@@ -103,7 +104,7 @@ class LinearAttention(nn.Module):
 
     def forward(self, queries, keys, values, bi=None):
         n, l, h, e = queries.shape  # batch, n_heads, length, depth
-        nb_features = int(e * math.log(e)) if 64 < e else 64
+        nb_features = int(e * math.log(e)) if e < 64 else 64
         gaussian_feature = self.gaussian_feature(nb_rows=nb_features, device=queries.device)
         feature_map = partial(generalized_kernel,
                               projection_matrix=gaussian_feature,
