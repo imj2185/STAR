@@ -131,7 +131,7 @@ def run_epoch(data_loader,
                     l1p = torch.nn.L1Loss(size_average=False)
                     l1_loss = 0
                     for param in model.parameters():
-                        l1_loss += l1p(param)
+                        l1_loss += l1p(param, target=torch.zeros_like(param))
                     factor = 0.9
                     loss += l1_loss * factor                    #l1_regularization
                 optimizer.zero_grad()
@@ -215,8 +215,8 @@ def main():
     # optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     # decay_rate = 0.96
     # lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decay_rate)
-    lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=12, cycle_mult=1.0, max_lr=0.1,
-                                                 min_lr=1e-4, warmup_steps=3, gamma=0.4)
+    lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=8, cycle_mult=1.0, max_lr=0.1,
+                                                 min_lr=1e-4, warmup_steps=3, gamma=0.7)
 
     # weight_clipper = ZeroOneClipper()
     weight_clipper = MaxOneClipper()
