@@ -7,7 +7,7 @@ from multiprocessing import Pool
 import numpy as np
 import torch
 from einops import rearrange
-from torch_geometric.data import Data, Dataset
+from torch_geometric.data import Data
 from torch.utils.data import Dataset
 
 from torch_sparse import spspmm
@@ -310,10 +310,12 @@ class SkeletonDataset(Dataset, ABC):
                                               'samples_with_missing_skeletons.txt')
         super(SkeletonDataset, self).__init__()
         if 'ntu' in self.name:
-            path = osp.join(self.processed_dir, self.processed_file_names)
-            if not osp.exists(path):
+            data_path = osp.join(self.processed_dir, self.processed_file_names[0])
+            label_path = osp.join(self.processed_dir, self.processed_file_names[1])
+            if not osp.exists(data_path):
                 self.process()            
-            self.data = torch.load(path)
+            self.data = torch.load(data_path)
+            self.label = torch.load(label_path)
         elif 'kinetic' in self.name:
             if self.cached_processed_file_names is None:
                 self.cached_processed_file_names = self.processed_file_names
@@ -336,7 +338,7 @@ class SkeletonDataset(Dataset, ABC):
                                                     if f != "pre_filter.pt" and f != "pre_transform.pt"]
             return self.cached_processed_file_names
         else:
-            return '{}_{}_{}.pt'.format(self.benchmark, self.sample, self.name)
+            return '{}_{}_{}_data.pt'.format(self.benchmark, self.sample, self.name), '{}_{}_{}_label.pt'.format(self.benchmark, self.sample, self.name)
 
     @property
     def raw_file_names(self):
@@ -382,7 +384,8 @@ class SkeletonDataset(Dataset, ABC):
                 torch_data = torch.cat((torch_data, gen_bone_data(torch_data, self.sk_adj)), dim=-1)
             if use_motion:
                 torch_data = torch.cat((torch_data, gen_motion_vector(torch_data)), dim=-1)
-            sparse_data = Data(x=torch_data, y=action_class - 1)
+            #sparse_data = Data(x=torch_data, y=action_class - 1)
+            return torch_data, action_class - 1
         else:
             import json
             with open(file, 'r') as f:
@@ -442,7 +445,8 @@ class SkeletonDataset(Dataset, ABC):
         sample_name = []
         sample_label = []
 
-        sparse_data_list = []
+        data_list = []
+        label_list = []
 
         if 'ntu' in self.name:
             is_training = False
@@ -487,29 +491,33 @@ class SkeletonDataset(Dataset, ABC):
 
         progress_bar = tqdm(pool.imap(func=partial_func, iterable=sample_name),
                             total=len(sample_name))
-        for data in progress_bar:
-            if 'ntu' in self.name:
-                sparse_data_list.append(data)
-            else:
+        if 'ntu' in self.name:
+            for data, label in progress_bar:
+                data_list.append(data)
+                label_list.append(label)
+        else:
+            for data in progress_bar:
                 continue
 
-        noisy_sparse_data_list = []
+        noisy_data_list = []
         # if self.sample == 'train':
         #     #pool = Pool(processes=num_processes())
         #     #partial_func = partial(self.add_noise,
         #     #                    scale=0.01)
         #
-        #     #progress_bar = tqdm(pool.imap(func=partial_func, iterable=sparse_data_list),
-        #     #                    total=len(sparse_data_list))
+        #     #progress_bar = tqdm(pool.imap(func=partial_func, iterable=data_list),
+        #     #                    total=len(data_list))
         #
         #     #for data in progress_bar:
-        #     #    noisy_sparse_data_list.append(data)
-        #     for data in sparse_data_list:
-        #         noisy_sparse_data_list.append(self.add_noise(data, scale=0.01))
+        #     #    noisy_data_list.append(data)
+        #     for data in data_list:
+        #         noisy_data_list.append(self.add_noise(data, scale=0.01))
 
         if 'ntu' in self.name:
-            torch.save(sparse_data_list + noisy_sparse_data_list,
-                       osp.join(self.processed_dir, self.processed_file_names))
+            torch.save(data_list + noisy_data_list,
+                       osp.join(self.processed_dir, self.processed_file_names[0]))
+            torch.save(label_list,
+                       osp.join(self.processed_dir, self.processed_file_names[1]))
 
     def len(self):
         if 'kinetics' in self.name:
@@ -524,12 +532,12 @@ class SkeletonDataset(Dataset, ABC):
                 return torch.load(fs(idx))
             return [fs(i) for i in idx]
 
-        return torch.stack(self.data[idx])
+        return self.data[idx], self.label[idx]
 
 
 def test():
     from argparse import ArgumentParser
-    from torch_geometric.data import DataLoader
+    from torch.utils.data import DataLoader
     parser = ArgumentParser()
     parser.add_argument('--root', dest='root',
                         default=osp.join(os.getcwd()),
@@ -541,8 +549,8 @@ def test():
                          name='ntu',
                          benchmark='xsub',
                          sample='val')
-    loader = DataLoader(ds[0: 8], batch_size=4)
-    for b in loader:
+    loader = DataLoader(ds, batch_size=4)
+    for b, labels in loader:
         print(b)
         print(b.x.shape)
 

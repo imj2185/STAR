@@ -10,7 +10,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 from tensorboardX import SummaryWriter
-from torch_geometric.data import DataLoader
+#from torch_geometric.data import DataLoader
+from torch.utils.data import DataLoader
 from tqdm import tqdm, trange
 
 from args import make_args
@@ -186,7 +187,7 @@ def main():
     train_loader = DataLoader(train_ds.data,
                               batch_size=args.batch_size,
                               shuffle=True)
-    test_loader = DataLoader(test_ds,
+    test_loader = DataLoader(test_ds.data,
                              batch_size=args.batch_size,
                              shuffle=True)
 
