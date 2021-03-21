@@ -57,6 +57,8 @@ class SeqPosEncoding(nn.Module):
         """
         super(SeqPosEncoding, self).__init__()
         self.model_dim = model_dim
+        scale = model_dim ** -0.5
+        self.weight = nn.Parameter(torch.randn(model_dim, model_dim) * scale)
 
     @staticmethod
     def segment(pos, bi, device):
@@ -74,7 +76,10 @@ class SeqPosEncoding(nn.Module):
         dim = torch.arange(d, dtype=torch.float).reshape(1, 1, -1).to(x.device)
         phase = (pos / 1e4) ** (dim / d)
         assert x.shape[-2] == sequence_length and x.shape[-1] == self.model_dim
-        return x + torch.where(dim.long() % 2 == 0, torch.sin(phase), torch.cos(phase))
+        return x + torch.matmul(torch.where(dim.long() % 2 == 0,
+                                            torch.sin(phase),
+                                            torch.cos(phase)),
+                                self.weight)
 
 
 def test():

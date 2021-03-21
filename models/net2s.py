@@ -74,7 +74,8 @@ class DualGraphEncoder(nn.Module, ABC):
                                  post_norm=post) for i in range(num_layers)])
         # self.cas = nn.ModuleList([
         #     ContextAttention(in_channels=channels_[i + 1]) for i in range(num_layers)])
-        self.lns = nn.ModuleList([LayerNorm(in_channels=channels_[i + 1]) for i in range(num_layers)])
+        # self.lns = nn.ModuleList([LayerNorm(in_channels=channels_[i + 1]) for i in range(num_layers)])
+        self.lns = nn.ModuleList([LayerNorm(in_channels=channels_[i]) for i in range(num_layers)])
 
         self.context_attention = GlobalContextAttention(in_channels=out_channels)
 
@@ -104,31 +105,23 @@ class DualGraphEncoder(nn.Module, ABC):
         :return: tensor
         """
         c = t.shape[-1]
-        t = self.dn(rearrange(t, 'b n c -> b (n c)'))
-        t = self.lls(rearrange(t, 'b (n c) -> b n c', c=c))
-        # c = t.shape[-1]
-        # t = self.bn(rearrange(t, 'b n c -> b (n c)'))
-        # t = rearrange(t, 'b (n c) -> b n c', c=c)
-        t = rearrange(t, 'b n c -> n b c')
-
+        t = self.lls(t)
+        t = rearrange(t, 'f n c -> n f c')
         t = self.positional_encoding(t, bi)
-        t = rearrange(t, 'n b c -> b n c')
+        t = rearrange(t, 'n f c -> f n c')
 
         # Core pipeline
         for i in range(self.num_layers):
+            t = self.lns[i](t, bi)
             u = t  # branch
             t = self.spatial_layers[i](t, adj)  # , tree_encoding=self.tree_encoding)
             u = self.temporal_layers[i](u, bi)
             # t = self.cas[i](u + t, bi)
             t = u + t
-            t = self.lns[i](t, bi)
-            
+            # t = self.lns[i](t, bi)
 
         t = rearrange(t, 'f n c -> n f c')
-        # bi_ = bi[:bi.shape[0]:2**self.num_layers]
         t = rearrange(self.context_attention(t, batch_index=bi),
                       'n f c -> f (n c)')  # bi is the shrunk along the batch index
-        # t = rearrange(global_mean_pool(t, bi), 'f n c -> f (n c)')
         t = self.mlp_head(t)
-        # return fn.sigmoid(t)  # dimension (b, n, oc)
         return t
