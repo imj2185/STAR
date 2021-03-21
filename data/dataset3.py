@@ -7,7 +7,9 @@ from multiprocessing import Pool
 import numpy as np
 import torch
 from einops import rearrange
-from torch_geometric.data import Dataset, Data
+from torch_geometric.data import Data, Dataset
+from torch.utils.data import Dataset
+
 from torch_sparse import spspmm
 from tqdm import tqdm
 
@@ -108,14 +110,22 @@ def pre_normalization(data, z_axis=None, x_axis=None):
     if x_axis is None:
         x_axis = [8, 4]
 
-    index = (data.sum(-1).sum(-1) != 0)  # index of non-zero frames
-
     if data.sum() == 0:
         print('empty video without skeleton information')
 
+    index = (data.sum(-1).sum(-1) != 0) 
+    index = (index == True).nonzero(as_tuple=True)[0]
+    reps = (600 // len(index)+1) if index[-1] > 300 else (300 // len(index)+1)
+    tmp = torch.zeros(data.shape)
+    m = min(600, len(index) * reps) if index[-1] > 300 else 300
+    data = torch.cat([data[index, ...]] * reps)[:m, ...]
+    tmp[:m, ...] = data
+    data = tmp
+    
+
     # print('sub the center joint #1 (spine joint in ntu and neck joint in kinetics)')
     # Use the first person's body center (`1:2` along the nodes dimension)
-    main_body_center = data[: data.shape[0] // 2, 1:2, :].clone()  # (F, V, C) where F = M * T
+    main_body_center = data[: 300, 1:2, :].clone()  # (F, V, C) where F = M * T
     main_body_center = torch.cat([main_body_center] * 2)
     data -= main_body_center
 
@@ -129,8 +139,9 @@ def pre_normalization(data, z_axis=None, x_axis=None):
     joint_r_shoulder = data[0, x_axis[0], :]  # (F, N, C) ->
     joint_l_shoulder = data[0, x_axis[1], :]
     data = rotate_joints(data, joint_r_shoulder, joint_l_shoulder)
-
-    return data[index]  # only non-zero frames are returned
+    if m == 300:
+        data[m:, ...] = 0.0
+    return data  # only non-zero frames are returned
 
 
 def read_skeleton_filter(file):
@@ -287,14 +298,21 @@ class SkeletonDataset(Dataset, ABC):
         self.cached_raw_file_names = None
         self.cached_processed_file_names = None
         self.max_body_true = 2
+        self.max_frame = 300
+        self.root = root
+        self.processed_dir = osp.join(root, 'processed')
+        self.raw_dir = osp.join(root, 'raw')
+        
 
         print('processed the adjacency matrices of skeleton')
         self.use_motion_vector = use_motion_vector
         self.missing_skeleton_path = osp.join(os.getcwd(),
                                               'samples_with_missing_skeletons.txt')
-        super(SkeletonDataset, self).__init__(root, transform, pre_transform)
+        super(SkeletonDataset, self).__init__()
         if 'ntu' in self.name:
             path = osp.join(self.processed_dir, self.processed_file_names)
+            if not osp.exists(path):
+                self.process()            
             self.data = torch.load(path)
         elif 'kinetic' in self.name:
             if self.cached_processed_file_names is None:
@@ -333,7 +351,7 @@ class SkeletonDataset(Dataset, ABC):
             action_class = int(filename[filename.find('A') + 1: filename.find('A') + 4])
             seq_info = read_skeleton_filter(file)
             # Create data tensor of shape: (# persons (M), # frames (T), # nodes (V), # channels (C))
-            data = np.zeros((max_body, seq_info['numFrame'], self.num_joints, 3), dtype=np.float32)
+            data = np.zeros((max_body, self.max_frame, self.num_joints, 3), dtype=np.float32)
             for n, f in enumerate(seq_info['frameInfo']):
                 # print("frame: ", n)
                 for m, b in enumerate(f['bodyInfo']):
