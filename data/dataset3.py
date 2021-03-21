@@ -320,6 +320,12 @@ class SkeletonDataset(Dataset, ABC):
         else:
             raise RuntimeError("Not supported")
 
+    def __len__(self):
+        return self.len()
+
+    def __getitem__(self, idx):
+        return self.get(idx)
+
     @property
     def processed_file_names(self):
         if 'kinetics' in self.name:
@@ -518,7 +524,7 @@ class SkeletonDataset(Dataset, ABC):
                 return torch.load(fs(idx))
             return [fs(i) for i in idx]
 
-        return self.data[idx]
+        return torch.stack(self.data[idx])
 
 
 def test():
