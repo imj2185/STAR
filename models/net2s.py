@@ -8,8 +8,9 @@ from einops import rearrange
 
 from models.positional_encoding import SeqPosEncoding
 from utility.tree import tree_encoding_from_traversal
-from .attentions import SpatialEncoderLayer, TemporalEncoderLayer
+from .attentions import SpatialEncoderLayer, TemporalEncoderLayer, SpatialFullEncoderLayer
 from .layers import GlobalContextAttention
+from fast_transformers.masking import FullMask
 
 
 class DualGraphEncoder(nn.Module, ABC):
@@ -50,7 +51,7 @@ class DualGraphEncoder(nn.Module, ABC):
         self.lls = nn.Linear(in_features=channels[0], out_features=channels[1])
 
         self.spatial_layers = nn.ModuleList([
-            SpatialEncoderLayer(in_channels=channels_[i],
+            SpatialFullEncoderLayer(in_channels=channels_[i],
                                 mdl_channels=channels_[i + 1],
                                 heads=num_heads,
                                 dropout=self.drop_rate) for i in range(num_layers)])
@@ -65,10 +66,10 @@ class DualGraphEncoder(nn.Module, ABC):
 
         self.mlp_head = nn.Sequential(
             nn.LayerNorm(out_channels * num_joints),
-            nn.Linear(out_channels * num_joints, out_channels * num_joints),
+            nn.Linear(out_channels * num_joints, 128),
             # nn.Tanh(),
             nn.LeakyReLU(),
-            nn.Linear(out_channels * num_joints, classes)
+            nn.Linear(128, classes)
         )
 
     def forward(self, t, adj, bi):  # t: tensor, adj: dataset.skeleton_
@@ -89,11 +90,12 @@ class DualGraphEncoder(nn.Module, ABC):
 
         t = self.positional_encoding(t, bi)
         t = rearrange(t, 'n b c -> b n c')
+        att = None
 
         # Core pipeline
         for i in range(self.num_layers):
             u = t  # branch
-            t = self.spatial_layers[i](t, adj, tree_encoding=self.tree_encoding)
+            t = self.spatial_layers[i](t, FullMask(25, 25, device=t.device))
             u = rearrange(u, 'f n c -> n f c')
             u = self.temporal_layers[i](u, bi)
             u = rearrange(u, 'n f c -> f n c')

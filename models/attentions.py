@@ -12,6 +12,7 @@ from fast_transformers.feature_maps import elu_feature_map
 from torch_scatter import scatter_sum
 
 
+
 class SparseAttention(nn.Module):
     """Implement the sparse scaled dot product attention with softmax.
     Inspired by:
@@ -76,6 +77,79 @@ class SparseAttention(nn.Module):
         # Make sure that what we return is contiguous
         return v.contiguous()
 
+class FullAttention(nn.Module):  # B * T X V X C
+    """Implement the scaled dot product attention with softmax.
+    Arguments
+    ---------
+        softmax_temp: The temperature to use for the softmax attention.
+                      (default: 1/sqrt(d_keys) where d_keys is computed at
+                      runtime)
+        attention_dropout: The dropout rate to apply to the attention
+                           (default: 0.1)
+        event_dispatcher: str or EventDispatcher instance to be used by this
+                          module for dispatching events (default: the default
+                          global dispatcher)
+    """
+
+    def __init__(self, in_channels, max_position_embeddings=128,
+                 softmax_temp=None, attention_dropout=0.1):
+        super(FullAttention, self).__init__()
+        self.softmax_temp = softmax_temp
+        self.dropout = nn.Dropout(attention_dropout)
+        self.max_position_embeddings = max_position_embeddings
+        self.embedding_weight = nn.Parameter(torch.randn(
+            2 * max_position_embeddings + 1, in_channels))
+        self.distance_embedding = nn.Embedding(
+            2 * max_position_embeddings + 1, in_channels, _weight=self.embedding_weight)
+
+    def forward(self, queries, keys, values, attn_mask):
+        """Implements the multihead softmax attention.
+        Arguments
+        ---------
+            queries: (N, L, H, E) The tensor containing the queries
+            keys: (N, S, H, E) The tensor containing the keys
+            values: (N, S, H, D) The tensor containing the values
+            attn_mask: An implementation of BaseMask that encodes where each
+                       query can attend to
+            query_lengths: An implementation of BaseMask that encodes how
+                           many queries each sequence in the batch consists of
+            key_lengths: An implementation of BaseMask that encodes how
+                         many queries each sequence in the batch consists of
+        """
+        # Extract some shapes and compute the temperature
+        n, l, h, e = queries.shape
+        _, s, _, d = values.shape
+        softmax_temp = self.softmax_temp or 1. / math.sqrt(e)
+
+        # Compute the unnormalized attention and apply the masks
+        qk = torch.einsum("nlhe, nshe -> nhls", queries, keys)
+
+        position_ids_l = torch.arange(
+            l, dtype=torch.long, device=queries.device).view(-1, 1)
+        position_ids_r = torch.arange(
+            l, dtype=torch.long, device=queries.device).view(1, -1)
+
+        distance = (position_ids_l - position_ids_r).clip(-self.max_position_embeddings,
+                                                          self.max_position_embeddings)
+        positional_embedding = self.distance_embedding(
+            distance + self.max_position_embeddings)
+
+        relative_position_scores_query = torch.einsum(
+            "blhd, lrd -> bhlr", queries, positional_embedding)
+        relative_position_scores_key = torch.einsum(
+            "brhd, lrd -> bhlr", keys, positional_embedding)
+        qk = qk + relative_position_scores_query + relative_position_scores_key
+
+        if not attn_mask.all_ones:
+            qk = qk + attn_mask.additive_matrix
+        # QK = QK + key_lengths.additive_matrix[:, None, None]
+
+        # Compute the attention and the weighted average
+        att = torch.softmax(softmax_temp * qk, dim=-1)
+        v = torch.einsum("nhls, nshd -> nlhd", self.dropout(att), values)
+
+        # Make sure that what we return is contiguous
+        return v.contiguous()#, torch.mean(att, dim=0)
 
 class LinearAttention(nn.Module):
     def __init__(self,
@@ -262,7 +336,7 @@ class SpatialEncoderLayer(nn.Module):
         self.add_norm_ffn.reset_parameters()
         self.ffn.reset_parameters()
 
-    def forward(self, x, adj=None, tree_encoding=None):
+    def forward(self, x):
         f, n, c = x.shape
         query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
 
@@ -284,7 +358,58 @@ class SpatialEncoderLayer(nn.Module):
 
         return x
 
+class SpatialFullEncoderLayer(nn.Module):
+    def __init__(self,
+                 in_channels=6,
+                 mdl_channels=64,
+                 heads=8,
+                 beta=True,
+                 dropout=None):
+        super(SpatialFullEncoderLayer, self).__init__()
+        self.in_channels = in_channels
+        self.mdl_channels = mdl_channels
+        self.heads = heads
+        self.beta = beta
+        if dropout is None:
+            self.dropout = [0.5, 0.5, 0.5, 0.5]   # temp_conv, sparse_attention, add_norm, ffn
+        else:
+            self.dropout = dropout
 
+        # self.tree_key_weights = nn.Parameter(torch.randn(in_channels, in_channels), requires_grad=True)
+        # self.tree_value_weights = nn.Parameter(torch.randn(in_channels, in_channels), requires_grad=True)
+
+        self.lin_qkv = Linear(in_channels, mdl_channels * 3, bias=False)
+
+        self.multi_head_attn = FullAttention(in_channels=mdl_channels // heads,
+                                               attention_dropout=dropout[1])
+
+        self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout[2])
+        self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2])
+        self.ffn = FeedForward(self.mdl_channels, self.mdl_channels, self.dropout[3])
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        self.lin_qkv.reset_parameters()
+        self.add_norm_att.reset_parameters()
+        self.add_norm_ffn.reset_parameters()
+        self.ffn.reset_parameters()
+
+    def forward(self, x, att=None):
+        f, n, c = x.shape
+        query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
+
+        query = rearrange(query, 'f n (h c) -> f n h c', h=self.heads)
+        key = rearrange(key, 'f n(h c) -> f n h c', h=self.heads)
+        value = rearrange(value, 'f n (h c) -> f n h c', h=self.heads)
+
+        t = self.multi_head_attn(query, key, value, att)
+        t = rearrange(t, 'f n h c -> f n (h c)', h=self.heads)
+
+        x = self.add_norm_att(x, t)
+        x = self.add_norm_ffn(x, self.ffn(x))
+
+        return x
 class TemporalEncoderLayer(nn.Module):
     def __init__(self,
                  in_channels=6,

@@ -57,7 +57,7 @@ def make_args():
     parser.add_argument('--alpha', dest='alpha', default=0.01, type=float)
 
     parser.set_defaults(gpu=True,
-                        batch_size=32,
+                        batch_size=24,
                         dataset_name='NTU',
                         dataset_root=osp.join(os.getcwd()),
                         load_model=False,

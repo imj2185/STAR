@@ -293,3 +293,16 @@ class CosineAnnealingWarmupRestarts(_LRScheduler):
         self.last_epoch = math.floor(epoch)
         for param_group, lr in zip(self.optimizer.param_groups, self.get_lr()):
             param_group['lr'] = lr
+
+
+class LabelSmoothingCrossEntropy(nn.Module):
+    def __init__(self):
+        super(LabelSmoothingCrossEntropy, self).__init__()
+    def forward(self, x, target, smoothing=0.1):
+        confidence = 1. - smoothing
+        logprobs = nn.functional.log_softmax(x, dim=-1)
+        nll_loss = -logprobs.gather(dim=-1, index=target.unsqueeze(1))
+        nll_loss = nll_loss.squeeze(1)
+        smooth_loss = -logprobs.mean(dim=-1)
+        loss = confidence * nll_loss + smoothing * smooth_loss
+        return loss.mean()
