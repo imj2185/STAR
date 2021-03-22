@@ -4,7 +4,7 @@ from abc import ABC
 import torch
 import torch.nn as nn
 # from torch_geometric.nn import global_mean_pool
-from torch_geometric.nn.norm import LayerNorm
+from .layers import LayerNorm
 from einops import rearrange
 
 from models.positional_encoding import SeqPosEncoding
