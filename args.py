@@ -7,9 +7,15 @@ def make_args():
     parser = ArgumentParser()
     # general
     parser.add_argument('--dataset_name', dest='dataset_name', default='NTU',
-                        type=str, help='RND3SAT DIMACS')
+                        type=str, help='Dataset Name, e.g., NTU-RGB-D-60, NTU-RGB-D-120')
     parser.add_argument('--dataset_root', dest='dataset_root', default='dataset',
-                        type=str, help='RND3SAT DIMACS')
+                        type=str, help='Path where to access the dataset')
+    parser.add_argument('--num_classes', dest='num_classes', default=60,
+                        type=int, help='Number of classes')
+    parser.add_argument('--num_joints', dest='num_joints', default=60,
+                        type=int, help='Number of joints')
+    parser.add_argument('--benchmark', dest='benchmark', default='xsub',
+                        type=str, help='The cross-view or cross-subject setting')
     parser.add_argument('--loss', dest='loss', default='l2', type=str,
                         help='l2; cross_entropy')
     parser.add_argument('--gpu', dest='use_gpu', default=True, type=bool,
@@ -33,11 +39,13 @@ def make_args():
                         type=int)  # implemented via accumulating gradient
     parser.add_argument('--num_enc_layers', dest='num_enc_layers', default=6, type=int)
     parser.add_argument('--num_conv_layers', dest='num_conv_layers', default=3, type=int)
+    parser.add_argument('--num_features', dest='num_features', default=16, type=int)
     parser.add_argument('--activation', dest='activation', default='relu', type=str)
     parser.add_argument('--in_channels', dest='in_channels', default=6, type=int)
     parser.add_argument('--hid_channels', dest='hid_channels', default=32, type=int)
     parser.add_argument('--out_channels', dest='out_channels', default=32, type=int)
-    parser.add_argument('--heads', dest='heads', default=32, type=int)
+    parser.add_argument('--mlp_head_hidden', dest='mlp_head_hidden', default=32, type=int)
+    parser.add_argument('--heads', dest='heads', default=8, type=int)
 
     # Training Setting up
     parser.add_argument('--lr', dest='lr', default=0.1, type=float)
@@ -57,17 +65,22 @@ def make_args():
     parser.add_argument('--alpha', dest='alpha', default=0.01, type=float)
 
     parser.set_defaults(gpu=True,
-                        batch_size=32,
-                        dataset_name='NTU',
+                        batch_size=16,
+                        dataset_name='ntu',
+                        num_classes=60,
+                        num_joints=25,
                         dataset_root=osp.join(os.getcwd()),
+                        benchmark='xsub',
                         load_model=False,
                         in_channels=9,
                         num_enc_layers=5,
                         num_conv_layers=2,
+                        num_features=8,
                         weight_decay=4e-5,
-                        drop_rate=[0.5, 0.5, 0.6, 0.7],  # linear_attention, sparse_attention, add_norm, ffn
-                        hid_channels=64,
-                        out_channels=64,
+                        drop_rate=[0.5, 0.5, 0.5, 0.5],  # linear_attention, sparse_attention, add_norm, ffn
+                        hid_channels=96,
+                        out_channels=96,
+                        mlp_head_hidden=128,
                         heads=8,
                         data_parallel=False,
                         cross_k=5)

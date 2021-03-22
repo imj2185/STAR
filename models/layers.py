@@ -269,34 +269,36 @@ class HGAConv(MessagePassing):
                                              self.out_channels, self.heads)
 
 
-class GlobalContextAttention(nn.Module):
-    def __init__(self, in_channels):
-        super(GlobalContextAttention, self).__init__()
-        self.in_channels = in_channels
-        self.weights = nn.Parameter(torch.FloatTensor(in_channels, in_channels))
-        nn.init.xavier_normal_(self.weights)
+class TemporalConv(nn.Module):
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 kernel_size,
+                 stride=1,
+                 activation=False,
+                 dropout=0.,
+                 bias=True):
+        super(TemporalConv, self).__init__()
+        pad = int((kernel_size - 1) / 2)
 
-    def forward(self, x, batch_index):
-        """
-        :param x: tensor(joints, frames, channels)
-        :param batch_index: batch index
-        :return: reduced tensor
-        """
-        # Global context
-        gc = torch.matmul(scatter_mean(x, batch_index, dim=1), self.weights)
-        gc = torch.tanh(gc)[..., batch_index, :]  # extended according to batch index
-        gc_ = torch.sigmoid(torch.sum(torch.mul(x, gc), dim=-1, keepdim=True))
-        return scatter_mean(gc_ * x, index=batch_index, dim=1)
+        self.conv = WSConv1d(  # nn.Conv1d
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            padding=pad,
+            stride=stride,
+            bias=bias)
 
+        self.bn = nn.BatchNorm1d(out_channels)
+        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(dropout, inplace=True)
+        self.activation = activation
 
-class AddNorm(nn.Module):
-    def __init__(self, normalized_shape, dropout, **kwargs):
-        super(AddNorm, self).__init__(**kwargs)
-        self.dropout = nn.Dropout(dropout)
-        self.ln = nn.LayerNorm(normalized_shape)
-
-    def forward(self, x, y):
-        return self.ln(self.dropout(y) + x)
+    def forward(self, x):
+        x = self.dropout(x)
+        x = self.bn(self.conv(x))  # B * M, C, T, V
+        # x = self.conv(x)
+        return self.relu(x) if self.activation else x
 
 
 class MLP(nn.Module):
