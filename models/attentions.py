@@ -6,8 +6,8 @@ import torch.nn.functional as fn
 from einops import rearrange
 from fast_transformers.feature_maps import elu_feature_map
 from torch.nn import Linear
-# from torch_geometric.nn.norm import LayerNorm
-from .layers import LayerNorm
+#from torch_geometric.nn.norm import LayerNorm
+#from .layers import LayerNorm
 from torch_scatter import scatter_sum, scatter_mean
 
 from utility.linalg import softmax_, spmm_
@@ -48,8 +48,8 @@ class SparseAttention(nn.Module):
             :param adj: the adjacency matrix plays role of mask that encodes where each query can attend to
         """
         # Extract some shapes and compute the temperature
-        n, l, h, e = queries.shape  # batch, n_heads, length, depth
-        _, _, s, d = values.shape
+        b, n, l, h, e = queries.shape  # batch, n_heads, length, depth
+        _, _, _, s, d = values.shape
 
         softmax_temp = self.softmax_temp or 1. / math.sqrt(e)
 
@@ -97,8 +97,8 @@ class LinearAttention(nn.Module):
             elu_feature_map(query_dims=in_channels)
         )
 
-    def forward(self, queries, keys, values, bi=None):
-        n, l, h, e = queries.shape  # batch, n_heads, length, depth
+    def forward(self, queries, keys, values):
+        b, n, l, h, e = queries.shape  # batch, n_heads, length, depth
         # _, _, s, d = values.shape
         softmax_temp = self.softmax_temp or (e ** -0.25)  # TODO: how to use this?
         (queries, keys) = map(lambda x: x * softmax_temp, (queries, keys))
@@ -106,23 +106,10 @@ class LinearAttention(nn.Module):
         q = self.feature_map.forward_queries(queries)
         k = self.feature_map.forward_keys(keys)
 
-        if bi is None:
-            kv = torch.einsum("nshd, nshm -> nhmd", k, values)
-            z = 1 / (torch.einsum("nlhd, nhd -> nlh", q, k.sum(dim=1)) + self.eps)
-            v = torch.einsum("nlhd, nhmd, nlh -> nlhm", q, kv, z)
-        else:
-            # change the dimensions of values to (N, H, L, 1, D) and keys to (N, H, L, D, 1)
-            q = rearrange(q, 'n l h d -> n h l d')
-            k = rearrange(k, 'n l h d -> n h l d')
-            kv = torch.matmul(rearrange(k, 'n h l d -> n h l d 1'),
-                              rearrange(values, 'n l h d -> n h l 1 d'))  # N H L D1 D2
-            kv = scatter_sum(kv, bi, dim=-3).index_select(dim=-3, index=bi)  # N H (L) D1 D2
-            k_ = scatter_sum(k, bi, dim=-2).index_select(dim=-2, index=bi)
-            z = 1 / torch.sum(q * k_, dim=-1)
-            v = torch.matmul(rearrange(q, 'n h l d -> n h l 1 d'),
-                             kv).squeeze(dim=-2) * z.unsqueeze(-1)
-            # return rearrange(v, 'n h l d -> n l h d').contiguous()
-            v = fn.dropout(rearrange(v, 'n h l d -> n l h d'), p=self.dropout)
+        kv = torch.einsum("bnshd, bnshm -> bnhmd", k, values)
+        z = 1 / (torch.einsum("bnlhd, bnhd -> bnlh", q, k.sum(dim=2)) + self.eps)
+        v = torch.einsum("bnlhd, bnhmd, bnlh -> bnlhm", q, kv, z)
+
         return v.contiguous()
 
 
@@ -175,7 +162,7 @@ class AddNorm(nn.Module):
         self.beta = beta
         self.post_norm = post_norm
         if self.post_norm:
-            self.ln = LayerNorm(normalized_shape, affine=True)
+            self.ln = nn.LayerNorm(normalized_shape, affine=True)
         if self.beta:
             self.lin_beta = Linear(3 * normalized_shape, 1, bias=True)
         self.reset_parameters()
@@ -185,14 +172,14 @@ class AddNorm(nn.Module):
         if self.beta:
             self.lin_beta.reset_parameters()
 
-    def forward(self, x, y, bi=None):
+    def forward(self, x, y):
         if self.beta:
             b = self.lin_beta(torch.cat([y, x, y - x], dim=-1))
             b = b.sigmoid()
             return self.ln(b * x + (1 - b) * self.dropout(y))
 
         if self.post_norm:
-            return self.ln(self.dropout(y) + x, batch=bi)  # self.dropout(y) + x
+            return self.ln(self.dropout(y) + x)  # self.dropout(y) + x
 
         return self.dropout(y) + x
 
@@ -289,7 +276,7 @@ class SpatialEncoderLayer(nn.Module):
         self.ffn.reset_parameters()'''
 
     def forward(self, x, adj=None):  # , tree_encoding=None):
-        f, n, c = x.shape
+        b, f, n, c = x.shape
         if self.pre_norm:
             x = self.ln_att(x)
         query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
@@ -300,12 +287,12 @@ class SpatialEncoderLayer(nn.Module):
         # key = key + tree_pos_enc_key.unsqueeze(dim=0)
         # value = value + tree_pos_enc_value.unsqueeze(dim=0)
 
-        query = rearrange(query, 'f n (h c) -> f n h c', h=self.heads)
-        key = rearrange(key, 'f n (h c) -> f n h c', h=self.heads)
-        value = rearrange(value, 'f n (h c) -> f n h c', h=self.heads)
+        query = rearrange(query, 'b f n (h c) -> b f n h c', h=self.heads)
+        key = rearrange(key, 'b f n (h c) -> b f n h c', h=self.heads)
+        value = rearrange(value, 'b f n (h c) -> b f n h c', h=self.heads)
 
         t = self.multi_head_attn(query, key, value, adj)
-        t = rearrange(t, 'f n h c -> f n (h c)', h=self.heads)
+        t = rearrange(t, 'b f n h c -> b f n (h c)', h=self.heads)
 
         x = self.add_norm_att(x, t)
         if self.pre_norm:
@@ -347,8 +334,8 @@ class TemporalEncoderLayer(nn.Module):
         self.ffn = FeedForward(self.mdl_channels, self.mdl_channels // 2, self.dropout[3], init_factor)
 
         if self.pre_norm:
-            self.ln_att = LayerNorm(self.mdl_channels)
-            self.ln_ffn = LayerNorm(self.mdl_channels)
+            self.ln_att = nn.LayerNorm(self.mdl_channels)
+            self.ln_ffn = nn.LayerNorm(self.mdl_channels)
 
         self.reset_parameters()
 
@@ -360,22 +347,22 @@ class TemporalEncoderLayer(nn.Module):
         # self.add_norm_ffn.reset_parameters()
         # self.ffn.reset_parameters()
 
-    def forward(self, x, bi=None):
-        f, n, c = x.shape
+    def forward(self, x):
+        b, f, n, c = x.shape
         if self.pre_norm:
-            x = self.ln_att(x, bi)
+            x = self.ln_att(x)
         query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
 
-        query = rearrange(query, 'f n (h c) -> n f h c', h=self.heads)
-        key = rearrange(key, 'f n (h c) -> n f h c', h=self.heads)
-        value = rearrange(value, 'f n (h c) -> n f h c', h=self.heads)
+        query = rearrange(query, 'b f n (h c) -> b n f h c', h=self.heads)
+        key = rearrange(key, 'b f n (h c) -> b n f h c', h=self.heads)
+        value = rearrange(value, 'b f n (h c) -> b n f h c', h=self.heads)
 
-        t = self.multi_head_attn(query, key, value, bi)
-        t = rearrange(t, 'n f h c -> f n (h c)', h=self.heads)
+        t = self.multi_head_attn(query, key, value)
+        t = rearrange(t, 'b n f h c ->b f n (h c)', h=self.heads)
 
-        x = self.add_norm_att(x, t, bi)
+        x = self.add_norm_att(x, t)
         if self.pre_norm:
-            x = self.ln_ffn(x, bi)
-        x = self.add_norm_ffn(x, self.ffn(x), bi)
+            x = self.ln_ffn(x)
+        x = self.add_norm_ffn(x, self.ffn(x))
 
         return x

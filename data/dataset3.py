@@ -12,6 +12,7 @@ from torch.utils.data import Dataset
 
 from torch_sparse import spspmm
 from tqdm import tqdm
+from dataclasses import dataclass
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -353,7 +354,7 @@ class SkeletonDataset(Dataset, ABC):
         pass
 
     def read_xyz(self, file, sample, max_body=4,
-                 use_bone=False, use_motion=True):  # 取了前两个body
+                 use_bone=True, use_motion=True):  # 取了前两个body
         filename = osp.split(file)[-1]
         if 'ntu' in self.name:
             action_class = int(filename[filename.find('A') + 1: filename.find('A') + 4])
@@ -384,8 +385,8 @@ class SkeletonDataset(Dataset, ABC):
                 torch_data = torch.cat((torch_data, gen_bone_data(torch_data, self.sk_adj)), dim=-1)
             if use_motion:
                 torch_data = torch.cat((torch_data, gen_motion_vector(torch_data)), dim=-1)
-            #sparse_data = Data(x=torch_data, y=action_class - 1)
-            return torch_data, action_class - 1
+            sparse_data = Data(x=torch_data, y=action_class - 1)
+            return sparse_data
         else:
             import json
             with open(file, 'r') as f:
@@ -492,9 +493,9 @@ class SkeletonDataset(Dataset, ABC):
         progress_bar = tqdm(pool.imap(func=partial_func, iterable=sample_name),
                             total=len(sample_name))
         if 'ntu' in self.name:
-            for data, label in progress_bar:
-                data_list.append(data)
-                label_list.append(label)
+            for data in progress_bar:
+                data_list.append(data.x)
+                label_list.append(data.y)
         else:
             for data in progress_bar:
                 continue
@@ -548,7 +549,7 @@ def test():
     ds = SkeletonDataset(root=args.root,
                          name='ntu',
                          benchmark='xsub',
-                         sample='val')
+                         sample='train')
     loader = DataLoader(ds, batch_size=4)
     for b, labels in loader:
         print(b)

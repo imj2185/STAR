@@ -117,14 +117,15 @@ def run_epoch(data_loader,
     total_samples = 0
     start = time.time()
     total_batch = len(dataset) // args.batch_size + 1
-    for i, batch in tqdm(enumerate(data_loader),
+    for i, (batch, label) in tqdm(enumerate(data_loader),
                          total=total_batch,
                          desc=desc):
         batch = batch.to(device)
-        sample, label, bi = batch.x, batch.y, batch.batch
+        label = label.to(device)
+        # sample, label, bi = batch.x, batch.y, batch.batch
 
         with torch.set_grad_enabled(is_train) and torch.autograd.set_detect_anomaly(True):
-            out = model(sample, adj=adj, bi=bi)
+            out = model(batch, adj=adj)
             loss = loss_compute(out, label.long())
             loss_ = loss
             if is_train:
@@ -184,10 +185,10 @@ def main():
 
     adj = skeleton_parts(dataset=args.dataset_name)[0].to(device)
 
-    train_loader = DataLoader(train_ds.data,
+    train_loader = DataLoader(train_ds,
                               batch_size=args.batch_size,
                               shuffle=True)
-    test_loader = DataLoader(test_ds.data,
+    test_loader = DataLoader(test_ds,
                              batch_size=args.batch_size,
                              shuffle=True)
 

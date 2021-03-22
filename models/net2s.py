@@ -5,10 +5,11 @@ import torch
 import torch.nn as nn
 from einops import rearrange
 
-from models.positional_encoding import SeqPosEncoding
+from models.positional_encoding import SeqPosEncoding, PositionalEmbedding
 from .attentions import SpatialEncoderLayer, TemporalEncoderLayer, GlobalContextAttention, ContextAttention
 
 from .layers import LayerNorm
+
 
 
 class DualGraphEncoder(nn.Module, ABC):
@@ -46,7 +47,8 @@ class DualGraphEncoder(nn.Module, ABC):
 
         self.tree_encoding = None
         # tree_encoding_from_traversal(onehot_length=3, max_padding=hidden_channels)
-        self.positional_encoding = SeqPosEncoding(model_dim=hidden_channels)
+        #self.positional_encoding = SeqPosEncoding(model_dim=hidden_channels)
+        self.positional_encoding = PositionalEmbedding(d_model=hidden_channels)
 
         self.lls = nn.Linear(in_features=channels[0], out_features=channels[1])
         pre = False
@@ -92,7 +94,7 @@ class DualGraphEncoder(nn.Module, ABC):
                 nn.init.xavier_uniform_(layer.weight, gain=1 / math.sqrt(2))
                 nn.init.constant_(layer.bias, 0.)
 
-    def forward(self, t, adj, bi):  # t: tensor, adj: dataset.skeleton_
+    def forward(self, t, adj):  # t: tensor, adj: dataset.skeleton_
         """
 
         :param t: tensor
@@ -101,31 +103,34 @@ class DualGraphEncoder(nn.Module, ABC):
         :return: tensor
         """
         c = t.shape[-1]
-        t = self.dn(rearrange(t, 'b n c -> b (n c)'))
-        t = self.lls(rearrange(t, 'b (n c) -> b n c', c=c))
+        t = self.dn(rearrange(t, 'b f n c -> b (n c) f'))
+        t = self.lls(rearrange(t, 'b (n c) f -> b f n c', c=c))
         # c = t.shape[-1]
         # t = self.bn(rearrange(t, 'b n c -> b (n c)'))
         # t = rearrange(t, 'b (n c) -> b n c', c=c)
-        t = rearrange(t, 'b n c -> n b c')
+        t = rearrange(t, 'b f n c -> b n f c')
 
-        t = self.positional_encoding(t, bi)
-        t = rearrange(t, 'n b c -> b n c')
+        t += self.positional_encoding(t).unsqueeze(-2)
+        t = rearrange(t, 'b n f c -> b f n c')
 
         # Core pipeline
         for i in range(self.num_layers):
             u = t  # branch
             t = self.spatial_layers[i](t, adj)  # , tree_encoding=self.tree_encoding)
-            u = self.temporal_layers[i](u, bi)
+            u = self.temporal_layers[i](u)
             # t = self.cas[i](u + t, bi)
             t = u + t
-            t = self.lns[i](t, bi)
+            t = self.lns[i](t)
             
 
-        t = rearrange(t, 'f n c -> n f c')
+        #t = rearrange(t, 'f n c -> n f c')
         # bi_ = bi[:bi.shape[0]:2**self.num_layers]
-        t = rearrange(self.context_attention(t, batch_index=bi),
-                      'n f c -> f (n c)')  # bi is the shrunk along the batch index
-        # t = rearrange(global_mean_pool(t, bi), 'f n c -> f (n c)')
+        #t = rearrange(self.context_attention(t),
+        #              'n f c -> f (n c)')  # bi is the shrunk along the batch index
+        #t = rearrange(global_mean_pool(t, bi), 'b f n c -> b f (n c)')
+        t = rearrange(t, 'b f n c -> b f (n c)')
+        #t = nn.functional.avg_pool1d(t, kernel_size=t.shape[-2])
+        t = torch.mean(t, dim=-2)
         t = self.mlp_head(t)
         # return fn.sigmoid(t)  # dimension (b, n, oc)
         return t

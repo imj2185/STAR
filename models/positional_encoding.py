@@ -3,6 +3,7 @@ import numpy as np
 from scipy.sparse import csr_matrix, coo_matrix
 from scipy.sparse.csgraph import breadth_first_tree
 import networkx as nx
+import math
 # from utility.linalg import bfs_enc
 
 
@@ -48,7 +49,8 @@ def tree_struct_pos_enc(adj, max_chs, func=None, device=None):
 
 class SeqPosEncoding(nn.Module):
     def __init__(self,
-                 model_dim: int):
+                 model_dim: int,
+                 use_weight=False):
         """ Sequential Positional Encoding
             This kind of encoding uses the trigonometric functions to
             incorporate the relative position information into the input
@@ -57,11 +59,17 @@ class SeqPosEncoding(nn.Module):
         """
         super(SeqPosEncoding, self).__init__()
         self.model_dim = model_dim
+        scale = model_dim ** -0.5
+        if use_weight:
+            self.weight = nn.Parameter(torch.randn(model_dim, model_dim) * scale)
+        else:
+            self.weight = None
 
     @staticmethod
     def segment(pos, bi, device):
-        offset = (torch.cat([torch.tensor([1]).to(device),
-                             bi[1:] - bi[:-1]]) == 1).nonzero(as_tuple=True)[0]
+        idx = torch.tensor((torch.cat([torch.tensor([1]).to(device),
+                                       bi[1:] - bi[:-1]]) == 1))
+        offset = torch.nonzero(idx, as_tuple=True)[0]
         return pos - offset[bi]
 
     def forward(self, x, bi=None) -> torch.Tensor:
@@ -74,8 +82,36 @@ class SeqPosEncoding(nn.Module):
         dim = torch.arange(d, dtype=torch.float).reshape(1, 1, -1).to(x.device)
         phase = (pos / 1e4) ** (dim / d)
         assert x.shape[-2] == sequence_length and x.shape[-1] == self.model_dim
-        return x + torch.where(dim.long() % 2 == 0, torch.sin(phase), torch.cos(phase))
+        if self.weight is not None:
+            return x + torch.matmul(torch.where(dim.long() % 2 == 0,
+                                                torch.sin(phase),
+                                                torch.cos(phase)),
+                                    self.weight)
+        return x + torch.where(dim.long() % 2 == 0,
+                               torch.sin(phase),
+                               torch.cos(phase))
 
+
+class PositionalEmbedding(nn.Module):
+
+    def __init__(self, d_model, max_len=600):
+        super().__init__()
+
+        # Compute the positional encodings once in log space.
+        pe = torch.zeros(max_len, d_model).float()
+        pe.require_grad = False
+
+        position = torch.arange(0, max_len).float().unsqueeze(1)
+        div_term = (torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / d_model)).exp()
+
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+
+        pe = pe.unsqueeze(0)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        return self.pe[:, :x.size(1)]
 
 def test():
     from ..data.dataset3 import skeleton_parts
