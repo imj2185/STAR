@@ -87,8 +87,8 @@ class LinearAttention(nn.Module):
     def __init__(self,
                  in_channels,
                  softmax_temp=None,
-                 use_generalized_kernel=True,
-                 use_gaussian_feature=False,
+                 use_generalized_kernel=False,
+                 use_gaussian_feature=True,
                  num_features=16,
                  eps=1e-6,
                  attention_dropout=0.1):
@@ -102,7 +102,7 @@ class LinearAttention(nn.Module):
         if not use_generalized_kernel:
             self.use_gaussian_feature = True
         else:
-            self.use_gaussian_feature = False
+            self.use_gaussian_feature = use_gaussian_feature
         self.gaussian_feature = partial(gaussian_orthogonal_random_matrix,
                                         nb_columns=in_channels) if self.use_gaussian_feature else None
 
