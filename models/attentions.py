@@ -87,8 +87,8 @@ class LinearAttention(nn.Module):
     def __init__(self,
                  in_channels,
                  softmax_temp=None,
-                 use_generalized_kernel=False,
-                 use_gaussian_feature=True,
+                 use_generalized_kernel=True,
+                 use_gaussian_feature=False,
                  num_features=16,
                  eps=1e-6,
                  attention_dropout=0.1):
@@ -100,17 +100,22 @@ class LinearAttention(nn.Module):
         self.eps = eps
         self.use_generalized_kernel = use_generalized_kernel
         if not use_generalized_kernel:
-            use_gaussian_feature = True
+            self.use_gaussian_feature = True
+        else:
+            self.use_gaussian_feature = False
         self.gaussian_feature = partial(gaussian_orthogonal_random_matrix,
-                                        nb_columns=in_channels) if use_gaussian_feature else None
+                                        nb_columns=in_channels) if self.use_gaussian_feature else None
 
     def forward(self, queries, keys, values, bi=None):
         n, l, h, e = queries.shape  # batch, n_heads, length, depth
         nb_features = int(e * math.log(e)) if e < self.num_features else self.num_features
-        gaussian_feature = self.gaussian_feature(nb_rows=nb_features, device=queries.device)
+        gaussian_feature = None if not self.use_gaussian_feature else \
+            self.gaussian_feature(nb_rows=nb_features, device=queries.device)
         feature_map = partial(generalized_kernel,
                               projection_matrix=gaussian_feature,
-                              kernel_fn=torch.nn.ELU()) if self.use_generalized_kernel \
+                              kernel_fn=torch.nn.ELU(),
+                              kernel_epsilon=(1 if self.gaussian_feature is None else 1e-3)) \
+            if self.use_generalized_kernel \
             else partial(softmax_kernel, projection_matrix=gaussian_feature)
         q = feature_map(queries) if self.use_generalized_kernel else feature_map(queries, is_query=True)
         k = feature_map(keys) if self.use_generalized_kernel else feature_map(keys, is_query=False)
