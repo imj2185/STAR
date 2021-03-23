@@ -10,6 +10,7 @@ from einops import rearrange
 from torch_geometric.data import Dataset, Data
 from torch_sparse import spspmm
 from tqdm import tqdm
+import random
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -275,6 +276,30 @@ class SkeletonDataset(Dataset, ABC):
 
         self.max_body_true = 2
 
+        self.head = [2, 3, 20, 4, 8]
+        self.lefthand = [4, 5, 6, 7, 22, 21]
+        self.righthand = [8, 9, 10, 11, 24, 23]
+        self.hands = self.lefthand + self.righthand
+        self.torso = [20, 4, 8, 1, 0, 12, 16]
+        self.leftleg = [0, 12, 13, 14, 15]
+        self.rightleg = [16, 17, 18, 19]
+        self.legs = self.leftleg + self.rightleg
+
+        self.parts = [self.head, self.hands, self.torso, self.legs]
+
+        self.keep_part = [1, 1, 1, 1, 1, 1, 1, 3, 3, 1, 
+                            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
+                            1, 1, 1, 3, 1, 3, 1, 1, 1, 1, 
+                            1, 1, 1, 1, 0, 0, 1, 1, 1, 1,
+                            3, 1, 1, 1, 1, 1, 1, 2, 1, 1,
+                            2, 1, 1, 1, 1, 1, 1, 1, 3, 3,
+                            1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                            1, 1, 1, 1, 1, 1, 1, 1, 1, 3,
+                            1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                            1, 1, 1, 1, 1, 1, 1, 1, 3, 3,
+                            3, 3, 1, 2, 1, 1, 1, 1, 1, 1,
+                            3, 1, 1, 1, 1, 3, 1, 1, 1, 1]
+
         print('processed the adjacency matrices of skeleton')
         self.use_motion_vector = use_motion_vector
         self.missing_skeleton_path = osp.join(os.getcwd(),
@@ -357,6 +382,48 @@ class SkeletonDataset(Dataset, ABC):
 
         t = Data(x=t, y=y)
         return t
+    
+    def transform_data(self, data):
+        option_list = [0, 1, 2, 3] # none, add noise, cut off, rotation
+        bp_list = [0, 1, 2, 3] #head, hands, torso, legs
+        scale = 0.01 
+        factor = 5e-3
+        choice = random.choices(option_list, weights=(70,20,30,20), k=1)
+        if choice == 1:
+            gaussian_noise = torch.normal(mean=0, std=scale, size=data.x[...,:3].size())
+            noisy_data = data.x[...,:3] + gaussian_noise * factor
+            bone_data = gen_bone_data(noisy_data, self.sk_adj)
+            mv_data = gen_motion_vector(noisy_data)
+            data.x = torch.cat((noisy_data, bone_data, mv_data), dim=-1)
+        elif choice == 2:
+            bp_list.remove(self.keep_part[data.y])
+            bp_choice = random.choices(bp_list, weights=(20,20,20), k=1)
+            data.x[:,self.parts[bp_choice],:] = 0.0
+        elif choice == 3:
+            z_axis = [0, 1]
+            x_axis = [8, 4]
+            # print('sub the center joint #1 (spine joint in ntu and neck joint in kinetics)')
+            # Use the first person's body center (`1:2` along the nodes dimension)
+            norm_data = data.x[...,:3]
+            main_body_center = norm_data[: data.x.shape[0] // 2, 1:2, :].clone()  # (F, V, C) where F = M * T
+            main_body_center = torch.cat([main_body_center] * 2)
+            norm_data -= main_body_center
+
+            # print('parallel the bone between hip (joint 0) and spine (joint 1) of the first person to the z axis')
+            joint_bottom = norm_data[0, z_axis[0], :]
+            joint_top = norm_data[0, z_axis[1], :]
+            norm_data = rotate_joints(norm_data, joint_top, joint_bottom)
+
+            # print('parallel the bone between right shoulder(joint 8) and
+            # left shoulder(joint 4) of the first person to the x axis')
+            joint_r_shoulder = norm_data[0, x_axis[0], :]  # (F, N, C) ->
+            joint_l_shoulder = norm_data[0, x_axis[1], :]
+            norm_data = rotate_joints(norm_data, joint_r_shoulder, joint_l_shoulder)
+            bone_data = gen_bone_data(norm_data, self.sk_adj)
+            mv_data = gen_motion_vector(norm_data)
+            data.x = torch.cat((norm_data, bone_data, mv_data), dim=-1)
+
+        return data
 
     def process(self):
         if self.missing_skeleton_path is not None:
@@ -436,7 +503,12 @@ class SkeletonDataset(Dataset, ABC):
                                            self.processed_file_names[idx]))
             return [torch.load(osp.join(self.processed_dir,
                                         self.processed_file_names[i])) for i in idx]
+        #return self.data[idx]
+        if self.sample == 'train':
+            return self.transform_data(self.data[idx])
+
         return self.data[idx]
+
 
 
 def test():
@@ -450,12 +522,12 @@ def test():
                         type=str, help='Dataset')
     args = parser.parse_args()
     ds = SkeletonDataset(root=os.getcwd(),
-                         name='ntu_60_test',
+                         name='ntu_60',
                          benchmark='xsub',
                          sample='val')
     loader = DataLoader(ds[0: 8], batch_size=4)
     for b in loader:
-        print(b.x.shape)
+        print(b.x)
 
 
 if __name__ == "__main__":

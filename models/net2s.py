@@ -83,6 +83,7 @@ class DualGraphEncoder(nn.Module, ABC):
             nn.Linear(out_channels * num_joints, mlp_head_hidden, bias=True),
             # nn.Tanh(),
             nn.LeakyReLU(),
+            nn.Dropout(p=0.5),
             nn.Linear(mlp_head_hidden, classes, bias=True)
         )
 

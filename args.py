@@ -78,9 +78,9 @@ def make_args():
                         num_features=8,
                         weight_decay=4e-5,
                         drop_rate=[0.5, 0.5, 0.5, 0.5],  # linear_attention, sparse_attention, add_norm, ffn
-                        hid_channels=64,
-                        out_channels=64,
-                        mlp_head_hidden=256,
+                        hid_channels=96,
+                        out_channels=96,
+                        mlp_head_hidden=128,
                         heads=8,
                         data_parallel=False,
                         cross_k=5)
