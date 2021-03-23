@@ -60,8 +60,8 @@ class SeqPosEncoding(nn.Module):
 
     @staticmethod
     def segment(pos, bi, device):
-        offset = (torch.cat([torch.tensor([1]).to(device),
-                             bi[1:] - bi[:-1]]) == 1).nonzero(as_tuple=True)[0]
+        offset = torch.zeros(max(bi) + 1).to(device)
+        offset[1:] = ((bi[1:] - bi[:-1]) == 1).nonzero(as_tuple=True)[0]
         return pos - offset[bi]
 
     def forward(self, x, bi=None) -> torch.Tensor:

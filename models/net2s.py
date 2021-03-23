@@ -6,8 +6,7 @@ import torch.nn as nn
 from einops import rearrange
 
 from models.positional_encoding import SeqPosEncoding
-from .attentions import SpatialEncoderLayer, TemporalEncoderLayer, GlobalContextAttention, ContextAttention
-
+from .attentions import SpatialEncoderLayer, TemporalEncoderLayer, GlobalContextAttention
 from .layers import LayerNorm
 
 
@@ -80,6 +79,7 @@ class DualGraphEncoder(nn.Module, ABC):
             nn.Linear(out_channels * num_joints, mlp_head_hidden, bias=True),
             # nn.Tanh(),
             nn.LeakyReLU(),
+            nn.Dropout(p=0.6),
             nn.Linear(mlp_head_hidden, classes, bias=True)
         )
 
@@ -119,7 +119,6 @@ class DualGraphEncoder(nn.Module, ABC):
             # t = self.cas[i](u + t, bi)
             t = u + t
             t = self.lns[i](t, bi)
-            
 
         t = rearrange(t, 'f n c -> n f c')
         # bi_ = bi[:bi.shape[0]:2**self.num_layers]
