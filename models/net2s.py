@@ -3,13 +3,11 @@ from abc import ABC
 
 import torch
 import torch.nn as nn
-# from torch_geometric.nn import global_mean_pool
-from .layers import LayerNorm
 from einops import rearrange
 
 from models.positional_encoding import SeqPosEncoding
-# from utility.tree import tree_encoding_from_traversal
 from .attentions import SpatialEncoderLayer, TemporalEncoderLayer, GlobalContextAttention
+from .layers import LayerNorm
 
 
 class DualGraphEncoder(nn.Module, ABC):
@@ -67,7 +65,6 @@ class DualGraphEncoder(nn.Module, ABC):
             TemporalEncoderLayer(in_channels=channels_[i],
                                  mdl_channels=channels_[i + 1],
                                  heads=num_heads,
-                                 num_features=num_features,
                                  dropout=self.drop_rate,
                                  pre_norm=pre,
                                  post_norm=post) for i in range(num_layers)])

@@ -5,14 +5,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as fn
 from einops import rearrange
-from torch.nn import Linear
-from torch_geometric.nn.norm import LayerNorm
-
-from utility.linalg import BatchedMask, softmax_, spmm_
-from .kernels import gaussian_orthogonal_random_matrix, softmax_kernel, generalized_kernel
-from .layers import WSConv1d
 from fast_transformers.feature_maps import elu_feature_map
+from torch.nn import Linear
+# from torch_geometric.nn.norm import LayerNorm
+from .layers import LayerNorm
 from torch_scatter import scatter_sum, scatter_mean
+
+from utility.linalg import softmax_, spmm_
 
 
 class SparseAttention(nn.Module):
@@ -71,11 +70,13 @@ class SparseAttention(nn.Module):
             qk = qk[idx]"""
 
         # Compute the attention and the weighted average, adj[0] is cols idx in the same row
-        alpha = fn.dropout(softmax_(softmax_temp * qk, adj[0]),
+        '''alpha = fn.dropout(softmax_(softmax_temp * qk, adj[0]),
                            p=self.dropout,
-                           training=self.training)
+                           training=self.training)'''
+        alpha = softmax_(softmax_temp * qk, adj[0])
         # sparse matmul, adj as indices and qk as nonzero
         v = spmm_(adj_, alpha, l, l, values)
+        v = fn.dropout(v, p=self.dropout)
         # Make sure that what we return is contiguous
         return v.contiguous()
 
@@ -84,33 +85,27 @@ class LinearAttention(nn.Module):
     def __init__(self,
                  in_channels,
                  softmax_temp=None,
-                 use_generalized_kernel=False,
-                 use_gaussian_feature=True,
-                 num_features=16,
+                 feature_map=None,
                  eps=1e-6,
                  attention_dropout=0.1):
         super(LinearAttention, self).__init__()
         self.in_channels = in_channels
         self.softmax_temp = softmax_temp
         self.dropout = attention_dropout
-        self.num_features = num_features
         self.eps = eps
-        self.use_generalized_kernel = use_generalized_kernel
-        if not use_generalized_kernel:
-            use_gaussian_feature = True
-        self.gaussian_feature = partial(gaussian_orthogonal_random_matrix,
-                                        nb_columns=in_channels) if use_gaussian_feature else None
+        self.feature_map = (
+            feature_map(in_channels) if feature_map else
+            elu_feature_map(query_dims=in_channels)
+        )
 
     def forward(self, queries, keys, values, bi=None):
         n, l, h, e = queries.shape  # batch, n_heads, length, depth
-        nb_features = int(e * math.log(e)) if e < self.num_features else self.num_features
-        gaussian_feature = self.gaussian_feature(nb_rows=nb_features, device=queries.device)
-        feature_map = partial(generalized_kernel,
-                              projection_matrix=gaussian_feature,
-                              kernel_fn=torch.nn.ELU()) if self.use_generalized_kernel \
-            else partial(softmax_kernel, projection_matrix=gaussian_feature)
-        q = feature_map(queries) if self.use_generalized_kernel else feature_map(queries, is_query=True)
-        k = feature_map(keys) if self.use_generalized_kernel else feature_map(keys, is_query=False)
+        # _, _, s, d = values.shape
+        softmax_temp = self.softmax_temp or (e ** -0.25)  # TODO: how to use this?
+        (queries, keys) = map(lambda x: x * softmax_temp, (queries, keys))
+        self.feature_map.new_feature_map(queries.device)
+        q = self.feature_map.forward_queries(queries)
+        k = self.feature_map.forward_keys(keys)
 
         if bi is None:
             kv = torch.einsum("nshd, nshm -> nhmd", k, values)
@@ -127,8 +122,51 @@ class LinearAttention(nn.Module):
             z = 1 / torch.sum(q * k_, dim=-1)
             v = torch.matmul(rearrange(q, 'n h l d -> n h l 1 d'),
                              kv).squeeze(dim=-2) * z.unsqueeze(-1)
+            # return rearrange(v, 'n h l d -> n l h d').contiguous()
             v = fn.dropout(rearrange(v, 'n h l d -> n l h d'), p=self.dropout)
         return v.contiguous()
+
+
+class GlobalContextAttention(nn.Module):
+    def __init__(self, in_channels):
+        super(GlobalContextAttention, self).__init__()
+        self.in_channels = in_channels
+        self.weight = nn.Parameter(torch.FloatTensor(in_channels, in_channels))
+        nn.init.xavier_normal_(self.weight)
+
+    def forward(self, x, batch_index):
+        """
+        :param x: tensor(joints, frames, channels)
+        :param batch_index: batch index
+        :return: reduced tensor
+        """
+        # Global context
+        gc = torch.matmul(scatter_mean(x, batch_index, dim=1), self.weight)
+        # extended according to batch index
+        gc = torch.tanh(gc).index_select(dim=-2, index=batch_index)  # [..., batch_index, :]
+        gc_ = torch.sigmoid(torch.sum(torch.mul(x, gc), dim=-1, keepdim=True))
+        return scatter_mean(gc_ * x, index=batch_index, dim=1)
+
+
+class ContextAttention(nn.Module):
+    def __init__(self, in_channels):
+        super(ContextAttention, self).__init__()
+        self.in_channels = in_channels
+        self.weight = nn.Parameter(torch.FloatTensor(in_channels, in_channels))
+        nn.init.xavier_normal_(self.weight)
+
+    def forward(self, x, batch_index):
+        """
+        :param x: tensor(joints, frames, channels)
+        :param batch_index: batch index
+        :return: reduced tensor
+        """
+        # Global context
+        gc = torch.matmul(scatter_mean(x, batch_index, dim=0), self.weight)
+        # extended according to batch index
+        gc = torch.tanh(gc).index_select(dim=0, index=batch_index)
+        gc_ = torch.sigmoid(torch.sum(torch.mul(x, gc), dim=-1, keepdim=True))
+        return gc_ * x
 
 
 class AddNorm(nn.Module):
@@ -156,11 +194,14 @@ class AddNorm(nn.Module):
         if self.post_norm:
             return self.ln(self.dropout(y) + x, batch=bi)  # self.dropout(y) + x
 
+        if self.post_norm:
+            return self.ln(self.dropout(y) + x, batch=bi)  # self.dropout(y) + x
+
         return self.dropout(y) + x
 
 
 class FeedForward(nn.Module):
-    def __init__(self, in_channels, hidden_channels, dropout=0.):
+    def __init__(self, in_channels, hidden_channels, dropout=0., init_factor=5):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(in_channels, hidden_channels),
@@ -169,35 +210,37 @@ class FeedForward(nn.Module):
             nn.Linear(hidden_channels, in_channels),
             nn.Dropout(dropout)
         )
+        self.init_factor = init_factor
         self.reset_parameters()
 
     def reset_parameters(self):
+        temp_state_dic = {}
         for layer in self.net:
             if isinstance(layer, nn.Linear):
-                layer.reset_parameters()
+                # layer.reset_parameters()
+                nn.init.xavier_uniform_(layer.weight)
+                nn.init.constant_(layer.bias, 0.)
+        self.fixup_initialization(self.init_factor)
+
+    def fixup_initialization(self, init_factor):
+        import collections
+        temp_state_dic = collections.OrderedDict()
+        if init_factor:
+            for name, param in self.named_parameters():
+                if name in ["net.0.weight",
+                            "net.3.weight"
+                            ]:
+                    temp_state_dic[name] = (9 * init_factor) ** (- 1. / 4.) * param
+                # elif name in ["self_attn.v_proj.weight", "encoder_attn.v_proj.weight", ]:
+                #     temp_state_dic[name] = (9 * init_factor) ** (- 1. / 4.) * (param * (2 ** 0.5))
+
+        for name in self.state_dict():
+            if name not in temp_state_dic:
+                temp_state_dic[name] = self.state_dict()[name]
+        self.load_state_dict(temp_state_dic)
 
     def forward(self, x):
         return self.net(x)
-
-
-class GlobalContextAttention(nn.Module):
-    def __init__(self, in_channels):
-        super(GlobalContextAttention, self).__init__()
-        self.in_channels = in_channels
-        self.weights = nn.Parameter(torch.FloatTensor(in_channels, in_channels))
-        nn.init.xavier_normal_(self.weights)
-
-    def forward(self, x, batch_index):
-        """
-        :param x: tensor(joints, frames, channels)
-        :param batch_index: batch index
-        :return: reduced tensor
-        """
-        # Global context
-        gc = torch.matmul(scatter_mean(x, batch_index, dim=1), self.weights)
-        gc = torch.tanh(gc)[..., batch_index, :]  # extended according to batch index
-        gc_ = torch.sigmoid(torch.sum(torch.mul(x, gc), dim=-1, keepdim=True))
-        return scatter_mean(gc_ * x, index=batch_index, dim=1)
 
 
 class SpatialEncoderLayer(nn.Module):
@@ -279,7 +322,6 @@ class TemporalEncoderLayer(nn.Module):
                  in_channels=6,
                  mdl_channels=64,
                  heads=8,
-                 num_features=8,
                  beta=False,
                  dropout=0.1,
                  pre_norm=False,
@@ -288,7 +330,6 @@ class TemporalEncoderLayer(nn.Module):
         self.in_channels = in_channels
         self.mdl_channels = mdl_channels
         self.heads = heads
-        self.num_features = num_features
         self.beta = beta
         self.pre_norm = pre_norm
         self.post_norm = post_norm
@@ -300,8 +341,7 @@ class TemporalEncoderLayer(nn.Module):
         self.lin_qkv = Linear(in_channels, mdl_channels * 3, bias=True)
 
         self.multi_head_attn = LinearAttention(in_channels=mdl_channels // heads,
-                                               attention_dropout=self.dropout[0],
-                                               num_features=num_features)
+                                               attention_dropout=self.dropout[0])
 
         self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout[2], self.post_norm)
         self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2], self.post_norm)

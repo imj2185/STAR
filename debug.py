@@ -88,4 +88,4 @@ with torch.autograd.set_detect_anomaly(True):
                 correct += (predicted == y).sum().item()
             print('\n\t accuracy: %d %%' % (100 * correct / total))
 
-# print(lt.context_attention.weights)
+# print(lt.context_attention.weight)

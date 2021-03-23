@@ -1,11 +1,9 @@
 import os
 import os.path as osp
 import time
-from random import shuffle
 
 import matplotlib
 import matplotlib.pyplot as plt
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -16,9 +14,8 @@ from tqdm import tqdm, trange
 from args import make_args
 from data.dataset3 import SkeletonDataset, skeleton_parts
 from models.net2s import DualGraphEncoder
-from optimizer import SGD_AGC, CosineAnnealingWarmupRestarts, ZeroOneClipper, MaxOneClipper, LabelSmoothingCrossEntropy
+from optimizer import SGD_AGC, CosineAnnealingWarmupRestarts, MaxOneClipper, LabelSmoothingCrossEntropy
 from utility.helper import make_checkpoint, load_checkpoint
-from random import shuffle
 
 matplotlib.use('Agg')
 
@@ -140,7 +137,7 @@ def run_epoch(data_loader,
                     path = osp.join(os.getcwd(), args.gradflow_dir)
                     if not osp.exists(path):
                         os.mkdir(path)
-                    plot_grad_flow(model.named_parameters(), osp.join(path, '%3d_%d.png' % (epoch_num, i)), writer,
+                    plot_grad_flow(model.named_parameters(), osp.join(path, '%d_%d.png' % (epoch_num, i)), writer,
                                    step)
 
             # statistics
@@ -195,7 +192,6 @@ def main():
                              mlp_head_hidden=args.mlp_head_hidden,
                              num_layers=args.num_enc_layers,
                              num_heads=args.heads,
-                             num_features=args.num_features,
                              sequential=False,
                              num_conv_layers=args.num_conv_layers,
                              drop_rate=args.drop_rate)
@@ -260,7 +256,8 @@ def main():
         test_loss, test_accuracy = run_epoch(test_loader, model, optimizer,
                                              loss_compute, test_ds, device, gt_list=gt_list, cr_list=cr_list,
                                              wr_list=wr_list, is_train=False, is_test=True,
-                                             desc="Final test: ", args=args, writer=writer, epoch_num=epoch, adj=adj, l1_penalty=l1_penalty)
+                                             desc="Final test: ", args=args, writer=writer, epoch_num=epoch, adj=adj,
+                                             l1_penalty=l1_penalty)
 
         writer.add_scalar('test/test_loss', test_loss, epoch + 1)
         writer.add_scalar('test/test_overall_acc', test_accuracy, epoch + 1)

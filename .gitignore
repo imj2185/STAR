@@ -123,4 +123,9 @@ log/
 logs/
 saved_model/
 gradflow/
+<<<<<<< HEAD
 distribution/
+=======
+gif_gradlow/
+distribution/
+>>>>>>> 6e4d531f794d03bb58d76cc0b174bf439277b546

@@ -12,10 +12,9 @@ from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.nn.inits import glorot, zeros, ones
 from torch_geometric.typing import OptTensor
 from torch_geometric.utils import remove_self_loops, add_self_loops
-from torch_scatter import scatter_mean, scatter_sum
+from torch_scatter import scatter_sum
 from torch_geometric.utils import degree
 
-# from models.attentions import SeqPosEncoding
 from utility.linalg import batched_spmm, batched_transpose, softmax_
 
 
@@ -181,7 +180,7 @@ class HGAConv(MessagePassing):
             return_attention_weights (bool, optional): If set to :obj:`True`,
                 will additionally return the tuple
                 :obj:`(adj, attention_weights)`, holding the computed
-                attention weights for each edge. (default: :obj:`None`)
+                attention weight for each edge. (default: :obj:`None`)
         """
         h, c = self.heads, self.out_channels
         # assert (not isinstance(adj, Tensor)) and h == len(adj), 'Number of heads is number of adjacency matrices'
@@ -424,14 +423,14 @@ class WSConv1d(nn.Conv1d):
                         \times (\text{kernel\_size} - 1) - 1}{\text{stride}} + 1\right\rfloor
 
     Attributes:
-        weight (Tensor): the learnable weights of the module of shape
+        weight (Tensor): the learnable weight of the module of shape
             :math:`(\text{out\_channels},
             \frac{\text{in\_channels}}{\text{groups}}, \text{kernel\_size})`.
-            The values of these weights are sampled from
+            The values of these weight are sampled from
             :math:`\mathcal{U}(-\sqrt{k}, \sqrt{k})` where
             :math:`k = \frac{groups}{C_\text{in} * \text{kernel\_size}}`
         bias (Tensor):   the learnable bias of the module of shape
-            (out_channels). If :attr:`bias` is ``True``, then the values of these weights are
+            (out_channels). If :attr:`bias` is ``True``, then the values of these weight are
             sampled from :math:`\mathcal{U}(-\sqrt{k}, \sqrt{k})` where
             :math:`k = \frac{groups}{C_\text{in} * \text{kernel\_size}}`
 
@@ -464,9 +463,9 @@ class WSConv1d(nn.Conv1d):
         shift = mean * scale
         return self.weight * scale - shift
 
-    def forward(self, input, eps=1e-4):
+    def forward(self, x, eps=1e-4):
         weight = self.standardize_weight(eps)
-        return fn.conv1d(input, weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
+        return fn.conv1d(x, weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
 
 
 class LayerNorm(torch.nn.Module):
@@ -478,8 +477,10 @@ class LayerNorm(torch.nn.Module):
         \mathbf{x}^{\prime}_i = \frac{\mathbf{x} -
         \textrm{E}[\mathbf{x}]}{\sqrt{\textrm{Var}[\mathbf{x}] + \epsilon}}
         \odot \gamma + \beta
+
     The mean and standard-deviation are calculated across all nodes and all
     node channels separately for each object in a mini-batch.
+
     Args:
         in_channels (int): Size of each input sample.
         eps (float, optional): A value added to the denominator for numerical

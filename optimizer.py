@@ -317,19 +317,17 @@ class MaxOneClipper(object):
         # filter the variables to get the ones you want
         if hasattr(module, 'weight'):
             w = module.weight.data
-            w = fn.softmax(w, dim=-1)
+            w = nn.functional.softmax(w, dim=-1)
 
 
 class LabelSmoothingCrossEntropy(nn.Module):
-    def __init__(self, smoothing=0.1):
+    def __init__(self):
         super(LabelSmoothingCrossEntropy, self).__init__()
-        self.smoothing = smoothing
-
-    def forward(self, x, target):
-        confidence = 1. - self.smoothing
-        log_probs = fn.log_softmax(x, dim=-1)
-        nll_loss = -log_probs.gather(dim=-1, index=target.unsqueeze(1))
+    def forward(self, x, target, smoothing=0.1):
+        confidence = 1. - smoothing
+        logprobs = nn.functional.log_softmax(x, dim=-1)
+        nll_loss = -logprobs.gather(dim=-1, index=target.unsqueeze(1))
         nll_loss = nll_loss.squeeze(1)
-        smooth_loss = -log_probs.mean(dim=-1)
-        loss = confidence * nll_loss + self.smoothing * smooth_loss
+        smooth_loss = -logprobs.mean(dim=-1)
+        loss = confidence * nll_loss + smoothing * smooth_loss
         return loss.mean()
