@@ -66,9 +66,9 @@ class SeqPosEncoding(nn.Module):
 
     @staticmethod
     def segment(pos, bi, device):
-        idx = torch.tensor((torch.cat([torch.tensor([1]).to(device),
-                                       bi[1:] - bi[:-1]]) == 1))
-        offset = torch.nonzero(idx, as_tuple=True)[0]
+        offset = torch.zeros(max(bi) + 1).to(device)
+        diff = bi[1:] - bi[:-1]
+        offset[1:] = torch.nonzero((diff == 1), as_tuple=True)[0]
         return pos - offset[bi]
 
     def forward(self, x, bi=None) -> torch.Tensor:
@@ -81,14 +81,12 @@ class SeqPosEncoding(nn.Module):
         dim = torch.arange(d, dtype=torch.float).reshape(1, 1, -1).to(x.device)
         phase = (pos / 1e4) ** (dim / d)
         assert x.shape[-2] == sequence_length and x.shape[-1] == self.model_dim
-        if self.weight is not None:
-            return x + torch.matmul(torch.where(dim.long() % 2 == 0,
-                                                torch.sin(phase),
-                                                torch.cos(phase)),
-                                    self.weight)
-        return x + torch.where(dim.long() % 2 == 0,
-                               torch.sin(phase),
-                               torch.cos(phase))
+        if self.weight is None:
+            return x + torch.where(dim.long() % 2 == 0, torch.sin(phase), torch.cos(phase))
+        return x + torch.matmul(torch.where(dim.long() % 2 == 0,
+                                            torch.sin(phase),
+                                            torch.cos(phase)),
+                                self.weight)
 
 
 def test():

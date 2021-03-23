@@ -80,10 +80,11 @@ class DualGraphEncoder(nn.Module, ABC):
         self.context_attention = GlobalContextAttention(in_channels=out_channels)
 
         self.mlp_head = nn.Sequential(
-            nn.LayerNorm(out_channels * num_joints),
+            # nn.LayerNorm(out_channels * num_joints),
             nn.Linear(out_channels * num_joints, mlp_head_hidden, bias=True),
             # nn.Tanh(),
             nn.LeakyReLU(),
+            nn.Dropout(p=0.6),
             nn.Linear(mlp_head_hidden, classes, bias=True)
         )
 
