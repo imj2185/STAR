@@ -65,10 +65,10 @@ def random_move(t,  # tensor(F, M, N, C)
         angle_candidate = [-10., -5., 0., 5., 10.]
     # input dimension
     if len(t.shape) == 3:
-        t = rearrange(t, '(m f) n c -> m n f c', m=2)
+        t = rearrange(t, 'f n c -> n f c')
     else:
         t = rearrange(t, 'f m n c -> m n f c')
-    m, n, f, c = t.shape  # we need to treat f and c dimensions
+    n, f, c = t.shape  # we need to treat f and c dimensions
     mt = random.choice(move_time_candidate)  # move time
     nodes = torch.cat([torch.arange(0, f, f * 1. / mt).round().int(), torch.tensor([f])])
     num_nodes = nodes.shape[0]
@@ -86,15 +86,19 @@ def random_move(t,  # tensor(F, M, N, C)
         t_x[nodes[i]: nodes[i + 1]] = torch.linspace(transform_x[i], transform_x[i + 1], nodes[i + 1] - nodes[i])
         t_y[nodes[i]: nodes[i + 1]] = torch.linspace(transform_y[i], transform_y[i + 1], nodes[i + 1] - nodes[i])
     # theta dimension: (c', c, f) -> (f, c, c')
-    theta = torch.tensor([[torch.cos(a) * s, -torch.sin(a) * s],
-                          [torch.sin(a) * s, torch.cos(a) * s]]).permute(2, 1, 0)
+    theta = torch.zeros(a.shape[0],2,2)
+    theta[:,0,0] = torch.cos(a) * s
+    theta[:,0,1] = -torch.sin(a) * s
+    theta[:,1,0] = torch.sin(a) * s
+    theta[:,1,1] = torch.cos(a) * s
+    #theta = theta.permute(2, 1, 0)
 
     # perform transformation
     xy = torch.matmul(t[..., :2].unsqueeze(-2), theta)  # (m, n, f, 1, c) \times (f, c, c')
     xy = xy.squeeze(-2)  # ('m, n, f, 1, c -> m, n, f, c')
     t[..., 0:2] = xy + torch.stack([t_x, t_y]).transpose(1, 0)  # (2, f) -> (f, 2)
 
-    return t.permute(2, 0, 1, 3)  # tensor(M, N, F, C) -> (F, M, N, C)
+    return rearrange(t, 'n f c -> f n c')  # tensor(N, F, C) -> (F, N, C)
 
 
 def random_shift(t):

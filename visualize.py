@@ -40,11 +40,11 @@ def test():
                                benchmark='xsub', sample='train')
 
     # print(skeletons[0].x[0)
-    skeleton_visual(valid_ds[33].x[30])
+    skeleton_visual(valid_ds[33].x[10])
     
-    skeleton_visual(valid_ds[44].x[30])
+    skeleton_visual(valid_ds[44].x[10])
     
-    skeleton_visual(valid_ds[55].x[30])
+    skeleton_visual(valid_ds[55].x[10])
 
 
 if __name__ == "__main__":

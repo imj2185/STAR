@@ -11,6 +11,7 @@ from torch_geometric.data import Dataset, Data
 from torch_sparse import spspmm
 from tqdm import tqdm
 import random
+from .sample_tools import random_choose, random_move
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -313,6 +314,8 @@ class SkeletonDataset(Dataset, ABC):
                             3, 3, 1, 2, 1, 1, 1, 1, 1, 1,
                             3, 1, 1, 1, 1, 3, 1, 1, 1, 1]
 
+        self.window_size = [75, 94, 112]
+
         print('processed the adjacency matrices of skeleton')
         self.use_motion_vector = use_motion_vector
         self.missing_skeleton_path = osp.join(os.getcwd(),
@@ -440,11 +443,11 @@ class SkeletonDataset(Dataset, ABC):
         return t
     
     def transform_data(self, data):
-        option_list = [0, 1, 2, 3] # none, add noise, cut off, rotation
+        option_list = [0, 1, 2, 3, 4, 5] # none, add noise, cut off, rotation
         bp_list = [0, 1, 2, 3] #head, hands, torso, legs
         scale = 0.01 
         factor = 5e-3
-        choice = random.choices(option_list, weights=(60,20,10,20), k=1)
+        choice = random.choices(option_list, weights=(80,20,10,20,20,10), k=1)
         if choice[0] == 1:
             gaussian_noise = torch.normal(mean=0, std=scale, size=data.x[...,:3].size())
             noisy_data = data.x[...,:3] + gaussian_noise * factor
@@ -478,6 +481,11 @@ class SkeletonDataset(Dataset, ABC):
             bone_data = gen_bone_data(norm_data, self.sk_adj)
             mv_data = gen_motion_vector(norm_data)
             data.x = torch.cat((norm_data, bone_data, mv_data), dim=-1)
+        elif choice[0] == 4:
+            len_choice = random.choices(self.window_size, weights=(20,20,20), k=1)
+            data.x = random_choose(data.x, size=len_choice[0])
+        elif choice[0] == 5:
+            data.x = random_move(data.x)
 
         return data
 
