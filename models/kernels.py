@@ -4,11 +4,11 @@ from einops import rearrange, repeat
 from torch.nn.functional import relu as r
 
 
-def param_free_project(x, nu):
-    x = torch.cat([r(x), r(-x)], dim=-1)
-    x_rolled = torch.cat([x.roll(shifts=j, dims=-1) for j in range(1, nu + 1)], dim=-1)
-    x_repeat = torch.cat([x] * nu, dim=-1)
-    return x_repeat * x_rolled
+# def param_free_project(x, nu):
+#     x = torch.cat([r(x), r(-x)], dim=-1)
+#     x_rolled = torch.cat([x.roll(shifts=j, dims=-1) for j in range(1, nu + 1)], dim=-1)
+#     x_repeat = torch.cat([x] * nu, dim=-1)
+#     return x_repeat * x_rolled
 
 
 def orthogonal_matrix_chunks(cols, batch, qr_uniform_q=False, device=None):

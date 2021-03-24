@@ -37,9 +37,14 @@ def test():
     # skeletons, labels = torch.load("dataset/ntu_60/processed/xsub_val_ntu_60.pt")
     valid_ds = SkeletonDataset(args.dataset_root, name='ntu_60',
                                use_motion_vector=False,
-                               benchmark='xsub', sample='val')
+                               benchmark='xsub', sample='train')
+
     # print(skeletons[0].x[0)
-    skeleton_visual(valid_ds.data[0].x[70])
+    skeleton_visual(valid_ds[33].x[30])
+    
+    skeleton_visual(valid_ds[44].x[30])
+    
+    skeleton_visual(valid_ds[55].x[30])
 
 
 if __name__ == "__main__":

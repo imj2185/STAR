@@ -8,7 +8,7 @@ from einops import rearrange
 from fast_transformers.feature_maps import elu_feature_map
 from torch.nn import Linear
 # from torch_geometric.nn.norm import LayerNorm
-from .kernels import param_free_project
+#from .kernels import param_free_project
 from .layers import LayerNorm
 from torch_scatter import scatter_sum, scatter_mean
 
@@ -373,8 +373,8 @@ class TemporalEncoderLayer(nn.Module):
         key = rearrange(key, 'f n (h c) -> n f h c', h=self.heads)
         value = rearrange(value, 'f n (h c) -> n f h c', h=self.heads)
         # apply feature kernels
-        query = param_free_project(query, nu=self.nu)
-        key = param_free_project(key, nu=self.nu)
+        #query = param_free_project(query, nu=self.nu)
+        #key = param_free_project(key, nu=self.nu)
         # multi-head attention
         t = self.multi_head_attn(query, key, value, bi)
         t = rearrange(t, 'n f h c -> f n (h c)', h=self.heads)

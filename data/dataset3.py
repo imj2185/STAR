@@ -444,18 +444,18 @@ class SkeletonDataset(Dataset, ABC):
         bp_list = [0, 1, 2, 3] #head, hands, torso, legs
         scale = 0.01 
         factor = 5e-3
-        choice = random.choices(option_list, weights=(70,20,30,20), k=1)
-        if choice == 1:
+        choice = random.choices(option_list, weights=(60,20,10,20), k=1)
+        if choice[0] == 1:
             gaussian_noise = torch.normal(mean=0, std=scale, size=data.x[...,:3].size())
             noisy_data = data.x[...,:3] + gaussian_noise * factor
             bone_data = gen_bone_data(noisy_data, self.sk_adj)
             mv_data = gen_motion_vector(noisy_data)
             data.x = torch.cat((noisy_data, bone_data, mv_data), dim=-1)
-        elif choice == 2:
+        elif choice[0] == 2:
             bp_list.remove(self.keep_part[data.y])
             bp_choice = random.choices(bp_list, weights=(20,20,20), k=1)
-            data.x[:,self.parts[bp_choice],:] = 0.0
-        elif choice == 3:
+            data.x[:,self.parts[bp_choice[0]],:] = 0.0
+        elif choice[0] == 3:
             z_axis = [0, 1]
             x_axis = [8, 4]
             # print('sub the center joint #1 (spine joint in ntu and neck joint in kinetics)')
