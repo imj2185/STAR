@@ -8,9 +8,6 @@ from scipy.sparse.csgraph import breadth_first_tree
 from torch import nn
 
 
-# from utility.linalg import bfs_enc
-
-
 def bfs_enc(edges, root, device):
     if not isinstance(edges, torch.Tensor):
         edges = torch.tensor(edges)

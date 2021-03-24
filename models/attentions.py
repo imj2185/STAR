@@ -8,6 +8,7 @@ from einops import rearrange
 from fast_transformers.feature_maps import elu_feature_map
 from torch.nn import Linear
 # from torch_geometric.nn.norm import LayerNorm
+from .kernels import param_free_project
 from .layers import LayerNorm
 from torch_scatter import scatter_sum, scatter_mean
 
@@ -324,6 +325,7 @@ class TemporalEncoderLayer(nn.Module):
                  heads=8,
                  beta=False,
                  dropout=0.1,
+                 nu=0,
                  pre_norm=False,
                  post_norm=True):
         super(TemporalEncoderLayer, self).__init__()
@@ -346,7 +348,7 @@ class TemporalEncoderLayer(nn.Module):
         self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout[2], self.post_norm)
         self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2], self.post_norm)
         self.ffn = FeedForward(self.mdl_channels, self.mdl_channels // 2, self.dropout[3])
-
+        self.nu = nu
         if self.pre_norm:
             self.ln_att = LayerNorm(self.mdl_channels)
             self.ln_ffn = LayerNorm(self.mdl_channels)
@@ -370,7 +372,10 @@ class TemporalEncoderLayer(nn.Module):
         query = rearrange(query, 'f n (h c) -> n f h c', h=self.heads)
         key = rearrange(key, 'f n (h c) -> n f h c', h=self.heads)
         value = rearrange(value, 'f n (h c) -> n f h c', h=self.heads)
-
+        # apply feature kernels
+        query = param_free_project(query, nu=self.nu)
+        key = param_free_project(key, nu=self.nu)
+        # multi-head attention
         t = self.multi_head_attn(query, key, value, bi)
         t = rearrange(t, 'n f h c -> f n (h c)', h=self.heads)
 
