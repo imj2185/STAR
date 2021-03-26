@@ -10,6 +10,7 @@ from utility.linalg import BatchedMask, softmax_, spmm_
 from .layers import WSConv1d
 from fast_transformers.feature_maps import elu_feature_map
 from torch_scatter import scatter_sum
+from .powernorm import MaskPowerNorm
 
 
 
@@ -96,11 +97,11 @@ class FullAttention(nn.Module):  # B * T X V X C
         super(FullAttention, self).__init__()
         self.softmax_temp = softmax_temp
         self.dropout = nn.Dropout(attention_dropout)
-        self.max_position_embeddings = max_position_embeddings
+        '''self.max_position_embeddings = max_position_embeddings
         self.embedding_weight = nn.Parameter(torch.randn(
             2 * max_position_embeddings + 1, in_channels))
         self.distance_embedding = nn.Embedding(
-            2 * max_position_embeddings + 1, in_channels, _weight=self.embedding_weight)
+            2 * max_position_embeddings + 1, in_channels, _weight=self.embedding_weight)'''
 
     def forward(self, queries, keys, values, attn_mask):
         """Implements the multihead softmax attention.
@@ -124,7 +125,7 @@ class FullAttention(nn.Module):  # B * T X V X C
         # Compute the unnormalized attention and apply the masks
         qk = torch.einsum("nlhe, nshe -> nhls", queries, keys)
 
-        position_ids_l = torch.arange(
+        '''position_ids_l = torch.arange(
             l, dtype=torch.long, device=queries.device).view(-1, 1)
         position_ids_r = torch.arange(
             l, dtype=torch.long, device=queries.device).view(1, -1)
@@ -138,7 +139,7 @@ class FullAttention(nn.Module):  # B * T X V X C
             "blhd, lrd -> bhlr", queries, positional_embedding)
         relative_position_scores_key = torch.einsum(
             "brhd, lrd -> bhlr", keys, positional_embedding)
-        qk = qk + relative_position_scores_query + relative_position_scores_key
+        qk = qk + relative_position_scores_query + relative_position_scores_key'''
 
         if not attn_mask.all_ones:
             qk = qk + attn_mask.additive_matrix
@@ -196,17 +197,18 @@ class LinearAttention(nn.Module):
 
 
 class AddNorm(nn.Module):
-    def __init__(self, normalized_shape, beta, dropout, **kwargs):
+    def __init__(self, normalized_shape, beta, dropout, heads, **kwargs):
         super(AddNorm, self).__init__(**kwargs)
         self.dropout = nn.Dropout(dropout)
-        self.ln = nn.LayerNorm(normalized_shape, elementwise_affine=True)
+        #self.ln = nn.LayerNorm(normalized_shape, elementwise_affine=True)
+        self.ln = MaskPowerNorm(normalized_shape, group_num=heads, warmup_iters=1671 * 3)
         self.beta = beta
         if self.beta:
             self.lin_beta = Linear(3 * normalized_shape, 1, bias=False)
         self.reset_parameters()
 
     def reset_parameters(self):
-        self.ln.reset_parameters()
+        #self.ln.reset_parameters()
         if self.beta:
             self.lin_beta.reset_parameters()
 
@@ -217,33 +219,6 @@ class AddNorm(nn.Module):
             return self.ln(b * x + (1 - b) * self.dropout(y))
 
         return self.ln(self.dropout(y) + x)
-
-
-class MLP(nn.Module):
-    def __init__(self,
-                 in_channels,
-                 out_channels,
-                 hid_channels,
-                 num_layers=2,
-                 bias=True):
-        super(MLP, self).__init__()
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.num_layers = num_layers
-        channels = [in_channels] + \
-                   [hid_channels] * (num_layers - 1) + \
-                   [out_channels]  # [64, 64, 64]
-
-        self.layers = nn.ModuleList([
-            nn.Linear(in_features=channels[i],
-                      out_features=channels[i + 1],
-                      bias=bias) for i in range(num_layers)
-        ])  # weight initialization is done in Linear()
-
-    def forward(self, x):
-        for i in range(self.num_layers - 1):
-            x = fn.relu(self.layers[i](x))
-        return self.layers[-1](x)
 
 
 class FeedForward(nn.Module):
@@ -266,37 +241,6 @@ class FeedForward(nn.Module):
     def forward(self, x):
         return self.net(x)
 
-
-class TemporalConv(nn.Module):
-    def __init__(self,
-                 in_channels,
-                 out_channels,
-                 kernel_size,
-                 stride=1,
-                 activation=False,
-                 dropout=0.,
-                 bias=True):
-        super(TemporalConv, self).__init__()
-        pad = int((kernel_size - 1) / 2)
-
-        self.conv = WSConv1d(  # nn.Conv1d
-            in_channels,
-            out_channels,
-            kernel_size=kernel_size,
-            padding=pad,
-            stride=stride,
-            bias=bias)
-
-        self.bn = nn.BatchNorm1d(out_channels)
-        self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(dropout, inplace=True)
-        self.activation = activation
-
-    def forward(self, x):
-        x = self.dropout(x)
-        x = self.bn(self.conv(x))  # B * M, C, T, V
-        # x = self.conv(x)
-        return self.relu(x) if self.activation else x
 
 
 class SpatialEncoderLayer(nn.Module):
@@ -383,8 +327,8 @@ class SpatialFullEncoderLayer(nn.Module):
         self.multi_head_attn = FullAttention(in_channels=mdl_channels // heads,
                                                attention_dropout=dropout[1])
 
-        self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout[2])
-        self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2])
+        self.add_norm_att = AddNorm(self.mdl_channels, False, self.dropout[2], self.heads)
+        self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2], self.heads)
         self.ffn = FeedForward(self.mdl_channels, self.mdl_channels, self.dropout[3])
 
         self.reset_parameters()
@@ -432,8 +376,8 @@ class TemporalEncoderLayer(nn.Module):
         self.multi_head_attn = LinearAttention(in_channels=mdl_channels // heads,
                                                attention_dropout=self.dropout[0])
 
-        self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout[2])
-        self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2])
+        self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout[2], self.heads)
+        self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2], self.heads)
         self.ffn = FeedForward(self.mdl_channels, self.mdl_channels, self.dropout[3])
 
         self.reset_parameters()

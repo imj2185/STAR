@@ -11,6 +11,7 @@ from utility.tree import tree_encoding_from_traversal
 from .attentions import SpatialEncoderLayer, TemporalEncoderLayer, SpatialFullEncoderLayer
 from .layers import GlobalContextAttention
 from fast_transformers.masking import FullMask
+from .powernorm import MaskPowerNorm
 
 
 class DualGraphEncoder(nn.Module, ABC):
@@ -62,13 +63,14 @@ class DualGraphEncoder(nn.Module, ABC):
                                  heads=num_heads,
                                  dropout=self.drop_rate) for i in range(num_layers)])
 
-        #self.context_attention = GlobalContextAttention(in_channels=out_channels)
+        self.context_attention = GlobalContextAttention(in_channels=out_channels)
 
         self.mlp_head = nn.Sequential(
-            nn.LayerNorm(out_channels * num_joints),
+            #nn.LayerNorm(out_channels * num_joints),
             nn.Linear(out_channels * num_joints, 128),
             # nn.Tanh(),
             nn.LeakyReLU(),
+            nn.Dropout(p=0.3),
             nn.Linear(128, classes)
         )
 
@@ -101,10 +103,10 @@ class DualGraphEncoder(nn.Module, ABC):
             u = rearrange(u, 'n f c -> f n c')
             t = u + t
 
-        #t = rearrange(t, 'f n c -> n f c')
+        t = rearrange(t, 'f n c -> n f c')
         # bi_ = bi[:bi.shape[0]:2**self.num_layers]
-        #t = rearrange(self.context_attention(t, batch_index=bi), 'n f c -> f (n c)')  # bi is the shrunk along the batch index
-        t = rearrange(global_mean_pool(t, bi), 'f n c -> f (n c)')
+        t = rearrange(self.context_attention(t, batch_index=bi), 'n f c -> f (n c)')  # bi is the shrunk along the batch index
+        #t = rearrange(global_mean_pool(t, bi), 'f n c -> f (n c)')
         t = self.mlp_head(t)
         # return fn.sigmoid(t)  # dimension (b, n, oc)
         return t

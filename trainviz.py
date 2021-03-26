@@ -223,7 +223,6 @@ def main():
         print("Load Model: ", last_epoch)
 
     loss_compute = LabelSmoothingCrossEntropy().to(device)
-    l1_penalty = False
 
     for epoch in trange(last_epoch, args.epoch_num + last_epoch):
         gt_list = [0 for _ in range(60)]
@@ -239,8 +238,7 @@ def main():
                                                wr_list=wr_list, is_train=True, is_test=False,
                                                desc="Train Epoch {}".format(epoch + 1), args=args, writer=writer,
                                                epoch_num=epoch,
-                                               adj=adj,
-                                               l1_penalty=l1_penalty)
+                                               adj=adj)
         print('Epoch: {} Evaluating...'.format(epoch + 1))
 
         # TODO Save model
@@ -255,7 +253,7 @@ def main():
         test_loss, test_accuracy = run_epoch(test_loader, model, optimizer,
                                              loss_compute, test_ds, device, gt_list=gt_list, cr_list=cr_list,
                                              wr_list=wr_list, is_train=False, is_test=True,
-                                             desc="Final test: ", args=args, writer=writer, epoch_num=epoch, adj=adj, l1_penalty=l1_penalty)
+                                             desc="Final test: ", args=args, writer=writer, epoch_num=epoch, adj=adj, l1_penalty=False)
 
         writer.add_scalar('test/test_loss', test_loss, epoch + 1)
         writer.add_scalar('test/test_overall_acc', test_accuracy, epoch + 1)
@@ -265,8 +263,6 @@ def main():
         # if epoch > 15:
 
         lr_scheduler.step()
-        if train_accuracy - 5 > test_accuracy:
-            l1_penalty=False
 
     writer.export_scalars_to_json(osp.join(args.log_dir, "all_scalars.json"))
     writer.close()

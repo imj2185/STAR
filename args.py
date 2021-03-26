@@ -65,7 +65,7 @@ def make_args():
                         num_enc_layers=5,
                         num_conv_layers=2,
                         weight_decay=4e-5,
-                        drop_rate=[0.5, 0.5, 0.6, 0.7],  # linear_attention, sparse_attention, add_norm, ffn
+                        drop_rate=[0.4, 0.4, 0.4, 0.4],  # linear_attention, sparse_attention, add_norm, ffn
                         hid_channels=64,
                         out_channels=64,
                         heads=8,
