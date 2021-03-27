@@ -268,8 +268,8 @@ class SpatialEncoderLayer(nn.Module):
         self.multi_head_attn = SparseAttention(in_channels=mdl_channels // heads,
                                                attention_dropout=dropout[1])
 
-        self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout[2])
-        self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2])
+        self.add_norm_att = AddNorm(self.mdl_channels, False, self.dropout[2], self.heads)
+        self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2], self.heads)
         self.ffn = FeedForward(self.mdl_channels, self.mdl_channels, self.dropout[3])
 
         self.reset_parameters()
@@ -280,7 +280,7 @@ class SpatialEncoderLayer(nn.Module):
         self.add_norm_ffn.reset_parameters()
         self.ffn.reset_parameters()
 
-    def forward(self, x):
+    def forward(self, x, adj=None):
         f, n, c = x.shape
         query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
 

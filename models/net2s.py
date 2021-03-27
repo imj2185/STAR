@@ -52,7 +52,7 @@ class DualGraphEncoder(nn.Module, ABC):
         self.lls = nn.Linear(in_features=channels[0], out_features=channels[1])
 
         self.spatial_layers = nn.ModuleList([
-            SpatialFullEncoderLayer(in_channels=channels_[i],
+            SpatialEncoderLayer(in_channels=channels_[i],
                                 mdl_channels=channels_[i + 1],
                                 heads=num_heads,
                                 dropout=self.drop_rate) for i in range(num_layers)])
@@ -97,7 +97,8 @@ class DualGraphEncoder(nn.Module, ABC):
         # Core pipeline
         for i in range(self.num_layers):
             u = t  # branch
-            t = self.spatial_layers[i](t, FullMask(25, 25, device=t.device))
+            #t = self.spatial_layers[i](t, FullMask(25, 25, device=t.device))
+            t = self.spatial_layers[i](t, adj)
             u = rearrange(u, 'f n c -> n f c')
             u = self.temporal_layers[i](u, bi)
             u = rearrange(u, 'n f c -> f n c')
