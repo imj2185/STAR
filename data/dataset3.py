@@ -12,7 +12,7 @@ from torch_sparse import spspmm
 from tqdm import tqdm
 import random
 from sample_tools import random_choose, random_move
-from args import make_args
+from ..args import make_args
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 
