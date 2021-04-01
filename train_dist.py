@@ -68,7 +68,7 @@ def run(rank, world_size):
         correct = 0
         total_samples = 0
         start = time.time()
-        total_batch = len(dataset) // args.batch_size + 1
+        total_batch = len(train_ds) // args.batch_size + 1
 
         for i, batch in tqdm(enumerate(train_loader),
                          total=total_batch,
@@ -89,7 +89,7 @@ def run(rank, world_size):
         elapsed = time.time() - start
         accuracy = correct / total_samples * 100.
         print('\n------ loss: %.3f; accuracy: %.3f; average time: %.4f' %
-          (running_loss / total_batch, accuracy, elapsed / len(dataset)))
+          (running_loss / total_batch, accuracy, elapsed / len(train_ds)))
 
         dist.barrier()
 
@@ -100,7 +100,7 @@ def run(rank, world_size):
             correct = 0
             total_samples = 0
             start = time.time()
-            total_batch = len(dataset) // args.batch_size + 1
+            total_batch = len(test_ds) // args.batch_size + 1
             #adj = skeleton_parts()[0].to(rank)
 
             for i, batch in tqdm(enumerate(train_loader),
@@ -118,7 +118,7 @@ def run(rank, world_size):
             elapsed = time.time() - start
             accuracy = correct / total_samples * 100.
             print('\n------ loss: %.3f; accuracy: %.3f; average time: %.4f' %
-            (running_loss / total_batch, accuracy, elapsed / len(dataset)))
+            (running_loss / total_batch, accuracy, elapsed / len(test_ds)))
 
         dist.barrier()
 
