@@ -1,6 +1,6 @@
 
 import os
-
+import time
 import torch
 import torch.nn.functional as F
 import torch.multiprocessing as mp
@@ -67,9 +67,10 @@ def run(rank, world_size):
         correct = 0
         total_samples = 0
         start = time.time()
+        total_batch = len(dataset) // args.batch_size + 1
 
         for i, batch in tqdm(enumerate(train_loader),
-                         total=len(train_ds) // args.batch_size + 1,
+                         total=total_batch,
                          desc="Train Epoch {}".format(epoch + 1)):
             batch = batch.to(rank)
             sample, label, bi = batch.x, batch.y, batch.batch
@@ -98,10 +99,11 @@ def run(rank, world_size):
             correct = 0
             total_samples = 0
             start = time.time()
-            adj = skeleton_parts()[0].to(rank)
+            total_batch = len(dataset) // args.batch_size + 1
+            #adj = skeleton_parts()[0].to(rank)
 
             for i, batch in tqdm(enumerate(train_loader),
-                         total=len(test_ds) // args.batch_size + 1,
+                         total=total_batch,
                          desc="Test: "):
                 batch = batch.to(rank)
                 sample, label, bi = batch.x, batch.y, batch.batch

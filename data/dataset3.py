@@ -455,13 +455,13 @@ class SkeletonDataset(Dataset, ABC):
             bone_data = gen_bone_data(noisy_data, self.sk_adj)
             mv_data = gen_motion_vector(noisy_data)
             data.x = torch.cat((noisy_data, bone_data, mv_data), dim=-1)
-            if torch.isnan(data.x):
+            if torch.isnan(data.x).sum():
                 print("Nan from gaussian noise")
         elif choice[0] == 2:
             bp_list.remove(self.keep_part[data.y])
             bp_choice = random.choices(bp_list, weights=(20,20,20), k=1)
             data.x[:,self.parts[bp_choice[0]],:] = 0.0
-            if torch.isnan(data.x):
+            if torch.isnan(data.x).sum():
                 print("Nan from cut off")
         elif choice[0] == 3:
             z_axis = [0, 1]
@@ -489,11 +489,11 @@ class SkeletonDataset(Dataset, ABC):
         elif choice[0] == 4:
             len_choice = random.choices(self.window_size, weights=(20,20,20), k=1)
             data.x = random_choose(data.x, size=len_choice[0])
-            if torch.isnan(data.x):
+            if torch.isnan(data.x).sum():
                 print("Nan from random.choice")
         elif choice[0] == 5:
             data.x = random_move(data.x)
-            if torch.isnan(data.x):
+            if torch.isnan(data.x).sum():
                 print("Nan from random.move")
             
         return data
