@@ -61,7 +61,7 @@ def run(rank, world_size):
     last_epoch = 0
     adj = skeleton_parts()[0].to(rank)
 
-    for epoch in trange(last_epoch, args.epoch_num + last_epoch):
+    for epoch in range(last_epoch, args.epoch_num + last_epoch):
         model.train()
         running_loss = 0.
         accuracy = 0.
@@ -103,7 +103,7 @@ def run(rank, world_size):
             total_batch = len(test_ds) // args.batch_size + 1
             #adj = skeleton_parts()[0].to(rank)
 
-            for i, batch in tqdm(enumerate(train_loader),
+            for i, batch in tqdm(enumerate(test_loader),
                          total=total_batch,
                          desc="Test: "):
                 batch = batch.to(rank)
