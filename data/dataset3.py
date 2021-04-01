@@ -586,8 +586,8 @@ class SkeletonDataset(Dataset, ABC):
             return [torch.load(osp.join(self.processed_dir,
                                         self.processed_file_names[i])) for i in idx]
         #return self.data[idx]
-        if self.sample == 'train':
-            return self.transform_data(self.data[idx])
+        #if self.sample == 'train':
+        #    return self.transform_data(self.data[idx])
 
         return self.data[idx]
 
