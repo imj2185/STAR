@@ -18,7 +18,6 @@ from data.dataset3 import SkeletonDataset, skeleton_parts
 from models.net2s import DualGraphEncoder
 from optimizer import SGD_AGC, CosineAnnealingWarmupRestarts, LabelSmoothingCrossEntropy
 from utility.helper import make_checkpoint, load_checkpoint
-from random import shuffle
 
 matplotlib.use('Agg')
 
