@@ -603,13 +603,12 @@ def test():
     parser.add_argument('--dataset', dest='dataset', default='ntu_60',
                         type=str, help='Dataset')
     args = parser.parse_args()
-    ds = SkeletonDataset(root=os.getcwd(),
-                         name='ntu_60',
-                         benchmark='xsub',
-                         sample='val')
-    loader = DataLoader(ds[0: 8], batch_size=4)
-    for b in loader:
-        print(b.x)
+    train_ds = SkeletonDataset(args.dataset_root, name='ntu_60',
+                               use_motion_vector=False, sample='train')
+    test_ds = SkeletonDataset(args.dataset_root, name='ntu_60',
+                              use_motion_vector=False, sample='val')
+    
+    print("Data generation finished.")
 
 
 if __name__ == "__main__":
