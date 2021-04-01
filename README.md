@@ -8,6 +8,11 @@ uzip data as the following file structure: APBGCN/nturgb+d_skeletons/raw/.\*skel
 
 change default dataset_root in args.py : dataset_root=osp.join(os.getcwd(),"nturgb+d_skeletons"),
 
+run the code below to generate dataset:
+```python
+python datagen.py
+```
+
 # Training
 git fetch and checkout to "best_performing" branch
 ```python
