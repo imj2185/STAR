@@ -127,7 +127,7 @@ class SGD_AGC(Optimizer):
                 "Nesterov momentum requires a momentum and zero dampening")
 
         # Annealed Gaussian noise hyper-parameters t, eta, and gamma
-        # self.t = 0
+        self.t = 0
         self.eta = eta
         self.gamma = gamma
 
@@ -160,9 +160,9 @@ class SGD_AGC(Optimizer):
                 max_norm = param_norm * group['clipping']
 
                 # add noise to gradients
-                # normal = torch.empty(1).normal_(  # p.shape
-                #     mean=0, std=math.sqrt(self.eta / ((1 + self.t) ** self.gamma))).to(p.device)
-                # p.grad += normal
+                '''normal = torch.empty(1).normal_(  # p.shape
+                    mean=0, std=math.sqrt(self.eta / ((1 + self.t) ** self.gamma))).to(p.device)
+                p.grad += normal'''
 
                 # Gradient clipping
                 grad_norm = unitwise_norm(p.grad.detach())
@@ -170,11 +170,11 @@ class SGD_AGC(Optimizer):
                 trigger = grad_norm > max_norm  # TODO: not working if "grad_norm < max_norm"
 
                 clipped_grad = p.grad * \
-                               (max_norm / torch.max(grad_norm,
-                                                     torch.tensor(1e-6).to(grad_norm.device)))
+                    (max_norm / torch.max(grad_norm,
+                                          torch.tensor(1e-6).to(grad_norm.device)))
                 p.grad.detach().copy_(torch.where(trigger, clipped_grad, p.grad))
 
-        # self.t += 1
+        self.t += 1
 
         for group in self.param_groups:
             weight_decay = group['weight_decay']
@@ -293,30 +293,6 @@ class CosineAnnealingWarmupRestarts(_LRScheduler):
         self.last_epoch = math.floor(epoch)
         for param_group, lr in zip(self.optimizer.param_groups, self.get_lr()):
             param_group['lr'] = lr
-
-
-class ZeroOneClipper(object):
-
-    def __init__(self, frequency=5):
-        self.frequency = frequency
-
-    def __call__(self, module):
-        # filter the variables to get the ones you want
-        if hasattr(module, 'weight'):
-            w = module.weight.data
-            w.sub_(torch.min(w)).div_(torch.max(w) - torch.min(w))
-
-
-class MaxOneClipper(object):
-
-    def __init__(self, frequency=1):
-        self.frequency = frequency
-
-    def __call__(self, module):
-        # filter the variables to get the ones you want
-        if hasattr(module, 'weight'):
-            w = module.weight.data
-            w = nn.functional.softmax(w, dim=-1)
 
 
 class LabelSmoothingCrossEntropy(nn.Module):
