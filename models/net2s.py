@@ -19,6 +19,7 @@ class DualGraphEncoder(nn.Module, ABC):
                  in_channels,
                  hidden_channels,
                  out_channels,
+                 mlp_head_hidden,
                  num_layers,
                  num_heads=8,
                  num_joints=25,
@@ -67,11 +68,11 @@ class DualGraphEncoder(nn.Module, ABC):
 
         self.mlp_head = nn.Sequential(
             #nn.LayerNorm(out_channels * num_joints),
-            nn.Linear(out_channels * num_joints, 128),
+            nn.Linear(out_channels * num_joints, mlp_head_hidden),
             # nn.Tanh(),
             nn.LeakyReLU(),
             nn.Dropout(p=0.3),
-            nn.Linear(128, classes)
+            nn.Linear(mlp_head_hidden, classes)
         )
 
     def forward(self, t, adj, bi):  # t: tensor, adj: dataset.skeleton_

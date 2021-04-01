@@ -44,6 +44,7 @@ def run(rank, world_size):
     model = DualGraphEncoder(in_channels=args.in_channels,
                              hidden_channels=args.hid_channels,
                              out_channels=args.out_channels,
+                             mlp_head_hidden=args.mlp_head_hidden,
                              num_layers=args.num_enc_layers,
                              num_heads=args.heads,
                              sequential=False,

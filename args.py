@@ -55,6 +55,7 @@ def make_args():
     parser.add_argument('--data_parallel', dest='data_parallel', default=False, type=bool, help='DataParallel')
     parser.add_argument('--cross_k', dest='cross_k', default=1, type=int, help='k value for cros validation')
     parser.add_argument('--alpha', dest='alpha', default=0.01, type=float)
+    parser.add_argument('--mlp_head_hidden', dest='mlp_head_hidden', default=128, type=int)  # paper used: 2001
 
     parser.set_defaults(gpu=True,
                         batch_size=32,
@@ -70,7 +71,8 @@ def make_args():
                         out_channels=64,
                         heads=8,
                         data_parallel=False,
-                        cross_k=5)
+                        cross_k=5,
+                        mlp_head_hidden=128)
 
     args = parser.parse_args()
     return args

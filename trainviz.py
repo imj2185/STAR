@@ -178,7 +178,7 @@ def main():
 
     adj = skeleton_parts()[0].to(device)
 
-    train_loader = DataLoader(train_ds.data,
+    train_loader = DataLoader(train_ds,
                               batch_size=args.batch_size,
                               shuffle=True)
     test_loader = DataLoader(test_ds,
