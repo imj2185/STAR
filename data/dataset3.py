@@ -12,7 +12,6 @@ from torch_sparse import spspmm
 from tqdm import tqdm
 import random
 from sample_tools import random_choose, random_move
-from args import make_args
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -604,9 +603,9 @@ def test():
     #parser.add_argument('--dataset', dest='dataset', default='ntu_60',
     #                    type=str, help='Dataset')
     args = make_args()
-    train_ds = SkeletonDataset(args.dataset_root, name='ntu_60',
+    train_ds = SkeletonDataset(os.getcwd(), name='ntu_60',
                                use_motion_vector=False, sample='train')
-    test_ds = SkeletonDataset(args.dataset_root, name='ntu_60',
+    test_ds = SkeletonDataset(os.getcwd(), name='ntu_60',
                               use_motion_vector=False, sample='val')
     
     print("Data generation finished.")
