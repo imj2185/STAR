@@ -22,6 +22,7 @@ from args import make_args
 from torch.utils.tensorboard import SummaryWriter
 import matplotlib
 import matplotlib.pyplot as plt
+import numpy as np
 
 matplotlib.use('Agg')
 
