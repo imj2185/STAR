@@ -1,5 +1,6 @@
 
 import os
+import os.path as osp
 import time
 import torch
 import torch.nn.functional as F
@@ -18,7 +19,35 @@ from utility.helper import make_checkpoint, load_checkpoint
 from random import shuffle
 from tqdm import tqdm, trange
 from args import make_args
+from torch.utils.tensorboard import SummaryWriter 
 
+def plot_grad_flow(named_parameters, path, writer, step):
+    ave_grads = []
+    layers = []
+    empty_grads = []
+    # total_norm = 0
+    for n, p in named_parameters:
+        if p.requires_grad and not (("bias" in n) or ("dn" in n) or ("ln" in n) or ("gain" in n)):
+            if p.grad is not None:
+                # writer.add_scalar('gradients/' + n, p.grad.norm(2).item(), step)
+                writer.add_histogram('weights/' + n, p, step)
+                # total_norm += p.grad.data.norm(2).item()
+                layers.append(n)
+                ave_grads.append(p.grad.abs().mean().cpu().item())
+            else:
+                empty_grads.append({n: p.mean().cpu().item()})
+    # total_norm = total_norm ** (1. / 2)
+    # print("Norm : ", total_norm)
+    plt.tight_layout()
+    plt.plot(ave_grads, alpha=0.3, color="b")
+    plt.hlines(0, 0, len(ave_grads) + 1, linewidth=1.5, color="k")
+    plt.xticks(np.arange(0, len(ave_grads), 1), layers, rotation="vertical", fontsize=4)
+    plt.xlim(xmin=0, xmax=len(ave_grads))
+    plt.xlabel("Layers")
+    plt.ylabel("average gradient")
+    plt.title("Gradient flow" + str(step))
+    plt.grid(True)
+    plt.savefig(path, dpi=300)
 
 def run(rank, world_size):
     os.environ['MASTER_ADDR'] = 'localhost'
@@ -39,7 +68,8 @@ def run(rank, world_size):
     train_sampler = DistributedSampler(train_ds, num_replicas=world_size,
                                        rank=rank)
     train_loader = DataLoader(train_ds,
-                              batch_size=args.batch_size)
+                              batch_size=args.batch_size,
+                              shuffle=True)
 
     model = DualGraphEncoder(in_channels=args.in_channels,
                              hidden_channels=args.hid_channels,
@@ -50,12 +80,14 @@ def run(rank, world_size):
                              sequential=False,
                              num_conv_layers=args.num_conv_layers,
                              drop_rate=args.drop_rate).to(rank)
+
     model = DistributedDataParallel(model, device_ids=[rank])
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     #optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
     loss_compute = LabelSmoothingCrossEntropy()
 
     if rank == 0:
+        writer = SummaryWriter(args.log_dir)
         test_loader = DataLoader(test_ds,
                              batch_size=args.batch_size)
     
@@ -81,6 +113,13 @@ def run(rank, world_size):
             loss = loss_compute(out, label.long())
             loss.backward()
             optimizer.step()
+            
+            if rank == 0 and i % 400 == 0:
+                step = (i + 1) + total_batch * epoch
+                path = osp.join(os.getcwd(), args.gradflow_dir)
+                if not osp.exists(path):
+                    os.mkdir(path)
+                plot_grad_flow(model.named_parameters(), osp.join(path, '%d_%d.png' % (epoch, i)), writer, step)
 
             running_loss += loss.item()
             pred = torch.max(out, 1)[1]
@@ -91,6 +130,10 @@ def run(rank, world_size):
         accuracy = correct / total_samples * 100.
         print('\n------ loss: %.3f; accuracy: %.3f; average time: %.4f' %
           (running_loss / total_batch, accuracy, elapsed / len(train_ds)))
+        if rank == 0:
+            writer.add_scalar('train/train_loss', running_loss / total_batch, epoch + 1)
+            writer.add_scalar('train/train_overall_acc', accuracy, epoch + 1)
+        
 
         dist.barrier()
 
@@ -119,7 +162,9 @@ def run(rank, world_size):
             elapsed = time.time() - start
             accuracy = correct / total_samples * 100.
             print('\n------ loss: %.3f; accuracy: %.3f; average time: %.4f' %
-            (running_loss / total_batch, accuracy, elapsed / len(test_ds)))
+              (running_loss / total_batch, accuracy, elapsed / len(test_ds)))
+            writer.add_scalar('test/test_loss', running_loss / total_batch, epoch + 1)
+            writer.add_scalar('test/test_overall_acc', accuracy, epoch + 1)
 
         dist.barrier()
 
