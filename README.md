@@ -17,7 +17,7 @@ python datagen.py
 ```
 
 # Training
-git fetch and checkout to "best_performing" branch
+git fetch and checkout to "distributed" branch
 ```python
 python train_dist.py -#distributed training
 ```
