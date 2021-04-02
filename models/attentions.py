@@ -8,7 +8,7 @@ from torch.nn import Linear
 
 from utility.linalg import BatchedMask, softmax_, spmm_
 from fast_transformers.feature_maps import elu_feature_map
-from torch_scatter import scatter_sum
+from torch_scatter import scatter_sum, scatter_mean
 from .powernorm import MaskPowerNorm
 
 
