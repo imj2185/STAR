@@ -269,36 +269,6 @@ class HGAConv(MessagePassing):
                                              self.out_channels, self.heads)
 
 
-class GlobalContextAttention(nn.Module):
-    def __init__(self, in_channels):
-        super(GlobalContextAttention, self).__init__()
-        self.in_channels = in_channels
-        self.weights = nn.Parameter(torch.FloatTensor(in_channels, in_channels))
-        nn.init.xavier_normal_(self.weights)
-
-    def forward(self, x, batch_index):
-        """
-        :param x: tensor(joints, frames, channels)
-        :param batch_index: batch index
-        :return: reduced tensor
-        """
-        # Global context
-        gc = torch.matmul(scatter_mean(x, batch_index, dim=1), self.weights)
-        gc = torch.tanh(gc)[..., batch_index, :]  # extended according to batch index
-        gc_ = torch.sigmoid(torch.sum(torch.mul(x, gc), dim=-1, keepdim=True))
-        return scatter_mean(gc_ * x, index=batch_index, dim=1)
-
-
-class AddNorm(nn.Module):
-    def __init__(self, normalized_shape, dropout, **kwargs):
-        super(AddNorm, self).__init__(**kwargs)
-        self.dropout = nn.Dropout(dropout)
-        self.ln = nn.LayerNorm(normalized_shape)
-
-    def forward(self, x, y):
-        return self.ln(self.dropout(y) + x)
-
-
 class MLP(nn.Module):
     def __init__(self,
                  in_channels,
