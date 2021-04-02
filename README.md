@@ -4,12 +4,20 @@
 # Dataset
 download ntu rgb+d 60 action recognition from skeleton from http://rose1.ntu.edu.sg/datasets/actionRecognition.asp
 
-uzip data as the following file structure: APBGCN/nturgb+d_skeletons/raw/.\*skeleton
+or use google drive 
 
-change default dataset_root in args.py : dataset_root=osp.join(os.getcwd(),"nturgb+d_skeletons"),
+[NTU60](https://drive.google.com/open?id=1CUZnBtYwifVXS21yVg62T-vrPVayso5H)
+[NTU120](https://drive.google.com/open?id=1tEbuaEqMxAV7dNc4fqu1O4M7mC6CJ50w)
+
+uzip data as the following file structure: APBGCN/raw/.\*skeleton (create "raw" directory under APBGCN and put skeleton files)
+
+run the code below to generate dataset:
+```python
+python datagen.py
+```
 
 # Training
-git fetch and checkout to "best_performing" branch
+git fetch and checkout to "distributed" branch
 ```python
 python train_dist.py -#distributed training
 ```
