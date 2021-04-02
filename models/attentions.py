@@ -9,7 +9,7 @@ from torch.nn import Linear
 from utility.linalg import BatchedMask, softmax_, spmm_
 from .layers import WSConv1d
 from fast_transformers.feature_maps import elu_feature_map
-from torch_scatter import scatter_sum
+from torch_scatter import scatter_sum, scatter_mean
 from .powernorm import MaskPowerNorm
 
 
@@ -195,6 +195,26 @@ class LinearAttention(nn.Module):
                              kv).squeeze(dim=-2) * z.unsqueeze(-1)
         return rearrange(v, 'n h l d -> n l h d').contiguous()
 
+    
+class GlobalContextAttention(nn.Module):
+    def __init__(self, in_channels):
+        super(GlobalContextAttention, self).__init__()
+        self.in_channels = in_channels
+        self.weights = nn.Parameter(torch.FloatTensor(in_channels, in_channels))
+        nn.init.xavier_normal_(self.weights)
+
+    def forward(self, x, batch_index):
+        """
+        :param x: tensor(joints, frames, channels)
+        :param batch_index: batch index
+        :return: reduced tensor
+        """
+        # Global context
+        gc = torch.matmul(scatter_mean(x, batch_index, dim=1), self.weights)
+        gc = torch.tanh(gc)[..., batch_index, :]  # extended according to batch index
+        gc_ = torch.sigmoid(torch.sum(torch.mul(x, gc), dim=-1, keepdim=True))
+        return scatter_mean(gc_ * x, index=batch_index, dim=1)
+    
 
 class AddNorm(nn.Module):
     def __init__(self, normalized_shape, beta, dropout, heads, **kwargs):
