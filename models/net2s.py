@@ -8,8 +8,7 @@ from einops import rearrange
 
 from models.positional_encoding import SeqPosEncoding
 from utility.tree import tree_encoding_from_traversal
-from .attentions import SpatialEncoderLayer, TemporalEncoderLayer, SpatialFullEncoderLayer
-from .layers import GlobalContextAttention
+from .attentions import SpatialEncoderLayer, TemporalEncoderLayer, SpatialFullEncoderLayer, GlobalContextAttention
 from fast_transformers.masking import FullMask
 from .powernorm import MaskPowerNorm
 
