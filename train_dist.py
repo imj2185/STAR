@@ -19,7 +19,9 @@ from utility.helper import make_checkpoint, load_checkpoint
 from random import shuffle
 from tqdm import tqdm, trange
 from args import make_args
-from torch.utils.tensorboard import SummaryWriter 
+from torch.utils.tensorboard import SummaryWriter
+import matplotlib
+import matplotlib.pyplot as plt
 
 def plot_grad_flow(named_parameters, path, writer, step):
     ave_grads = []
@@ -113,7 +115,7 @@ def run(rank, world_size):
             loss = loss_compute(out, label.long())
             loss.backward()
             optimizer.step()
-            
+
             if rank == 0 and i % 400 == 0:
                 step = (i + 1) + total_batch * epoch
                 path = osp.join(os.getcwd(), args.gradflow_dir)
