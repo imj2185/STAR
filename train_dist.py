@@ -35,7 +35,7 @@ def plot_grad_flow(named_parameters, path, writer, step):
         if p.requires_grad and not (("bias" in n) or ("dn" in n) or ("ln" in n) or ("gain" in n)):
             if p.grad is not None:
                 # writer.add_scalar('gradients/' + n, p.grad.norm(2).item(), step)
-                writer.add_histogram('weights/' + n, p, step)
+                # writer.add_histogram('weights/' + n, p, step)
                 # total_norm += p.grad.data.norm(2).item()
                 layers.append(n)
                 ave_grads.append(p.grad.abs().mean().cpu().item())
