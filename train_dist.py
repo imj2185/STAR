@@ -1,30 +1,27 @@
-
 import os
 import os.path as osp
 import time
-import torch
-import torch.nn.functional as F
-import torch.multiprocessing as mp
-import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel
-from torch.utils.data.distributed import DistributedSampler
-
-from torch_geometric.data import DataLoader
-import torch_geometric.transforms as T
-
-from data.dataset3 import SkeletonDataset, skeleton_parts
-from models.net2s import DualGraphEncoder
-from optimizer import SGD_AGC, CosineAnnealingWarmupRestarts, LabelSmoothingCrossEntropy
-from utility.helper import make_checkpoint, load_checkpoint
 from random import shuffle
-from tqdm import tqdm, trange
-from args import make_args
-from torch.utils.tensorboard import SummaryWriter
+
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
+import torch.distributed as dist
+import torch.multiprocessing as mp
+from torch.nn.parallel import DistributedDataParallel
+from torch.utils.data.distributed import DistributedSampler
+from torch.utils.tensorboard import SummaryWriter
+from torch_geometric.data import DataLoader
+from tqdm import tqdm
+
+from args import make_args
+from data.dataset3 import SkeletonDataset, skeleton_parts
+from models.net2s import DualGraphEncoder
+from optimizer import LabelSmoothingCrossEntropy
 
 matplotlib.use('Agg')
+
 
 def plot_grad_flow(named_parameters, path, writer, step):
     ave_grads = []
@@ -53,6 +50,7 @@ def plot_grad_flow(named_parameters, path, writer, step):
     plt.title("Gradient flow" + str(step))
     plt.grid(True)
     plt.savefig(path, dpi=300)
+
 
 def run(rank, world_size):
     os.environ['MASTER_ADDR'] = 'localhost'
@@ -88,14 +86,14 @@ def run(rank, world_size):
 
     model = DistributedDataParallel(model, device_ids=[rank])
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    #optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
+    # optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
     loss_compute = LabelSmoothingCrossEntropy()
 
     if rank == 0:
         writer = SummaryWriter(args.log_dir)
         test_loader = DataLoader(test_ds,
-                             batch_size=args.batch_size)
-    
+                                 batch_size=args.batch_size)
+
     last_epoch = 0
     adj = skeleton_parts()[0].to(rank)
 
@@ -109,8 +107,8 @@ def run(rank, world_size):
         total_batch = len(train_ds) // args.batch_size + 1
 
         for i, batch in tqdm(enumerate(train_loader),
-                         total=total_batch,
-                         desc="Train Epoch {}".format(epoch + 1)):
+                             total=total_batch,
+                             desc="Train Epoch {}".format(epoch + 1)):
             batch = batch.to(rank)
             sample, label, bi = batch.x, batch.y, batch.batch
             optimizer.zero_grad()
@@ -134,11 +132,10 @@ def run(rank, world_size):
         elapsed = time.time() - start
         accuracy = correct / total_samples * 100.
         print('\n------ loss: %.3f; accuracy: %.3f; average time: %.4f' %
-          (running_loss / total_batch, accuracy, elapsed / len(train_ds)))
+              (running_loss / total_batch, accuracy, elapsed / len(train_ds)))
         if rank == 0:
             writer.add_scalar('train/train_loss', running_loss / total_batch, epoch + 1)
             writer.add_scalar('train/train_overall_acc', accuracy, epoch + 1)
-        
 
         dist.barrier()
 
@@ -150,11 +147,11 @@ def run(rank, world_size):
             total_samples = 0
             start = time.time()
             total_batch = len(test_ds) // args.batch_size + 1
-            #adj = skeleton_parts()[0].to(rank)
+            # adj = skeleton_parts()[0].to(rank)
 
             for i, batch in tqdm(enumerate(test_loader),
-                         total=total_batch,
-                         desc="Test: "):
+                                 total=total_batch,
+                                 desc="Test: "):
                 batch = batch.to(rank)
                 sample, label, bi = batch.x, batch.y, batch.batch
                 with torch.no_grad():
@@ -167,7 +164,7 @@ def run(rank, world_size):
             elapsed = time.time() - start
             accuracy = correct / total_samples * 100.
             print('\n------ loss: %.3f; accuracy: %.3f; average time: %.4f' %
-              (running_loss / total_batch, accuracy, elapsed / len(test_ds)))
+                  (running_loss / total_batch, accuracy, elapsed / len(test_ds)))
             writer.add_scalar('test/test_loss', running_loss / total_batch, epoch + 1)
             writer.add_scalar('test/test_overall_acc', accuracy, epoch + 1)
 
@@ -179,4 +176,4 @@ def run(rank, world_size):
 if __name__ == '__main__':
     world_size = torch.cuda.device_count()
     print('Let\'s use', world_size, 'GPUs!')
-    mp.spawn(run, args=(world_size, ), nprocs=world_size, join=True)
+    mp.spawn(run, args=(world_size,), nprocs=world_size, join=True)
