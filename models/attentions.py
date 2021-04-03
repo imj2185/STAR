@@ -426,6 +426,6 @@ class TemporalEncoderLayer(nn.Module):
         x = self.add_norm_att(x, t)
         x = self.add_norm_ffn(x, self.ffn(x))
 
-        x = rearrange(t, 'n f c -> f n c')
+        x = rearrange(x, 'n f c -> f n c')
 
         return x
