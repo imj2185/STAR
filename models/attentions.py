@@ -13,7 +13,6 @@ from torch_scatter import scatter_sum, scatter_mean
 from .powernorm import MaskPowerNorm
 
 
-
 class SparseAttention(nn.Module):
     """Implement the sparse scaled dot product attention with softmax.
     Inspired by:
@@ -77,6 +76,7 @@ class SparseAttention(nn.Module):
         v = spmm_(adj_, alpha, l, l, values)
         # Make sure that what we return is contiguous
         return v.contiguous()
+
 
 class FullAttention(nn.Module):  # B * T X V X C
     """Implement the scaled dot product attention with softmax.
@@ -150,7 +150,8 @@ class FullAttention(nn.Module):  # B * T X V X C
         v = torch.einsum("nhls, nshd -> nlhd", self.dropout(att), values)
 
         # Make sure that what we return is contiguous
-        return v.contiguous()#, torch.mean(att, dim=0)
+        return v.contiguous()  # , torch.mean(att, dim=0)
+
 
 class LinearAttention(nn.Module):
     def __init__(self,
@@ -187,7 +188,7 @@ class LinearAttention(nn.Module):
             q = rearrange(q, 'n l h d -> n h l d')
             k = rearrange(k, 'n l h d -> n h l d')
             kv = torch.matmul(rearrange(k, 'n h l d -> n h l d 1'),
-                              rearrange(values, 'n l h d -> n h l 1 d'))     # N H L D1 D2
+                              rearrange(values, 'n l h d -> n h l 1 d'))  # N H L D1 D2
             kv = scatter_sum(kv, bi, dim=-3).index_select(dim=-3, index=bi)  # N H (L) D1 D2
             k_ = scatter_sum(k, bi, dim=-2).index_select(dim=-2, index=bi)
             z = 1 / torch.sum(q * k_, dim=-1)
@@ -195,7 +196,7 @@ class LinearAttention(nn.Module):
                              kv).squeeze(dim=-2) * z.unsqueeze(-1)
         return rearrange(v, 'n h l d -> n l h d').contiguous()
 
-    
+
 class GlobalContextAttention(nn.Module):
     def __init__(self, in_channels):
         super(GlobalContextAttention, self).__init__()
@@ -214,13 +215,13 @@ class GlobalContextAttention(nn.Module):
         gc = torch.tanh(gc)[..., batch_index, :]  # extended according to batch index
         gc_ = torch.sigmoid(torch.sum(torch.mul(x, gc), dim=-1, keepdim=True))
         return scatter_mean(gc_ * x, index=batch_index, dim=1)
-    
+
 
 class AddNorm(nn.Module):
     def __init__(self, normalized_shape, beta, dropout, heads, **kwargs):
         super(AddNorm, self).__init__(**kwargs)
         self.dropout = nn.Dropout(dropout)
-        #self.ln = nn.LayerNorm(normalized_shape, elementwise_affine=True)
+        # self.ln = nn.LayerNorm(normalized_shape, elementwise_affine=True)
         self.ln = MaskPowerNorm(normalized_shape, group_num=heads, warmup_iters=1671 * 3)
         self.beta = beta
         if self.beta:
@@ -228,7 +229,7 @@ class AddNorm(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        #self.ln.reset_parameters()
+        # self.ln.reset_parameters()
         if self.beta:
             self.lin_beta.reset_parameters()
 
@@ -262,7 +263,6 @@ class FeedForward(nn.Module):
         return self.net(x)
 
 
-
 class SpatialEncoderLayer(nn.Module):
     def __init__(self,
                  in_channels=6,
@@ -276,7 +276,7 @@ class SpatialEncoderLayer(nn.Module):
         self.heads = heads
         self.beta = beta
         if dropout is None:
-            self.dropout = [0.5, 0.5, 0.5, 0.5]   # temp_conv, sparse_attention, add_norm, ffn
+            self.dropout = [0.5, 0.5, 0.5, 0.5]  # temp_conv, sparse_attention, add_norm, ffn
         else:
             self.dropout = dropout
 
@@ -322,6 +322,7 @@ class SpatialEncoderLayer(nn.Module):
 
         return x
 
+
 class SpatialFullEncoderLayer(nn.Module):
     def __init__(self,
                  in_channels=6,
@@ -335,7 +336,7 @@ class SpatialFullEncoderLayer(nn.Module):
         self.heads = heads
         self.beta = beta
         if dropout is None:
-            self.dropout = [0.5, 0.5, 0.5, 0.5]   # temp_conv, sparse_attention, add_norm, ffn
+            self.dropout = [0.5, 0.5, 0.5, 0.5]  # temp_conv, sparse_attention, add_norm, ffn
         else:
             self.dropout = dropout
 
@@ -345,7 +346,7 @@ class SpatialFullEncoderLayer(nn.Module):
         self.lin_qkv = Linear(in_channels, mdl_channels * 3, bias=False)
 
         self.multi_head_attn = FullAttention(in_channels=mdl_channels // heads,
-                                               attention_dropout=dropout[1])
+                                             attention_dropout=dropout[1])
 
         self.add_norm_att = AddNorm(self.mdl_channels, False, self.dropout[2], self.heads)
         self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2], self.heads)
@@ -374,6 +375,8 @@ class SpatialFullEncoderLayer(nn.Module):
         x = self.add_norm_ffn(x, self.ffn(x))
 
         return x
+
+
 class TemporalEncoderLayer(nn.Module):
     def __init__(self,
                  in_channels=6,
@@ -387,7 +390,7 @@ class TemporalEncoderLayer(nn.Module):
         self.heads = heads
         self.beta = beta
         if dropout is None:
-            self.dropout = [0.5, 0.5, 0.5, 0.5]   # temp_conv, sparse_attention, add_norm, ffn
+            self.dropout = [0.5, 0.5, 0.5, 0.5]  # temp_conv, sparse_attention, add_norm, ffn
         else:
             self.dropout = dropout
 

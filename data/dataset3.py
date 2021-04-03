@@ -301,18 +301,18 @@ class SkeletonDataset(Dataset, ABC):
 
         self.parts = [self.head, self.hands, self.torso, self.legs]
 
-        self.keep_part = [1, 1, 1, 1, 1, 1, 1, 3, 3, 1, 
-                            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
-                            1, 1, 1, 3, 1, 3, 1, 1, 1, 1, 
-                            1, 1, 1, 1, 0, 0, 1, 1, 1, 1,
-                            3, 1, 1, 1, 1, 1, 1, 2, 1, 1,
-                            2, 1, 1, 1, 1, 1, 1, 1, 3, 3,
-                            1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                            1, 1, 1, 1, 1, 1, 1, 1, 1, 3,
-                            1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                            1, 1, 1, 1, 1, 1, 1, 1, 3, 3,
-                            3, 3, 1, 2, 1, 1, 1, 1, 1, 1,
-                            3, 1, 1, 1, 1, 3, 1, 1, 1, 1]
+        self.keep_part = [1, 1, 1, 1, 1, 1, 1, 3, 3, 1,
+                          1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                          1, 1, 1, 3, 1, 3, 1, 1, 1, 1,
+                          1, 1, 1, 1, 0, 0, 1, 1, 1, 1,
+                          3, 1, 1, 1, 1, 1, 1, 2, 1, 1,
+                          2, 1, 1, 1, 1, 1, 1, 1, 3, 3,
+                          1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                          1, 1, 1, 1, 1, 1, 1, 1, 1, 3,
+                          1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                          1, 1, 1, 1, 1, 1, 1, 1, 3, 3,
+                          3, 3, 1, 2, 1, 1, 1, 1, 1, 1,
+                          3, 1, 1, 1, 1, 3, 1, 1, 1, 1]
 
         self.window_size = [75, 94, 112]
 
@@ -441,17 +441,17 @@ class SkeletonDataset(Dataset, ABC):
 
         t = Data(x=t, y=y)
         return t
-    
+
     def transform_data(self, data):
-        option_list = [0, 1, 2, 3, 4, 5] # none, add noise, cut off, rotation
-        bp_list = [0, 1, 2, 3] #head, hands, torso, legs
-        scale = 0.01 
+        option_list = [0, 1, 2, 3, 4, 5]  # none, add noise, cut off, rotation
+        bp_list = [0, 1, 2, 3]  # head, hands, torso, legs
+        scale = 0.01
         factor = 5e-3
-        choice = random.choices(option_list, weights=(80,20,10,20,20,10), k=1)
-        #choice = random.choices(option_list, weights=(0,0,0,20,0,0), k=1)
+        choice = random.choices(option_list, weights=(80, 20, 10, 20, 20, 10), k=1)
+        # choice = random.choices(option_list, weights=(0,0,0,20,0,0), k=1)
         if choice[0] == 1:
-            gaussian_noise = torch.normal(mean=0, std=scale, size=data.x[...,:3].size())
-            noisy_data = data.x[...,:3] + gaussian_noise * factor
+            gaussian_noise = torch.normal(mean=0, std=scale, size=data.x[..., :3].size())
+            noisy_data = data.x[..., :3] + gaussian_noise * factor
             bone_data = gen_bone_data(noisy_data, self.sk_adj)
             mv_data = gen_motion_vector(noisy_data)
             data.x = torch.cat((noisy_data, bone_data, mv_data), dim=-1)
@@ -459,8 +459,8 @@ class SkeletonDataset(Dataset, ABC):
                 print("Nan from gaussian noise")
         elif choice[0] == 2:
             bp_list.remove(self.keep_part[data.y])
-            bp_choice = random.choices(bp_list, weights=(20,20,20), k=1)
-            data.x[:,self.parts[bp_choice[0]],:] = 0.0
+            bp_choice = random.choices(bp_list, weights=(20, 20, 20), k=1)
+            data.x[:, self.parts[bp_choice[0]], :] = 0.0
             if torch.isnan(data.x).sum():
                 print("Nan from cut off")
         elif choice[0] == 3:
@@ -468,9 +468,9 @@ class SkeletonDataset(Dataset, ABC):
             x_axis = [8, 4]
             # print('sub the center joint #1 (spine joint in ntu and neck joint in kinetics)')
             # Use the first person's body center (`1:2` along the nodes dimension)
-            norm_data = data.x[...,:3]
+            norm_data = data.x[..., :3]
             main_body_center = norm_data[:, 1:2, :].clone()  # (F, V, C) where F = M * T
-            #main_body_center = torch.cat([main_body_center] * 2)
+            # main_body_center = torch.cat([main_body_center] * 2)
             norm_data -= main_body_center
 
             # print('parallel the bone between hip (joint 0) and spine (joint 1) of the first person to the z axis')
@@ -487,7 +487,7 @@ class SkeletonDataset(Dataset, ABC):
             mv_data = gen_motion_vector(norm_data)
             data.x = torch.cat((norm_data, bone_data, mv_data), dim=-1)
         elif choice[0] == 4:
-            len_choice = random.choices(self.window_size, weights=(20,20,20), k=1)
+            len_choice = random.choices(self.window_size, weights=(20, 20, 20), k=1)
             data.x = random_choose(data.x, size=len_choice[0])
             if torch.isnan(data.x).sum():
                 print("Nan from random.choice")
@@ -495,7 +495,7 @@ class SkeletonDataset(Dataset, ABC):
             data.x = random_move(data.x)
             if torch.isnan(data.x).sum():
                 print("Nan from random.move")
-            
+
         return data
 
     def process(self):
@@ -585,29 +585,28 @@ class SkeletonDataset(Dataset, ABC):
                                            self.processed_file_names[idx]))
             return [torch.load(osp.join(self.processed_dir,
                                         self.processed_file_names[i])) for i in idx]
-        #return self.data[idx]
-        #if self.sample == 'train':
+        # return self.data[idx]
+        # if self.sample == 'train':
         #    return self.transform_data(self.data[idx])
 
         return self.data[idx]
 
 
-
 def test():
-    #from argparse import ArgumentParser
+    # from argparse import ArgumentParser
     from torch_geometric.data import DataLoader
-    #parser = ArgumentParser()
-    #parser.add_argument('--root', dest='root',
+    # parser = ArgumentParser()
+    # parser.add_argument('--root', dest='root',
     #                    default=osp.join(os.getcwd()),
     #                    type=str, help='Dataset')
-    #parser.add_argument('--dataset', dest='dataset', default='ntu_60',
+    # parser.add_argument('--dataset', dest='dataset', default='ntu_60',
     #                    type=str, help='Dataset')
-    #sargs = make_args()
+    # sargs = make_args()
     train_ds = SkeletonDataset(os.getcwd(), name='ntu_60',
                                use_motion_vector=False, sample='train')
     test_ds = SkeletonDataset(os.getcwd(), name='ntu_60',
                               use_motion_vector=False, sample='val')
-    
+
     print("Data generation finished.")
 
 

@@ -6,8 +6,8 @@ download ntu rgb+d 60 action recognition from skeleton from http://rose1.ntu.edu
 
 or use google drive 
 
-[NTU60](https://drive.google.com/open?id=1CUZnBtYwifVXS21yVg62T-vrPVayso5H)
-[NTU120](https://drive.google.com/open?id=1tEbuaEqMxAV7dNc4fqu1O4M7mC6CJ50w)
+[NTU60](https://drive.google.com/uc?id=1CUZnBtYwifVXS21yVg62T-vrPVayso5H)
+[NTU120](https://drive.google.com/uc?id=1tEbuaEqMxAV7dNc4fqu1O4M7mC6CJ50w)
 
 uzip data as the following file structure: APBGCN/raw/.\*skeleton (create "raw" directory under APBGCN and put skeleton files)
 

@@ -5,13 +5,16 @@ import torch.nn.functional as F
 
 __all__ = ['MaskPowerNorm']
 
+
 def _sum_ft(tensor):
     """sum over the first and last dimention"""
     return tensor.sum(dim=0).sum(dim=-1)
 
+
 class GroupScaling1D(nn.Module):
     r"""Scales inputs by the second moment for the entire layer.
     """
+
     def __init__(self, eps=1e-5, group_num=4):
         super(GroupScaling1D, self).__init__()
         self.eps = eps
@@ -26,18 +29,19 @@ class GroupScaling1D(nn.Module):
         T, B, C = input.shape[0], input.shape[1], input.shape[2]
         Cg = C // self.group_num
         gn_input = input.contiguous().reshape(T, B, self.group_num, Cg)
-        moment2 = torch.repeat_interleave( torch.mean(gn_input * gn_input, dim=3, keepdim=True), \
-            repeats=Cg, dim=-1).contiguous().reshape(T, B, C)
+        moment2 = torch.repeat_interleave(torch.mean(gn_input * gn_input, dim=3, keepdim=True), \
+                                          repeats=Cg, dim=-1).contiguous().reshape(T, B, C)
         # divide out second moment
         return input / torch.sqrt(moment2 + self.eps)
+
 
 def _unsqueeze_ft(tensor):
     """add new dimensions at the front and the tail"""
     return tensor.unsqueeze(0).unsqueeze(-1)
 
+
 class PowerFunction(torch.autograd.Function):
     @staticmethod
-
     def forward(ctx, x, weight, bias, running_phi, eps, afwd, abkw, ema_gz, \
                 debug, warmup_iters, current_iter, mask_x):
         ctx.eps = eps
@@ -50,19 +54,20 @@ class PowerFunction(torch.autograd.Function):
         N, C, H, W = x.size()
         x2 = (mask_x * mask_x).mean(dim=0)
 
-       	var = x2.reshape(1, C, 1, 1)
+        var = x2.reshape(1, C, 1, 1)
         if current_iter <= warmup_iters:
-            z = x /(var + eps).sqrt()
+            z = x / (var + eps).sqrt()
         else:
-            z = x /(running_phi + eps).sqrt()
-            
+            z = x / (running_phi + eps).sqrt()
+
         y = z
         ctx.save_for_backward(z, var, weight, ema_gz)
 
         if current_iter < warmup_iters:
-            running_phi.copy_(running_phi * (current_iter-1)/current_iter + var.mean(dim=0, keepdim=True)/current_iter)
-        running_phi.copy_(afwd*running_phi + (1-afwd)*var.mean(dim=0, keepdim=True))
-        y = weight.reshape(1,C,1,1) * y + bias.reshape(1,C,1,1)
+            running_phi.copy_(
+                running_phi * (current_iter - 1) / current_iter + var.mean(dim=0, keepdim=True) / current_iter)
+        running_phi.copy_(afwd * running_phi + (1 - afwd) * var.mean(dim=0, keepdim=True))
+        y = weight.reshape(1, C, 1, 1) * y + bias.reshape(1, C, 1, 1)
         return y
 
     @staticmethod
@@ -81,13 +86,14 @@ class PowerFunction(torch.autograd.Function):
         g = g * 1
 
         gz = (g * z).mean(dim=3).mean(dim=2).mean(dim=0)
-        
+
         approx_grad_g = (g - (1 - abkw) * ema_gz * z)
         ema_gz.add_((approx_grad_g * z).mean(dim=3, keepdim=True).mean(dim=2, keepdim=True).mean(dim=0, keepdim=True))
 
-        gx = 1. / torch.sqrt(var + eps) * approx_grad_g 
+        gx = 1. / torch.sqrt(var + eps) * approx_grad_g
         return gx, (grad_output * y).sum(dim=3).sum(dim=2).sum(dim=0), grad_output.sum(dim=3).sum(dim=2).sum(dim=0), \
-         None, None, None, None, None, None, None, None, None, None
+               None, None, None, None, None, None, None, None, None, None
+
 
 class MaskPowerNorm(nn.Module):
     """
@@ -96,7 +102,7 @@ class MaskPowerNorm(nn.Module):
     """
 
     def __init__(self, num_features, eps=1e-5, alpha_fwd=0.9, alpha_bkw=0.9, \
-                affine=True, warmup_iters=10000, group_num=1):
+                 affine=True, warmup_iters=10000, group_num=1):
         super().__init__()
 
         self.num_features = num_features
@@ -105,8 +111,8 @@ class MaskPowerNorm(nn.Module):
 
         self.register_parameter('weight', nn.Parameter(torch.ones(num_features)))
         self.register_parameter('bias', nn.Parameter(torch.zeros(num_features)))
-        self.register_buffer('running_phi', torch.ones(1,num_features,1,1))
-        self.register_buffer('ema_gz', torch.zeros(1,num_features,1,1))
+        self.register_buffer('running_phi', torch.ones(1, num_features, 1, 1))
+        self.register_buffer('ema_gz', torch.zeros(1, num_features, 1, 1))
         self.register_buffer('iters', torch.zeros(1).type(torch.LongTensor))
 
         self.afwd = alpha_fwd
@@ -158,13 +164,14 @@ class MaskPowerNorm(nn.Module):
         if self.training:
             self.iters.copy_(self.iters + 1)
             output = PowerFunction.apply(input, self.weight, self.bias, self.running_phi, self.eps, \
-                        self.afwd, self.abkw, self.ema_gz, self.debug, self.warmup_iters, self.iters, mask_input)
-            
+                                         self.afwd, self.abkw, self.ema_gz, self.debug, self.warmup_iters, self.iters,
+                                         mask_input)
+
         else:
             N, C, H, W = input.size()
             var = self.running_phi
             output = input / (var + self.eps).sqrt()
-            output = self.weight.reshape(1,C,1,1) * output + self.bias.reshape(1,C,1,1)
+            output = self.weight.reshape(1, C, 1, 1) * output + self.bias.reshape(1, C, 1, 1)
 
         output = output.reshape(input_shape)
         output = output.permute(2, 0, 1).contiguous()
