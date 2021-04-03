@@ -1,4 +1,3 @@
-
 import os
 import time
 import torch
@@ -52,13 +51,13 @@ def run(rank, world_size):
                              drop_rate=args.drop_rate).to(rank)
     model = DistributedDataParallel(model, device_ids=[rank])
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    #optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
+    # optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
     loss_compute = LabelSmoothingCrossEntropy()
 
     if rank == 0:
         test_loader = DataLoader(test_ds,
-                             batch_size=args.batch_size)
-    
+                                 batch_size=args.batch_size)
+
     last_epoch = 0
     adj = skeleton_parts()[0].to(rank)
 
@@ -72,8 +71,8 @@ def run(rank, world_size):
         total_batch = len(train_ds) // args.batch_size + 1
 
         for i, batch in tqdm(enumerate(train_loader),
-                         total=total_batch,
-                         desc="Train Epoch {}".format(epoch + 1)):
+                             total=total_batch,
+                             desc="Train Epoch {}".format(epoch + 1)):
             batch = batch.to(rank)
             sample, label, bi = batch.x, batch.y, batch.batch
             optimizer.zero_grad()
@@ -90,7 +89,7 @@ def run(rank, world_size):
         elapsed = time.time() - start
         accuracy = correct / total_samples * 100.
         print('\n------ loss: %.3f; accuracy: %.3f; average time: %.4f' %
-          (running_loss / total_batch, accuracy, elapsed / len(train_ds)))
+              (running_loss / total_batch, accuracy, elapsed / len(train_ds)))
 
         dist.barrier()
 
@@ -102,11 +101,11 @@ def run(rank, world_size):
             total_samples = 0
             start = time.time()
             total_batch = len(test_ds) // args.batch_size + 1
-            #adj = skeleton_parts()[0].to(rank)
+            # adj = skeleton_parts()[0].to(rank)
 
             for i, batch in tqdm(enumerate(test_loader),
-                         total=total_batch,
-                         desc="Test: "):
+                                 total=total_batch,
+                                 desc="Test: "):
                 batch = batch.to(rank)
                 sample, label, bi = batch.x, batch.y, batch.batch
                 with torch.no_grad():
@@ -119,7 +118,7 @@ def run(rank, world_size):
             elapsed = time.time() - start
             accuracy = correct / total_samples * 100.
             print('\n------ loss: %.3f; accuracy: %.3f; average time: %.4f' %
-            (running_loss / total_batch, accuracy, elapsed / len(test_ds)))
+                  (running_loss / total_batch, accuracy, elapsed / len(test_ds)))
 
         dist.barrier()
 
@@ -129,4 +128,4 @@ def run(rank, world_size):
 if __name__ == '__main__':
     world_size = torch.cuda.device_count()
     print('Let\'s use', world_size, 'GPUs!')
-    mp.spawn(run, args=(world_size, ), nprocs=world_size, join=True)
+    mp.spawn(run, args=(world_size,), nprocs=world_size, join=True)

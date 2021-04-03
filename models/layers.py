@@ -447,7 +447,8 @@ class WSConv1d(nn.Conv1d):
         https://github.com/vdumoulin/conv_arithmetic/blob/master/README.md
     """
 
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True, padding_mode='zeros'):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True,
+                 padding_mode='zeros'):
         super().__init__(in_channels, out_channels, kernel_size, stride=stride, padding=padding,
                          dilation=dilation, groups=groups, bias=bias, padding_mode=padding_mode)
 
@@ -490,6 +491,7 @@ class LayerNorm(torch.nn.Module):
             learnable affine parameters :math:`\gamma` and :math:`\beta`.
             (default: :obj:`True`)
     """
+
     def __init__(self, in_channels, eps=1e-5, affine=True):
         super(LayerNorm, self).__init__()
 
