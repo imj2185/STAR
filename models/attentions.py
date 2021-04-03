@@ -412,13 +412,13 @@ class TemporalEncoderLayer(nn.Module):
         self.ffn.reset_parameters()
 
     def forward(self, x, bi=None):
-        f, n, c = x.shape
-
+        #f, n, c = x.shape
+        x = rearrange(x, 'f n c -> n f c')
         query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
 
-        query = rearrange(query, 'f n (h c) -> n f h c', h=self.heads)
-        key = rearrange(key, 'f n (h c) -> n f h c', h=self.heads)
-        value = rearrange(value, 'f n (h c) -> n f h c', h=self.heads)
+        query = rearrange(query, 'n f (h c) -> n f h c', h=self.heads)
+        key = rearrange(key, 'n f (h c) -> n f h c', h=self.heads)
+        value = rearrange(value, 'n f (h c) -> n f h c', h=self.heads)
 
         t = self.multi_head_attn(query, key, value, bi)
         t = rearrange(t, 'n f h c -> n f (h c)', h=self.heads)
