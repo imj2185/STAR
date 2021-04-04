@@ -69,7 +69,8 @@ class DualGraphEncoder(nn.Module, ABC):
             #nn.LayerNorm(out_channels * num_joints),
             nn.Linear(out_channels * num_joints, mlp_head_hidden),
             # nn.Tanh(),
-            nn.LeakyReLU(),
+            #nn.LeakyReLU(),
+            nn.SiLU(),
             nn.Dropout(p=0.3),
             nn.Linear(mlp_head_hidden, classes)
         )

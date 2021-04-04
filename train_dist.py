@@ -18,7 +18,7 @@ from tqdm import tqdm
 from args import make_args
 from data.dataset3 import SkeletonDataset, skeleton_parts
 from models.net2s import DualGraphEncoder
-from optimizer import LabelSmoothingCrossEntropy, SGD_AGC, CosineAnnealingWarmupRestarts
+from optimizer import LabelSmoothingCrossEntropy, SGD_AGC, CosineAnnealingWarmupRestarts, NoamOpt
 
 matplotlib.use('Agg')
 
@@ -85,7 +85,12 @@ def run(rank, world_size):
                              drop_rate=args.drop_rate).to(rank)
 
     model = DistributedDataParallel(model, device_ids=[rank])
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    #optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = NoamOpt(args.model_dim,  # TODO num_nodes is not fixed
+                   args.opt_train_factor,
+                   args.warmup_steps,
+                   opt.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.98), eps=1e-9,
+                   weight_decay=args.weight_decay))
     #optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
     #lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=12, cycle_mult=1.0, max_lr=0.1,
     #                                             min_lr=1e-4, warmup_steps=3, gamma=0.4)
@@ -140,6 +145,8 @@ def run(rank, world_size):
             writer.add_scalar('train/train_overall_acc', accuracy, epoch + 1)
             
         #lr_scheduler.step()
+        if (epoch+1) % 10 == 0:
+
         dist.barrier()
 
         if rank == 0:  # We evaluate on a single GPU for now.

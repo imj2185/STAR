@@ -40,7 +40,7 @@ def make_args():
     parser.add_argument('--heads', dest='heads', default=32, type=int)
 
     # Training Setting up
-    parser.add_argument('--lr', dest='lr', default=0.1, type=float)
+    parser.add_argument('--lr', dest='lr', default=0.001, type=float)
     parser.add_argument('--weight_decay', dest='weight_decay', default=0.09, type=float)
     parser.add_argument('--warmup_steps', dest='warmup_steps', default=6e5, type=float)
     parser.add_argument('--opt_train_factor', dest='opt_train_factor', default=4, type=float)
@@ -72,7 +72,8 @@ def make_args():
                         heads=8,
                         data_parallel=False,
                         cross_k=5,
-                        mlp_head_hidden=128)
+                        mlp_head_hidden=128,
+                        lr=0.001)
 
     args = parser.parse_args()
     return args
