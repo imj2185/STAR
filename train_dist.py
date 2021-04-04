@@ -18,7 +18,7 @@ from tqdm import tqdm
 from args import make_args
 from data.dataset3 import SkeletonDataset, skeleton_parts
 from models.net2s import DualGraphEncoder
-from optimizer import LabelSmoothingCrossEntropy
+from optimizer import LabelSmoothingCrossEntropy, SGD_AGC, CosineAnnealingWarmupRestarts
 
 matplotlib.use('Agg')
 
@@ -85,8 +85,10 @@ def run(rank, world_size):
                              drop_rate=args.drop_rate).to(rank)
 
     model = DistributedDataParallel(model, device_ids=[rank])
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    # optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
+    #optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
+    lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=12, cycle_mult=1.0, max_lr=0.1,
+                                                 min_lr=1e-4, warmup_steps=3, gamma=0.4)
     loss_compute = LabelSmoothingCrossEntropy()
 
     if rank == 0:
@@ -136,7 +138,8 @@ def run(rank, world_size):
         if rank == 0:
             writer.add_scalar('train/train_loss', running_loss / total_batch, epoch + 1)
             writer.add_scalar('train/train_overall_acc', accuracy, epoch + 1)
-
+            
+        lr_scheduler.step()
         dist.barrier()
 
         if rank == 0:  # We evaluate on a single GPU for now.

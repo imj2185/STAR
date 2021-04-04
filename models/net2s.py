@@ -92,7 +92,6 @@ class DualGraphEncoder(nn.Module, ABC):
 
         t = self.positional_encoding(t, bi)
         t = rearrange(t, 'n b c -> b n c')
-        att = None
 
         # Core pipeline
         for i in range(self.num_layers):

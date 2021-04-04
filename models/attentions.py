@@ -365,7 +365,7 @@ class SpatialFullEncoderLayer(nn.Module):
         query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
 
         query = rearrange(query, 'f n (h c) -> f n h c', h=self.heads)
-        key = rearrange(key, 'f n(h c) -> f n h c', h=self.heads)
+        key = rearrange(key, 'f n (h c) -> f n h c', h=self.heads)
         value = rearrange(value, 'f n (h c) -> f n h c', h=self.heads)
 
         t = self.multi_head_attn(query, key, value, att)
