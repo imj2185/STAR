@@ -19,7 +19,7 @@ def power_adj(adj, dim, p):
     return ic
 
 
-def softmax(src: Tensor, index: Optional[Tensor] = None,
+def softmax_(src: Tensor, index: Optional[Tensor] = None,
             ptr: Optional[Tensor] = None, num_nodes: Optional[int] = None,
             dim: int = 0) -> Tensor:
     r"""Computes a sparsely evaluated softmax.
