@@ -66,9 +66,8 @@ class DualGraphEncoder(nn.Module, ABC):
         self.context_attention = GlobalContextAttention(in_channels=out_channels)
 
         self.mlp_head = nn.Sequential(
-            #nn.LayerNorm(out_channels * num_joints),
-            #nn.Linear(out_channels * num_joints, mlp_head_hidden),
-            nn.Linear(out_channels, mlp_head_hidden),
+            nn.Linear(out_channels * num_joints, mlp_head_hidden),
+            #nn.Linear(out_channels, mlp_head_hidden),
             # nn.Tanh(),
             #nn.LeakyReLU(),
             nn.SiLU(),
@@ -103,10 +102,9 @@ class DualGraphEncoder(nn.Module, ABC):
 
         t = rearrange(t, 'f n c -> n f c')
         # bi_ = bi[:bi.shape[0]:2**self.num_layers]
-        #t = rearrange(self.context_attention(t, batch_index=bi), 'n f c -> f (n c)')  # bi is the shrunk along the batch index
-        t = self.context_attention(t, batch_index=bi) # n b c
+        t = rearrange(self.context_attention(t, batch_index=bi), 'n f c -> f (n c)')  # bi is the shrunk along the batch index
+        #t = self.context_attention(t, batch_index=bi) # n b c
         #t = rearrange(global_mean_pool(t, bi), 'f n c -> f (n c)')
-        t = t.mean(0)
         t = self.mlp_head(t)
         # return fn.sigmoid(t)  # dimension (b, n, oc)
         return t

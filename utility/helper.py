@@ -14,8 +14,8 @@ def make_checkpoint(root, name, epoch, model, optimizer, loss):
     }, osp.join(root, name + '_' + str(epoch) + ".pickle"))
 
 
-def load_checkpoint(path, model, optimizer):
-    checkpoint = torch.load(path)
+def load_checkpoint(path, model, optimizer, map_location):
+    checkpoint = torch.load(path, map_location=map_location)
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     epoch = checkpoint['epoch']

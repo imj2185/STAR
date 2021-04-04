@@ -19,7 +19,7 @@ from args import make_args
 from data.dataset3 import SkeletonDataset, skeleton_parts
 from models.net2s import DualGraphEncoder
 from optimizer import LabelSmoothingCrossEntropy, SGD_AGC, CosineAnnealingWarmupRestarts, NoamOpt
-
+from utility.helper import make_checkpoint, load_checkpoint
 matplotlib.use('Agg')
 
 
@@ -95,13 +95,19 @@ def run(rank, world_size):
     #lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=12, cycle_mult=1.0, max_lr=0.1,
     #                                             min_lr=1e-4, warmup_steps=3, gamma=0.4)
     loss_compute = LabelSmoothingCrossEntropy()
+    last_epoch = args.last_epoch
 
     if rank == 0:
         writer = SummaryWriter(args.log_dir)
         test_loader = DataLoader(test_ds,
                                  batch_size=args.batch_size)
+    
+    if args.load_model:
+        map_location = {'cuda:%d' % 0: 'cuda:%d' % rank}
+        last_epoch, loss = load_checkpoint(osp.join(args.save_root,
+                                                    args.save_name + '_' + str(last_epoch) + '.pickle'),
+                                           model, optimizer, map_location)
 
-    last_epoch = 0
     adj = skeleton_parts()[0].to(rank)
 
     for epoch in range(last_epoch, args.epoch_num + last_epoch):
@@ -148,6 +154,8 @@ def run(rank, world_size):
         dist.barrier()
 
         if rank == 0:  # We evaluate on a single GPU for now.
+            if epoch + 1 % args.epoch_save == 0 and epoch != 0:
+                make_checkpoint(args.save_root, args.save_name, epoch + 1, model, optimizer, loss)
             model.eval()
             running_loss = 0.
             accuracy = 0.

@@ -39,6 +39,9 @@ class NoamOpt(object):
     def zero_grad(self):
         self.optimizer.zero_grad()
 
+    def state_dict(self):
+        return self.optimizer.state_dict()
+
 
 def get_std_opt(model, args):
     # channels = [int(n) for n in args.encoder_channels.split(',')]
