@@ -69,7 +69,7 @@ class SparseAttention(nn.Module):
             qk = qk[idx]"""
 
         # Compute the attention and the weighted average, adj[0] is cols idx in the same row
-        alpha = fn.dropout(softmax_(softmax_temp * qk, adj[0]),
+        alpha = fn.dropout(softmax_(softmax_temp * qk, adj[0], dim=-2),
                            p=self.dropout,
                            training=self.training)
         # sparse matmul, adj as indices and qk as nonzero
