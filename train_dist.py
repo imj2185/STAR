@@ -89,7 +89,7 @@ def run(rank, world_size):
     optimizer = NoamOpt(args.model_dim,  # TODO num_nodes is not fixed
                    args.opt_train_factor,
                    args.warmup_steps,
-                   opt.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.98), eps=1e-9,
+                   torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.98), eps=1e-9,
                    weight_decay=args.weight_decay))
     #optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
     #lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=12, cycle_mult=1.0, max_lr=0.1,

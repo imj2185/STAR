@@ -36,6 +36,9 @@ class NoamOpt(object):
         self._rate = rate
         self.optimizer.step()
 
+    def zero_grad(self):
+        self.optimizer.zero_grad()
+
 
 def get_std_opt(model, args):
     # channels = [int(n) for n in args.encoder_channels.split(',')]
