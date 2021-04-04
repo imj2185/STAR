@@ -145,8 +145,6 @@ def run(rank, world_size):
             writer.add_scalar('train/train_overall_acc', accuracy, epoch + 1)
             
         #lr_scheduler.step()
-        if (epoch+1) % 10 == 0:
-
         dist.barrier()
 
         if rank == 0:  # We evaluate on a single GPU for now.
