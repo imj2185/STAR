@@ -156,6 +156,8 @@ def run(rank, world_size):
         if rank == 0:  # We evaluate on a single GPU for now.
             if epoch + 1 % args.epoch_save == 0 and epoch != 0:
                 make_checkpoint(args.save_root, args.save_name, epoch + 1, model, optimizer, loss)
+            lr = optimizer.state_dict()['param_groups'][0]['lr']
+            writer.add_scalar('params/lr', lr, epoch)
             model.eval()
             running_loss = 0.
             accuracy = 0.
