@@ -75,7 +75,7 @@ def make_args():
                         cross_k=5,
                         mlp_head_hidden=128,
                         lr=0.001,
-                        epoch_save=50)
+                        epoch_save=1)
 
     args = parser.parse_args()
     return args
