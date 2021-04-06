@@ -117,7 +117,7 @@ def run(rank, world_size):
         correct = 0
         total_samples = 0
         start = time.time()
-        total_batch = len(train_ds) // args.batch_size + 1
+        total_batch = len(train_ds) // (torch.cuda.device_count() * args.batch_size) + 1
 
         for i, batch in tqdm(enumerate(train_loader),
                              total=total_batch,
