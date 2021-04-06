@@ -71,7 +71,7 @@ def run(rank, world_size):
     train_sampler = DistributedSampler(train_ds, num_replicas=world_size,
                                        rank=rank)
     train_loader = DataLoader(train_ds,
-                              batch_size=args.batch_size,
+                              batch_size=args.batch_size, 
                               shuffle=True)
 
     model = DualGraphEncoder(in_channels=args.in_channels,
@@ -86,9 +86,10 @@ def run(rank, world_size):
 
     model = DistributedDataParallel(model, device_ids=[rank])
     #optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    total_batch = len(train_ds) // (torch.cuda.device_count() * args.batch_size) + 1
     optimizer = NoamOpt(args.model_dim,  # TODO num_nodes is not fixed
                    args.opt_train_factor,
-                   args.warmup_steps,
+                   total_batch * args.warmup_epochs,
                    torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.98), eps=1e-9,
                    weight_decay=args.weight_decay))
     #optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
@@ -117,7 +118,6 @@ def run(rank, world_size):
         correct = 0
         total_samples = 0
         start = time.time()
-        total_batch = len(train_ds) // (torch.cuda.device_count() * args.batch_size) + 1
 
         for i, batch in tqdm(enumerate(train_loader),
                              total=total_batch,

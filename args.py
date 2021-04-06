@@ -42,7 +42,7 @@ def make_args():
     # Training Setting up
     parser.add_argument('--lr', dest='lr', default=0.001, type=float)
     parser.add_argument('--weight_decay', dest='weight_decay', default=0.09, type=float)
-    parser.add_argument('--warmup_steps', dest='warmup_steps', default=6e5, type=float)
+    parser.add_argument('--warmup_epochs', dest='warmup_epochs', default=5, type=float)
     parser.add_argument('--opt_train_factor', dest='opt_train_factor', default=4, type=float)
     parser.add_argument('--epoch_num', dest='epoch_num', default=200, type=int)  # paper used: 2001
     parser.add_argument('--epoch_log', dest='epoch_log', default=50, type=int)  # test every
@@ -58,7 +58,7 @@ def make_args():
     parser.add_argument('--mlp_head_hidden', dest='mlp_head_hidden', default=128, type=int)  # paper used: 2001
     parser.add_argument('--last_epoch', dest='last_epoch', default=0, type=int)
     parser.set_defaults(gpu=True,
-                        batch_size=64,
+                        batch_size=16,
                         dataset_name='NTU',
                         dataset_root=osp.join(os.getcwd()),
                         save_root=osp.join(os.getcwd(), 'saved_model'),
@@ -68,8 +68,8 @@ def make_args():
                         num_conv_layers=2,
                         weight_decay=4e-5,
                         drop_rate=[0.4, 0.4, 0.4, 0.4],  # linear_attention, sparse_attention, add_norm, ffn
-                        hid_channels=64,
-                        out_channels=64,
+                        hid_channels=128,
+                        out_channels=128,
                         heads=8,
                         data_parallel=False,
                         cross_k=5,
