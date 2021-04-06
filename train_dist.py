@@ -125,6 +125,7 @@ def run(rank, world_size):
             batch = batch.to(rank)
             sample, label, bi = batch.x, batch.y, batch.batch
             optimizer.zero_grad()
+            #print(batch.y.shape, rank)
             out = model(sample, adj=adj, bi=bi)
             loss = loss_compute(out, label.long())
             loss.backward()

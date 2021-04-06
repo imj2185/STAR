@@ -44,7 +44,7 @@ def make_args():
     parser.add_argument('--weight_decay', dest='weight_decay', default=0.09, type=float)
     parser.add_argument('--warmup_steps', dest='warmup_steps', default=6e5, type=float)
     parser.add_argument('--opt_train_factor', dest='opt_train_factor', default=4, type=float)
-    parser.add_argument('--epoch_num', dest='epoch_num', default=100, type=int)  # paper used: 2001
+    parser.add_argument('--epoch_num', dest='epoch_num', default=200, type=int)  # paper used: 2001
     parser.add_argument('--epoch_log', dest='epoch_log', default=50, type=int)  # test every
     parser.add_argument('--epoch_save', dest='epoch_save', default=500, type=int)  # save every
     parser.add_argument('--save_root', dest='save_root', default='saved_model', type=str)
@@ -58,7 +58,7 @@ def make_args():
     parser.add_argument('--mlp_head_hidden', dest='mlp_head_hidden', default=128, type=int)  # paper used: 2001
     parser.add_argument('--last_epoch', dest='last_epoch', default=0, type=int)
     parser.set_defaults(gpu=True,
-                        batch_size=32,
+                        batch_size=64,
                         dataset_name='NTU',
                         dataset_root=osp.join(os.getcwd()),
                         save_root=osp.join(os.getcwd(), 'saved_model'),
@@ -75,7 +75,7 @@ def make_args():
                         cross_k=5,
                         mlp_head_hidden=128,
                         lr=0.001,
-                        epoch_save=1)
+                        epoch_save=50)
 
     args = parser.parse_args()
     return args
