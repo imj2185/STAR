@@ -86,10 +86,10 @@ def run(rank, world_size):
 
     model = DistributedDataParallel(model, device_ids=[rank])
     #optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    total_batch = len(train_ds) // (torch.cuda.device_count() * args.batch_size) + 1
+    total_batch_train = len(train_ds) // (torch.cuda.device_count() * args.batch_size) + 1
     optimizer = NoamOpt(args.model_dim,  # TODO num_nodes is not fixed
                    args.opt_train_factor,
-                   total_batch * args.warmup_epochs,
+                   total_batch_train * args.warmup_epochs,
                    torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.98), eps=1e-9,
                    weight_decay=args.weight_decay))
     #optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
@@ -120,7 +120,7 @@ def run(rank, world_size):
         start = time.time()
 
         for i, batch in tqdm(enumerate(train_loader),
-                             total=total_batch,
+                             total=total_batch_train,
                              desc="Train Epoch {}".format(epoch + 1)):
             batch = batch.to(rank)
             sample, label, bi = batch.x, batch.y, batch.batch
@@ -132,7 +132,7 @@ def run(rank, world_size):
             optimizer.step()
 
             if rank == 0 and i % 400 == 0:
-                step = (i + 1) + total_batch * epoch
+                step = (i + 1) + total_batch_train * epoch
                 path = osp.join(os.getcwd(), args.gradflow_dir)
                 if not osp.exists(path):
                     os.mkdir(path)
@@ -146,9 +146,9 @@ def run(rank, world_size):
         elapsed = time.time() - start
         accuracy = correct / total_samples * 100.
         print('\n------ loss: %.3f; accuracy: %.3f; average time: %.4f' %
-              (running_loss / total_batch, accuracy, elapsed / len(train_ds)))
+              (running_loss / total_batch_train, accuracy, elapsed / len(train_ds)))
         if rank == 0:
-            writer.add_scalar('train/train_loss', running_loss / total_batch, epoch + 1)
+            writer.add_scalar('train/train_loss', running_loss / total_batch_train, epoch + 1)
             writer.add_scalar('train/train_overall_acc', accuracy, epoch + 1)
             
         #lr_scheduler.step()
@@ -165,11 +165,11 @@ def run(rank, world_size):
             correct = 0
             total_samples = 0
             start = time.time()
-            total_batch = len(test_ds) // args.batch_size + 1
+            total_batch_test = len(test_ds) // args.batch_size + 1
             # adj = skeleton_parts()[0].to(rank)
 
             for i, batch in tqdm(enumerate(test_loader),
-                                 total=total_batch,
+                                 total=total_batch_test,
                                  desc="Test: "):
                 batch = batch.to(rank)
                 sample, label, bi = batch.x, batch.y, batch.batch
@@ -183,8 +183,8 @@ def run(rank, world_size):
             elapsed = time.time() - start
             accuracy = correct / total_samples * 100.
             print('\n------ loss: %.3f; accuracy: %.3f; average time: %.4f' %
-                  (running_loss / total_batch, accuracy, elapsed / len(test_ds)))
-            writer.add_scalar('test/test_loss', running_loss / total_batch, epoch + 1)
+                  (running_loss / total_batch_test, accuracy, elapsed / len(test_ds)))
+            writer.add_scalar('test/test_loss', running_loss / total_batch_test, epoch + 1)
             writer.add_scalar('test/test_overall_acc', accuracy, epoch + 1)
 
         dist.barrier()
