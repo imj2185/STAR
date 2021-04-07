@@ -9,6 +9,7 @@ from torch.nn import Linear
 from torch_scatter import scatter_sum, scatter_mean
 
 from utility.linalg import softmax_, spmm_
+from .kernels import swish_feature_map
 from .layers import Swish
 from .powernorm import MaskPowerNorm
 
@@ -398,6 +399,7 @@ class TemporalEncoderLayer(nn.Module):
         self.lin_qkv = Linear(in_channels, mdl_channels * 3, bias=False)
 
         self.multi_head_attn = LinearAttention(in_channels=mdl_channels // heads,
+                                               feature_map=swish_feature_map,
                                                attention_dropout=self.dropout[0])
 
         self.add_norm_att = AddNorm(self.mdl_channels, self.beta, self.dropout[2], self.heads)

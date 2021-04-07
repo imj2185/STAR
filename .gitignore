@@ -123,3 +123,9 @@ log/
 logs/
 saved_model/
 gradflow/
+
+# Picture or Figures
+*.pdf
+*.jpg
+*.png
+*.gif

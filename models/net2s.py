@@ -98,9 +98,11 @@ class DualGraphEncoder(nn.Module, ABC):
             t = self.spatial_layers[i](t, adj) + self.temporal_layers[i](t, bi)
 
         t = rearrange(t, 'f n c -> n f c')
+        # @context-aware attention shrinks the frames dimension: f -> m,
+        # where m is the actual number of video clip in a batch
         # t = rearrange(self.context_attention(t, batch_index=bi),
-        #               'n f c -> f (n c)')  # bi is the shrunk along the batch index
+        #               'n m c -> m (n c)')  # bi is the shrunk along the batch index
         t = self.context_attention(t, batch_index=bi)
-        t = rearrange(t, 'n f c -> f n c').mean(1)
+        t = rearrange(t, 'n m c -> m n c').mean(1)
         t = self.mlp_head(t)
         return t
