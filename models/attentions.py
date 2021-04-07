@@ -4,12 +4,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as fn
 from einops import rearrange
-from torch.nn import Linear
-
-from utility.linalg import BatchedMask, softmax_, spmm_
-from .layers import WSConv1d
 from fast_transformers.feature_maps import elu_feature_map
+from torch.nn import Linear
 from torch_scatter import scatter_sum, scatter_mean
+
+from utility.linalg import softmax_, spmm_
+from .layers import Swish
 from .powernorm import MaskPowerNorm
 
 
@@ -247,8 +247,9 @@ class FeedForward(nn.Module):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(in_channels, hidden_channels),
-            #nn.GELU(),
+            # nn.GELU(), #nn.SiLU(),
             nn.SiLU(),
+            Swish(),
             nn.Dropout(dropout),
             nn.Linear(hidden_channels, in_channels),
             nn.Dropout(dropout)
@@ -413,7 +414,7 @@ class TemporalEncoderLayer(nn.Module):
         self.ffn.reset_parameters()
 
     def forward(self, x, bi=None):
-        #f, n, c = x.shape
+        # f, n, c = x.shape
         x = rearrange(x, 'f n c -> n f c')
         query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
 
