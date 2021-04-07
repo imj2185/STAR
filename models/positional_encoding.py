@@ -1,14 +1,14 @@
-import networkx as nx
-import numpy as np
 import torch
-from scipy.sparse import coo_matrix
+import numpy as np
+from scipy.sparse import csr_matrix, coo_matrix
 from scipy.sparse.csgraph import breadth_first_tree
+import networkx as nx
+# from utility.linalg import bfs_enc
+
+
 # sequential relative
 # tree-based
 from torch import nn
-
-
-# from utility.linalg import bfs_enc
 
 
 def bfs_enc(edges, root, device):
@@ -48,8 +48,7 @@ def tree_struct_pos_enc(adj, max_chs, func=None, device=None):
 
 class SeqPosEncoding(nn.Module):
     def __init__(self,
-                 model_dim: int,
-                 use_weight=False):
+                 model_dim: int):
         """ Sequential Positional Encoding
             This kind of encoding uses the trigonometric functions to
             incorporate the relative position information into the input
@@ -58,17 +57,11 @@ class SeqPosEncoding(nn.Module):
         """
         super(SeqPosEncoding, self).__init__()
         self.model_dim = model_dim
-        scale = model_dim ** -0.5
-        if use_weight:
-            self.weight = nn.Parameter(torch.randn(model_dim, model_dim) * scale)
-        else:
-            self.weight = None
 
     @staticmethod
     def segment(pos, bi, device):
-        offset = torch.zeros(int(max(bi).item()) + 1).to(device)
-        diff = bi[1:] - bi[:-1]
-        offset[1:] = torch.nonzero((diff == 1), as_tuple=True)[0]
+        offset = (torch.cat([torch.tensor([1]).to(device),
+                             bi[1:] - bi[:-1]]) == 1).nonzero(as_tuple=True)[0]
         return pos - offset[bi]
 
     def forward(self, x, bi=None) -> torch.Tensor:
@@ -81,17 +74,13 @@ class SeqPosEncoding(nn.Module):
         dim = torch.arange(d, dtype=torch.float).reshape(1, 1, -1).to(x.device)
         phase = (pos / 1e4) ** (dim / d)
         assert x.shape[-2] == sequence_length and x.shape[-1] == self.model_dim
-        if self.weight is None:
-            return x + torch.where(dim.long() % 2 == 0, torch.sin(phase), torch.cos(phase))
-        return x + torch.matmul(torch.where(dim.long() % 2 == 0,
-                                            torch.sin(phase),
-                                            torch.cos(phase)), self.weight)
+        return x + torch.where(dim.long() % 2 == 0, torch.sin(phase), torch.cos(phase))
 
 
 def test():
     from ..data.dataset3 import skeleton_parts
     adj = skeleton_parts(cat=False)
-    enc = tree_struct_pos_enc(adj, 25, 25, None)
+    enc = tree_struct_pos_enc(adj, 25, 25, None, 'cuda')
     print(enc)
 
 
