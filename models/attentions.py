@@ -248,7 +248,6 @@ class FeedForward(nn.Module):
         self.net = nn.Sequential(
             nn.Linear(in_channels, hidden_channels),
             # nn.GELU(), #nn.SiLU(),
-            nn.SiLU(),
             Swish(),
             nn.Dropout(dropout),
             nn.Linear(hidden_channels, in_channels),
