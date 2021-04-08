@@ -49,7 +49,7 @@ def make_args():
     parser.add_argument('--epoch_save', dest='epoch_save', default=500, type=int)  # save every
     parser.add_argument('--save_root', dest='save_root', default='saved_model', type=str)
     parser.add_argument('--save_name', dest='save_name', default='check_point', type=str)
-    parser.add_argument('--model_dim', dest='model_dim', default=150, type=int)
+    parser.add_argument('--model_dim', dest='model_dim', default=128, type=int)
     parser.add_argument('--log_dir', dest='log_dir', default=osp.join(os.getcwd(), 'logs'), type=str)
     parser.add_argument('--gradflow_dir', dest='gradflow_dir', default=osp.join(os.getcwd(), 'gradflow'), type=str)
     parser.add_argument('--data_parallel', dest='data_parallel', default=False, type=bool, help='DataParallel')
@@ -58,7 +58,7 @@ def make_args():
     parser.add_argument('--mlp_head_hidden', dest='mlp_head_hidden', default=128, type=int)  # paper used: 2001
     parser.add_argument('--last_epoch', dest='last_epoch', default=0, type=int)
     parser.set_defaults(gpu=True,
-                        batch_size=16,
+                        batch_size=22,
                         dataset_name='NTU',
                         dataset_root=osp.join(os.getcwd()),
                         save_root=osp.join(os.getcwd(), 'saved_model'),
@@ -75,7 +75,10 @@ def make_args():
                         cross_k=5,
                         mlp_head_hidden=128,
                         lr=0.001,
-                        epoch_save=50)
+                        epoch_save=50,
+                        model_dim=128,
+                        warmup_epochs=5,
+                        opt_train_factor=1)
 
     args = parser.parse_args()
     return args

@@ -83,11 +83,11 @@ def run(rank, world_size):
                              sequential=False,
                              num_conv_layers=args.num_conv_layers,
                              drop_rate=args.drop_rate).to(rank)
-
+    print("# of model parameters: ", sum(p.numel() for p in model.parameters()))
     model = DistributedDataParallel(model, device_ids=[rank])
     #optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     total_batch_train = len(train_ds) // (torch.cuda.device_count() * args.batch_size) + 1
-    optimizer = NoamOpt(args.model_dim,  # TODO num_nodes is not fixed
+    optimizer = NoamOpt(args.model_dim,  #model dimension = hidden channel dim
                    args.opt_train_factor,
                    total_batch_train * args.warmup_epochs,
                    torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.98), eps=1e-9,
