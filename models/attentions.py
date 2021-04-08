@@ -250,7 +250,7 @@ class FeedForward(nn.Module):
             nn.Linear(in_channels, hidden_channels),
             # nn.GELU(), #nn.SiLU(),
             Swish(),
-            nn.Dropout(dropout),
+            # nn.Dropout(dropout),
             nn.Linear(hidden_channels, in_channels),
             nn.Dropout(dropout)
         )

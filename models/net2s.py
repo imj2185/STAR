@@ -72,7 +72,7 @@ class DualGraphEncoder(nn.Module, ABC):
             # nn.Tanh(),
             # nn.LeakyReLU(),  # nn.SiLU(),
             Swish(),
-            nn.Dropout(p=0.3),
+            # nn.Dropout(p=0.3),
             nn.Linear(mlp_head_hidden, classes)
         )
 
