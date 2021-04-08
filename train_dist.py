@@ -18,8 +18,9 @@ from tqdm import tqdm
 from args import make_args
 from data.dataset3 import SkeletonDataset, skeleton_parts
 from models.net2s import DualGraphEncoder
-from optimizer import LabelSmoothingCrossEntropy, SGD_AGC, CosineAnnealingWarmupRestarts, NoamOpt
+from optimizer import LabelSmoothingCrossEntropy, NoamOpt
 from utility.helper import make_checkpoint, load_checkpoint
+
 matplotlib.use('Agg')
 
 
@@ -68,10 +69,9 @@ def run(rank, world_size):
     shuffle(shuffled_list)
     train_ds = train_ds[shuffled_list]
 
-    train_sampler = DistributedSampler(train_ds, num_replicas=world_size,
-                                       rank=rank)
+    # train_sampler = DistributedSampler(train_ds, num_replicas=world_size, rank=rank)
     train_loader = DataLoader(train_ds,
-                              batch_size=args.batch_size, 
+                              batch_size=args.batch_size,
                               shuffle=True)
 
     model = DualGraphEncoder(in_channels=args.in_channels,
@@ -87,15 +87,15 @@ def run(rank, world_size):
     print(sum(p.numel() for p in model.parameters()))
 
     model = DistributedDataParallel(model, device_ids=[rank])
-    #optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    # optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     total_batch_train = len(train_ds) // (torch.cuda.device_count() * args.batch_size) + 1
     optimizer = NoamOpt(args.model_dim,  # TODO num_nodes is not fixed
-                   args.opt_train_factor,
-                   total_batch_train * args.warmup_epochs,
-                   torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.98), eps=1e-9,
-                   weight_decay=args.weight_decay))
-    #optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
-    #lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=12, cycle_mult=1.0, max_lr=0.1,
+                        args.opt_train_factor,
+                        total_batch_train * args.warmup_epochs,
+                        torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.98), eps=1e-9,
+                                         weight_decay=args.weight_decay))
+    # optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
+    # lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=12, cycle_mult=1.0, max_lr=0.1,
     #                                             min_lr=1e-4, warmup_steps=3, gamma=0.4)
     loss_compute = LabelSmoothingCrossEntropy()
     last_epoch = args.last_epoch
@@ -104,7 +104,7 @@ def run(rank, world_size):
         writer = SummaryWriter(args.log_dir)
         test_loader = DataLoader(test_ds,
                                  batch_size=args.batch_size)
-    
+
     if args.load_model:
         map_location = {'cuda:%d' % 0: 'cuda:%d' % rank}
         last_epoch, loss = load_checkpoint(osp.join(args.save_root,
@@ -127,7 +127,7 @@ def run(rank, world_size):
             batch = batch.to(rank)
             sample, label, bi = batch.x, batch.y, batch.batch
             optimizer.zero_grad()
-            #print(batch.y.shape, rank)
+            # print(batch.y.shape, rank)
             out = model(sample, adj=adj, bi=bi)
             loss = loss_compute(out, label.long())
             loss.backward()
@@ -152,8 +152,8 @@ def run(rank, world_size):
         if rank == 0:
             writer.add_scalar('train/train_loss', running_loss / total_batch_train, epoch + 1)
             writer.add_scalar('train/train_overall_acc', accuracy, epoch + 1)
-            
-        #lr_scheduler.step()
+
+        # lr_scheduler.step()
         dist.barrier()
 
         if rank == 0:  # We evaluate on a single GPU for now.
@@ -163,7 +163,6 @@ def run(rank, world_size):
             writer.add_scalar('params/lr', lr, epoch)
             model.eval()
             running_loss = 0.
-            accuracy = 0.
             correct = 0
             total_samples = 0
             start = time.time()
