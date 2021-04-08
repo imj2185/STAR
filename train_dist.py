@@ -147,8 +147,8 @@ def run(rank, world_size):
             correct += corr.double().sum().item()
         elapsed = time.time() - start
         accuracy = correct / total_samples * 100.
-        print('\n------ loss: %.3f; accuracy: %.3f; average time: %.4f' %
-              (running_loss / total_batch_train, accuracy, elapsed / len(train_ds)))
+        print('--- train loss (epoch %d): %.3f; accuracy: %.3f; average time: %.4f' %
+              (epoch + 1, running_loss / total_batch_train, accuracy, elapsed / len(train_ds)))
         if rank == 0:
             writer.add_scalar('train/train_loss', running_loss / total_batch_train, epoch + 1)
             writer.add_scalar('train/train_overall_acc', accuracy, epoch + 1)
@@ -184,8 +184,8 @@ def run(rank, world_size):
                 correct += corr.double().sum().item()
             elapsed = time.time() - start
             accuracy = correct / total_samples * 100.
-            print('\n------ loss: %.3f; accuracy: %.3f; average time: %.4f' %
-                  (running_loss / total_batch_test, accuracy, elapsed / len(test_ds)))
+            print('--- test loss (epoch %d): %.3f; accuracy: %.3f; average time: %.4f\n' %
+                  (epoch + 1, running_loss / total_batch_test, accuracy, elapsed / len(test_ds)))
             writer.add_scalar('test/test_loss', running_loss / total_batch_test, epoch + 1)
             writer.add_scalar('test/test_overall_acc', accuracy, epoch + 1)
 
