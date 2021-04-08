@@ -84,8 +84,6 @@ def run(rank, world_size):
                              num_conv_layers=args.num_conv_layers,
                              drop_rate=args.drop_rate).to(rank)
 
-    print(sum(p.numel() for p in model.parameters()))
-
     model = DistributedDataParallel(model, device_ids=[rank])
     # optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     total_batch_train = len(train_ds) // (torch.cuda.device_count() * args.batch_size) + 1

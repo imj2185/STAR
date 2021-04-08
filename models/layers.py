@@ -434,22 +434,3 @@ class WSConv1d(nn.Conv1d):
     def forward(self, input, eps=1e-4):
         weight = self.standardize_weight(eps)
         return fn.conv1d(input, weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
-
-
-class _Swish(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, i):
-        result = i * torch.sigmoid(i)
-        ctx.save_for_backward(i)
-        return result
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        i = ctx.saved_variables[0]
-        _sigmoid = torch.sigmoid(i)
-        return grad_output * (_sigmoid * (1 + i * (1 - _sigmoid)))
-
-
-class Swish(nn.Module):
-    def forward(self, x):
-        return _Swish.apply(x)

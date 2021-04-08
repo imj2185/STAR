@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+import torch.nn.init as init
+import torch.nn.functional as F
 
 __all__ = ['MaskPowerNorm']
 
@@ -48,7 +50,7 @@ class PowerFunction(torch.autograd.Function):
         ctx.current_iter = current_iter
         ctx.warmup_iters = warmup_iters
         ctx.abkw = abkw
-        # rmax = 1
+        rmax = 1
         N, C, H, W = x.size()
         x2 = (mask_x * mask_x).mean(dim=0)
 

@@ -2,12 +2,15 @@ from abc import ABC
 
 import torch
 import torch.nn as nn
+from torch_geometric.nn import global_mean_pool
 # from third_party.performer import SelfAttention
 from einops import rearrange
-from models.layers import Swish
 
 from models.positional_encoding import SeqPosEncoding
-from .attentions import SpatialEncoderLayer, TemporalEncoderLayer, GlobalContextAttention
+from utility.tree import tree_encoding_from_traversal
+from .attentions import SpatialEncoderLayer, TemporalEncoderLayer, SpatialFullEncoderLayer, GlobalContextAttention
+from fast_transformers.masking import FullMask
+from .powernorm import MaskPowerNorm
 
 
 class DualGraphEncoder(nn.Module, ABC):
@@ -27,7 +30,7 @@ class DualGraphEncoder(nn.Module, ABC):
                  num_conv_layers=3):
         super(DualGraphEncoder, self).__init__()
         if drop_rate is None:
-            self.drop_rate = [0.5, 0.5, 0.5, 0.5]  # temp_conv, sparse_attention, add_norm, ffn
+            self.drop_rate = [0.5, 0.5, 0.5, 0.5]   # temp_conv, sparse_attention, add_norm, ffn
         else:
             self.drop_rate = drop_rate
         self.spatial_factor = nn.Parameter(torch.ones(num_layers)) * 0.5
@@ -38,7 +41,7 @@ class DualGraphEncoder(nn.Module, ABC):
         self.num_classes = classes
         self.dropout = drop_rate
         self.trainable_factor = trainable_factor
-        # self.bn = nn.BatchNorm1d(hidden_channels * 25, affine=False)
+        #self.bn = nn.BatchNorm1d(hidden_channels * 25, affine=False)
         self.dn = nn.BatchNorm1d(in_channels * 25, affine=True)
         channels = [in_channels] + [hidden_channels] * (num_layers - 1) + [out_channels]
         channels_ = channels[1:] + [out_channels]
@@ -66,6 +69,7 @@ class DualGraphEncoder(nn.Module, ABC):
         self.mean_bottleneck = mean_bottleneck
 
         self.mlp_head = nn.Sequential(
+<<<<<<< HEAD
             nn.Linear(out_channels if mean_bottleneck else out_channels * num_joints,
                       mlp_head_hidden),
             # nn.Linear(out_channels, mlp_head_hidden),
@@ -73,6 +77,14 @@ class DualGraphEncoder(nn.Module, ABC):
             # nn.LeakyReLU(),  # nn.SiLU(),
             Swish(),
             # nn.Dropout(p=0.3),
+=======
+            nn.Linear(out_channels * num_joints, mlp_head_hidden),
+            #nn.Linear(out_channels, mlp_head_hidden),
+            # nn.Tanh(),
+            #nn.LeakyReLU(),
+            nn.SiLU(),
+            nn.Dropout(p=0.3),
+>>>>>>> parent of 9d15476... new swish activation better GPU memory
             nn.Linear(mlp_head_hidden, classes)
         )
 
@@ -87,8 +99,8 @@ class DualGraphEncoder(nn.Module, ABC):
         c = t.shape[-1]
         t = self.dn(rearrange(t, 'b n c -> b (n c)'))
         t = self.lls(rearrange(t, 'b (n c) -> b n c', c=c))
-        # c = t.shape[-1]
-        # t = self.bn(rearrange(t, 'b n c -> b (n c)'))
+        #c = t.shape[-1]
+        #t = self.bn(rearrange(t, 'b n c -> b (n c)'))
         # t = rearrange(t, 'b (n c) -> b n c', c=c)
         t = rearrange(t, 'b n c -> n b c')
 
@@ -97,11 +109,12 @@ class DualGraphEncoder(nn.Module, ABC):
 
         # Core pipeline
         for i in range(self.num_layers):
-            # u = t  # branch
-            # t = self.spatial_layers[i](t, FullMask(25, 25, device=t.device))
+            #u = t  # branch
+            #t = self.spatial_layers[i](t, FullMask(25, 25, device=t.device))
             t = self.spatial_layers[i](t, adj) + self.temporal_layers[i](t, bi)
 
         t = rearrange(t, 'f n c -> n f c')
+<<<<<<< HEAD
         # @context-aware attention shrinks the frames dimension: f -> m,
         # where m is the actual number of video clip in a batch
         if self.mean_bottleneck:
@@ -110,5 +123,12 @@ class DualGraphEncoder(nn.Module, ABC):
         else:
             t = rearrange(self.context_attention(t, batch_index=bi),
                           'n m c -> m (n c)')  # bi is the shrunk along the batch index
+=======
+        # bi_ = bi[:bi.shape[0]:2**self.num_layers]
+        t = rearrange(self.context_attention(t, batch_index=bi), 'n f c -> f (n c)')  # bi is the shrunk along the batch index
+        #t = self.context_attention(t, batch_index=bi) # n b c
+        #t = rearrange(global_mean_pool(t, bi), 'f n c -> f (n c)')
+>>>>>>> parent of 9d15476... new swish activation better GPU memory
         t = self.mlp_head(t)
+        # return fn.sigmoid(t)  # dimension (b, n, oc)
         return t
