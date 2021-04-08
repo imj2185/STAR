@@ -21,6 +21,7 @@ class DualGraphEncoder(nn.Module, ABC):
                  num_joints=25,
                  classes=60,
                  drop_rate=None,
+                 mean_bottleneck=False,
                  sequential=True,
                  trainable_factor=False,
                  num_conv_layers=3):
@@ -62,8 +63,11 @@ class DualGraphEncoder(nn.Module, ABC):
 
         self.context_attention = GlobalContextAttention(in_channels=out_channels)
 
+        self.mean_bottleneck = mean_bottleneck
+
         self.mlp_head = nn.Sequential(
-            nn.Linear(out_channels * num_joints, mlp_head_hidden),
+            nn.Linear(out_channels if mean_bottleneck else out_channels * num_joints,
+                      mlp_head_hidden),
             # nn.Linear(out_channels, mlp_head_hidden),
             # nn.Tanh(),
             # nn.LeakyReLU(),  # nn.SiLU(),
@@ -100,9 +104,11 @@ class DualGraphEncoder(nn.Module, ABC):
         t = rearrange(t, 'f n c -> n f c')
         # @context-aware attention shrinks the frames dimension: f -> m,
         # where m is the actual number of video clip in a batch
-        t = rearrange(self.context_attention(t, batch_index=bi),
-                      'n m c -> m (n c)')  # bi is the shrunk along the batch index
-        # t = self.context_attention(t, batch_index=bi)
-        # t = rearrange(t, 'n m c -> m n c').mean(1)
+        if self.mean_bottleneck:
+            t = self.context_attention(t, batch_index=bi)
+            t = rearrange(t, 'n m c -> m n c').mean(1)
+        else:
+            t = rearrange(self.context_attention(t, batch_index=bi),
+                          'n m c -> m (n c)')  # bi is the shrunk along the batch index
         t = self.mlp_head(t)
         return t
