@@ -208,7 +208,7 @@ def skeleton_parts(num_joints=25, dataset='ntu', cat=True):
     if ('ntu' in dataset) or ('NTU' in dataset):
         sk_adj = torch.tensor(
             [[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24],
-             [1, 20, 20, 2, 20, 4, 5, 6, 20, 8, 9, 10, 0, 12, 13, 14, 0, 16, 17, 18, 22, 7, 24, 11]])
+             [1, 20, 20, 2, 20, 4, 5, 6, 20, 8, 9, 10, 0, 12, 13, 14, 0, 16, 17, 18, 7, 7, 11, 11]])
     elif 'kinetics' in dataset:
         sk_adj = torch.tensor(
             [[0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
@@ -224,9 +224,12 @@ def skeleton_parts(num_joints=25, dataset='ntu', cat=True):
     _, idx = sk_adj_undirected[0].sort()
     sk_adj_undirected = sk_adj_undirected[:, idx]
 
-    cat_adj = torch.cat([sk_adj_undirected,
-                         power_adj(sk_adj_undirected, max(num_joints, max(sk_adj_undirected[1]) + 1), 2),
-                         power_adj(sk_adj_undirected, max(num_joints, max(sk_adj_undirected[1]) + 1), 3)], dim=1)
+    p2 = power_adj(sk_adj_undirected, max(num_joints, max(sk_adj_undirected[1]) + 1), 2)
+    p2 = torch.stack([p2[0][p2[0] != p2[1]], p2[1][p2[0] != p2[1]]], dim=0)
+    p3 = power_adj(sk_adj_undirected, max(num_joints, max(sk_adj_undirected[1]) + 1), 3)
+
+
+    cat_adj = torch.cat([sk_adj_undirected, p2], dim=1)
 
     _, idx = cat_adj[0].sort()
     cat_adj = cat_adj[:, idx]
@@ -447,7 +450,7 @@ class SkeletonDataset(Dataset, ABC):
         bp_list = [0, 1, 2, 3]  # head, hands, torso, legs
         scale = 0.01
         factor = 5e-3
-        choice = random.choices(option_list, weights=(80, 20, 10, 20, 20, 10), k=1)
+        choice = random.choices(option_list, weights=(80, 20, 0, 0, 0, 0), k=1)
         # choice = random.choices(option_list, weights=(0,0,0,20,0,0), k=1)
         if choice[0] == 1:
             gaussian_noise = torch.normal(mean=0, std=scale, size=data.x[..., :3].size())
@@ -586,8 +589,8 @@ class SkeletonDataset(Dataset, ABC):
             return [torch.load(osp.join(self.processed_dir,
                                         self.processed_file_names[i])) for i in idx]
         # return self.data[idx]
-        # if self.sample == 'train':
-        #    return self.transform_data(self.data[idx])
+        if self.sample == 'train':
+            return self.transform_data(self.data[idx])
 
         return self.data[idx]
 
