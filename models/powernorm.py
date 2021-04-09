@@ -7,7 +7,7 @@ __all__ = ['MaskPowerNorm']
 
 
 def _sum_ft(tensor):
-    """sum over the first and last dimention"""
+    """sum over the first and last dimension"""
     return tensor.sum(dim=0).sum(dim=-1)
 
 
@@ -29,7 +29,7 @@ class GroupScaling1D(nn.Module):
         T, B, C = input.shape[0], input.shape[1], input.shape[2]
         Cg = C // self.group_num
         gn_input = input.contiguous().reshape(T, B, self.group_num, Cg)
-        moment2 = torch.repeat_interleave(torch.mean(gn_input * gn_input, dim=3, keepdim=True), \
+        moment2 = torch.repeat_interleave(torch.mean(gn_input * gn_input, dim=3, keepdim=True),
                                           repeats=Cg, dim=-1).contiguous().reshape(T, B, C)
         # divide out second moment
         return input / torch.sqrt(moment2 + self.eps)
@@ -42,7 +42,7 @@ def _unsqueeze_ft(tensor):
 
 class PowerFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, x, weight, bias, running_phi, eps, afwd, abkw, ema_gz, \
+    def forward(ctx, x, weight, bias, running_phi, eps, afwd, abkw, ema_gz,
                 debug, warmup_iters, current_iter, mask_x):
         ctx.eps = eps
         ctx.debug = debug
@@ -50,7 +50,7 @@ class PowerFunction(torch.autograd.Function):
         ctx.current_iter = current_iter
         ctx.warmup_iters = warmup_iters
         ctx.abkw = abkw
-        rmax = 1
+
         N, C, H, W = x.size()
         x2 = (mask_x * mask_x).mean(dim=0)
 
@@ -73,9 +73,6 @@ class PowerFunction(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         eps = ctx.eps
-        debug = ctx.debug
-        current_iter = ctx.current_iter
-        warmup_iters = ctx.warmup_iters
         abkw = ctx.abkw
 
         N, C, H, W = grad_output.size()
@@ -84,8 +81,6 @@ class PowerFunction(torch.autograd.Function):
         y = z
         g = grad_output * weight.reshape(1, C, 1, 1)
         g = g * 1
-
-        gz = (g * z).mean(dim=3).mean(dim=2).mean(dim=0)
 
         approx_grad_g = (g - (1 - abkw) * ema_gz * z)
         ema_gz.add_((approx_grad_g * z).mean(dim=3, keepdim=True).mean(dim=2, keepdim=True).mean(dim=0, keepdim=True))
@@ -101,7 +96,7 @@ class MaskPowerNorm(nn.Module):
     stability.
     """
 
-    def __init__(self, num_features, eps=1e-5, alpha_fwd=0.9, alpha_bkw=0.9, \
+    def __init__(self, num_features, eps=1e-5, alpha_fwd=0.9, alpha_bkw=0.9,
                  affine=True, warmup_iters=10000, group_num=1):
         super().__init__()
 
@@ -137,7 +132,7 @@ class MaskPowerNorm(nn.Module):
         shaped_input = (len(input.shape) == 2)
         if shaped_input:
             input = input.unsqueeze(0)
-        T, B, C = input.shape
+        T, B, _ = input.shape
         input = self.gp(input)
 
         # construct the mask_input, size to be (BxL) x C: L is the real length here
@@ -147,12 +142,7 @@ class MaskPowerNorm(nn.Module):
             # Transpose the bn_mask (B x T -> T x B)
             bn_mask = ~pad_mask
             bn_mask = bn_mask.transpose(0, 1)
-
-        if pad_mask is not None:
-            pad_size = (~bn_mask).sum()
             mask_input = input[bn_mask, :]
-        else:
-            mask_input = input.clone()
 
         mask_input = mask_input.reshape(-1, self.num_features)
 
@@ -163,7 +153,7 @@ class MaskPowerNorm(nn.Module):
 
         if self.training:
             self.iters.copy_(self.iters + 1)
-            output = PowerFunction.apply(input, self.weight, self.bias, self.running_phi, self.eps, \
+            output = PowerFunction.apply(input, self.weight, self.bias, self.running_phi, self.eps,
                                          self.afwd, self.abkw, self.ema_gz, self.debug, self.warmup_iters, self.iters,
                                          mask_input)
 
