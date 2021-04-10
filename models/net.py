@@ -7,7 +7,7 @@ from einops import rearrange
 
 from models.positional_encoding import SeqPosEncoding
 from .attentions import SpatialEncoderLayer, TemporalEncoderLayer
-from .layers import GlobalContextAttention
+from .attentions import GlobalContextAttention
 
 
 class DualGraphEncoder(nn.Module, ABC):
@@ -92,15 +92,6 @@ class DualGraphEncoder(nn.Module, ABC):
         :param bi: batch index
         :return: tensor
         """
-        """ if self.sequential:  # sequential architecture
-            for i in range(self.num_layers):
-                t = rearrange(fn.relu(self.spatial_layers[i](t, adj)),
-                              'b n c -> n b c')
-                t = rearrange(fn.relu(fn.layer_norm(fn.dropout(self.temporal_layers[i](t),
-                                                               self.dropout),
-                                                    t.shape[1:]) + t),  # residual and add_norm
-                              'n b c -> b n c')
-        else:  # parallel architecture"""
         t = self.lls(t)
         c = t.shape[-1]
         t = self.bn(rearrange(t, 'b n c -> b (n c)'))
@@ -118,9 +109,7 @@ class DualGraphEncoder(nn.Module, ABC):
             t = rearrange(t, 'n f c -> f n c')
 
         t = rearrange(t, 'f n c -> n f c')
-        # bi_ = bi[:bi.shape[0]:2**self.num_layers]
         t = rearrange(self.context_attention(t, batch_index=bi),
                       'n f c -> f (n c)')  # bi is the shrunk along the batch index
         t = self.mlp_head(t)
-        # return fn.sigmoid(t)  # dimension (b, n, oc)
         return t
