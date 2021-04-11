@@ -15,6 +15,27 @@ from .sample_tools import random_choose, random_move
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 
+def multi_input(data):
+    conn = np.array([2,2,21,3,21,5,6,7,21,9,10,11,1,13,14,15,1,17,18,19,2,23,8,25,12]) - 1
+    data = rearrange(' m f v c -> c f v m')
+    C, T, V, M = data.shape
+    data_new = np.zeros((3, C*2, T, V, M))
+    data_new[0,:C,:,:,:] = data
+    for i in range(V):
+        data_new[0,C:,:,i,:] = data[:,:,i,:] - data[:,:,1,:]
+    for i in range(T-2):
+        data_new[1,:C,i,:,:] = data[:,i+1,:,:] - data[:,i,:,:]
+        data_new[1,C:,i,:,:] = data[:,i+2,:,:] - data[:,i,:,:]
+    for i in range(len(conn)):
+        data_new[2,:C,:,i,:] = data[:,:,i,:] - data[:,:,conn[i],:]
+    bone_length = 0
+    for i in range(C):
+        bone_length += np.power(data_new[2,i,:,:,:], 2)
+    bone_length = np.sqrt(bone_length) + 0.0001
+    for i in range(C):
+        data_new[2,C+i,:,:,:] = np.arccos(data_new[2,i,:,:,:] / bone_length)
+
+    return rearrange(np.stack((data_new[0,:,:,:,:], data_new[1,:,:,:,:], data_new[2,:,:,:,:]), axis=0), 'c f v m -> m f v c')
 
 # def gen_bone_data(torch_data, paris, benchmark):
 #     T, N = torch_data.shape[0], torch_data.shape[1]
@@ -110,9 +131,11 @@ def pre_normalization(data, z_axis=None, x_axis=None):
     if x_axis is None:
         x_axis = [8, 4]
 
-    index = (data.sum(-1).sum(-1) != 0)  # index of non-zero frames
+    data_xyz = data[:,:,:3]
 
-    if data.sum() == 0:
+    index = (data_xyz.sum(-1).sum(-1) != 0)  # index of non-zero frames
+
+    if data_xyz.sum() == 0:
         print('empty video without skeleton information')
     '''
     # print('sub the center joint #1 (spine joint in ntu and neck joint in kinetics)')
@@ -358,7 +381,7 @@ class SkeletonDataset(Dataset, ABC):
         pass
 
     def read_xyz(self, file, sample, max_body=4,
-                 use_bone=True, use_motion=True):  # 取了前两个body
+                 use_bone=False, use_motion=False):  # 取了前两个body
         filename = osp.split(file)[-1]
         if 'ntu' in self.name:
             action_class = int(filename[filename.find('A') + 1: filename.find('A') + 4])
@@ -373,12 +396,12 @@ class SkeletonDataset(Dataset, ABC):
                         if m < max_body and j < self.num_joints:
                             # data[m, n, j, :] = [v['x'], v['y'], v['z'],
                             # v['orientationX'], v['orientationY'], v['orientationZ']]
-                            data[m, n, j, :] = [v['x'], v['y'], v['z']]
+                            data[m, n, j, :] = [v['x'], v['y'], v['z']] #M F V C
             # select 2 max energy body
             energy = np.array([get_nonzero_std(x) for x in data])
             index = energy.argsort()[::-1][0:self.max_body_true]
             data = data[index]
-
+            data = multi_input(data)
             torch_data = torch.from_numpy(data)
             del data
             torch_data = rearrange(torch_data, 'm f n c -> (m f) n c')  # <- always even so you can get person idx
@@ -589,8 +612,8 @@ class SkeletonDataset(Dataset, ABC):
             return [torch.load(osp.join(self.processed_dir,
                                         self.processed_file_names[i])) for i in idx]
         # return self.data[idx]
-        if self.sample == 'train':
-            return self.transform_data(self.data[idx])
+        #if self.sample == 'train':
+        #    return self.transform_data(self.data[idx])
 
         return self.data[idx]
 
