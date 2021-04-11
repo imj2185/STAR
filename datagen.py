@@ -18,7 +18,7 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 
 def multi_input(data):
     conn = np.array([2,2,21,3,21,5,6,7,21,9,10,11,1,13,14,15,1,17,18,19,2,23,8,25,12]) - 1
-    data = rearrange(' m f v c -> c f v m')
+    data = rearrange(data, ' m f v c -> c f v m')
     C, T, V, M = data.shape
     data_new = np.zeros((3, C*2, T, V, M))
     data_new[0,:C,:,:,:] = data
