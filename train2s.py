@@ -214,7 +214,7 @@ def main():
                              out_channels=args.out_channels,
                              num_layers=args.num_enc_layers,
                              num_heads=args.heads,
-                             sequential=False,
+                             use_joint_mean=False,
                              num_conv_layers=args.num_conv_layers,
                              drop_rate=args.drop_rate)
 

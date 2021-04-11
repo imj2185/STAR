@@ -11,7 +11,6 @@ from torch.nn import Parameter, Linear
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.nn.inits import glorot, zeros
 from torch_geometric.utils import remove_self_loops, add_self_loops
-from torch_scatter import scatter_mean
 
 # from models.attentions import SeqPosEncoding
 from utility.linalg import batched_spmm, batched_transpose, softmax_

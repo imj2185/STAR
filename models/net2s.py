@@ -20,7 +20,7 @@ class DualGraphEncoder(nn.Module, ABC):
                  num_joints=25,
                  classes=60,
                  drop_rate=None,
-                 sequential=True,
+                 use_joint_mean=False,
                  trainable_factor=False,
                  num_conv_layers=3):
         super(DualGraphEncoder, self).__init__()
@@ -29,7 +29,7 @@ class DualGraphEncoder(nn.Module, ABC):
         else:
             self.drop_rate = drop_rate
         self.spatial_factor = nn.Parameter(torch.ones(num_layers)) * 0.5
-        self.sequential = sequential
+        self.use_joint_mean = use_joint_mean
         self.num_layers = num_layers
         self.num_conv_layers = num_conv_layers
         self.num_joints = num_joints
@@ -62,10 +62,9 @@ class DualGraphEncoder(nn.Module, ABC):
         self.context_attention = GlobalContextAttention(in_channels=out_channels)
 
         self.mlp_head = nn.Sequential(
-            nn.Linear(out_channels * num_joints, mlp_head_hidden),
-            # nn.Linear(out_channels, mlp_head_hidden),
-            # nn.Tanh(),
-            # nn.LeakyReLU(),
+            nn.Linear(out_channels * (1 if self.use_joint_mean else num_joints),
+                      mlp_head_hidden),
+            # non-linear activation choices are: nn.SiLU(), nn.Tanh(), nn.LeakyReLU(),
             nn.SiLU(),
             nn.Dropout(p=0.3),
             nn.Linear(mlp_head_hidden, classes)
@@ -91,11 +90,11 @@ class DualGraphEncoder(nn.Module, ABC):
         for i in range(self.num_layers):
             t = self.spatial_layers[i](t, adj) + self.temporal_layers[i](t, bi)
 
-        t = rearrange(t, 'f n c -> n f c')
         # Context-aware attention makes f shrunk to m = batch_size
-        t = rearrange(self.context_attention(t, batch_index=bi),
-                      'n m c -> m (n c)')
-        # t = self.context_attention(t, batch_index=bi) # n m c
-        # t = rearrange(global_mean_pool(t, bi), 'm n c -> m (n c)')
+        t = self.context_attention(rearrange(t, 'f n c -> n f c'), batch_index=bi)
+        if not self.use_joint_mean:
+            t = rearrange(t, 'n m c -> m (n c)')
+        else:
+            t = rearrange(t, 'n m c -> m n c').mean(1)
         t = self.mlp_head(t)
         return t
