@@ -117,12 +117,12 @@ class FullAttention(nn.Module):  # B * T X V X C
                          many queries each sequence in the batch consists of
         """
         # Extract some shapes and compute the temperature
-        n, l, h, e = queries.shape
+        n, l, h, e = queries.shape # f v h c
         _, s, _, d = values.shape
         softmax_temp = self.softmax_temp or 1. / math.sqrt(e)
 
         # Compute the unnormalized attention and apply the masks
-        qk = torch.einsum("nlhe, nshe -> nhls", queries, keys)
+        qk = torch.einsum("nlhe, nshe -> nhls", queries, keys) # f h v v
 
         '''position_ids_l = torch.arange(
             l, dtype=torch.long, device=queries.device).view(-1, 1)
@@ -146,7 +146,7 @@ class FullAttention(nn.Module):  # B * T X V X C
 
         # Compute the attention and the weighted average
         att = torch.softmax(softmax_temp * qk, dim=-1)
-        v = torch.einsum("nhls, nshd -> nlhd", self.dropout(att), values)
+        v = torch.einsum("nhls, nshd -> nlhd", self.dropout(att), values)# f h v v * f v h c -> f v h c
 
         # Make sure that what we return is contiguous
         return v.contiguous()  # , torch.mean(att, dim=0)

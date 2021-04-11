@@ -32,8 +32,8 @@ def auto_padding(t, size, random_pad=True):
         return t
 
 
-def random_choose(t, size, auto_pad=True):
-    f, n, c = t.shape
+def random_choose(t, size, auto_pad=False):
+    f = t.shape[0]
     if f == size:
         return t
     elif f < size:
@@ -58,9 +58,9 @@ def random_move(t,  # tensor(F, M, N, C)
     if move_time_candidate is None:
         move_time_candidate = [1]
     if transform_candidate is None:
-        transform_candidate = [0.9, 1.0, 1.1]
+        transform_candidate = [-0.2, -0.1, 0.0, 0.1, 0.2]
     if scale_candidate is None:
-        scale_candidate = [-0.2, -0.1, 0.0, 0.1, 0.2]
+        scale_candidate = [0.9, 1.0, 1.1]
     if angle_candidate is None:
         angle_candidate = [-10., -5., 0., 5., 10.]
     # input dimension
@@ -70,6 +70,9 @@ def random_move(t,  # tensor(F, M, N, C)
         t = rearrange(t, 'f m n c -> m n f c')
     m, n, f, c = t.shape  # we need to treat f and c dimensions
     mt = random.choice(move_time_candidate)  # move time
+    #if f == 0:
+    #    print("f is zero error")
+    #    print(t.shape)
     nodes = torch.cat([torch.arange(0, f, f * 1. / mt).round().int(), torch.tensor([f])])
     num_nodes = nodes.shape[0]
     angles = choice(torch.tensor(angle_candidate), num_nodes)
@@ -86,8 +89,14 @@ def random_move(t,  # tensor(F, M, N, C)
         t_x[nodes[i]: nodes[i + 1]] = torch.linspace(transform_x[i], transform_x[i + 1], nodes[i + 1] - nodes[i])
         t_y[nodes[i]: nodes[i + 1]] = torch.linspace(transform_y[i], transform_y[i + 1], nodes[i + 1] - nodes[i])
     # theta dimension: (c', c, f) -> (f, c, c')
-    theta = torch.tensor([[torch.cos(a) * s, -torch.sin(a) * s],
-                          [torch.sin(a) * s, torch.cos(a) * s]]).permute(2, 1, 0)
+    theta = torch.zeros(2, 2, a.shape[0])
+    theta[0,0,:]=torch.cos(a) * s
+    theta[0,1,:]= -torch.sin(a) * s
+    theta[1,0,:]= torch.sin(a) * s
+    theta[1,1,:]=torch.cos(a) * s
+    theta = theta.permute(2,1,0)
+    #theta = torch.tensor([[torch.cos(a) * s, -torch.sin(a) * s],
+    #                      [torch.sin(a) * s, torch.cos(a) * s]]).permute(2, 1, 0)
 
     # perform transformation
     xy = torch.matmul(t[..., :2].unsqueeze(-2), theta)  # (m, n, f, 1, c) \times (f, c, c')

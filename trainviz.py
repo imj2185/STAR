@@ -148,7 +148,7 @@ def run_epoch(data_loader,
             total_samples += label.size(0)
             corr = (pred == label)
             correct += corr.double().sum().item()
-            if is_test:
+            if not is_test:
                 for j in range(len(label)):
                     gt_list[label[j].item()] += 1
                     cr_list[label[j].item()] += corr[j].item()
@@ -189,6 +189,7 @@ def main():
     model = DualGraphEncoder(in_channels=args.in_channels,
                              hidden_channels=args.hid_channels,
                              out_channels=args.out_channels,
+                             mlp_head_hidden=args.mlp_head_hidden,
                              num_layers=args.num_enc_layers,
                              num_heads=args.heads,
                              sequential=False,
@@ -256,8 +257,8 @@ def main():
 
         writer.add_scalar('test/test_loss', test_loss, epoch + 1)
         writer.add_scalar('test/test_overall_acc', test_accuracy, epoch + 1)
-        # plot_distribution(gt_list=gt_list, cr_list=cr_list, wr_list=wr_list,
-        #                   path=osp.join(os.getcwd(), 'distribution', str(epoch + 1) + '.png'))
+        plot_distribution(gt_list=gt_list, cr_list=cr_list, wr_list=wr_list,
+                           path=osp.join(os.getcwd(), 'distribution_train', str(epoch + 1) + '.png'))
 
         # if epoch > 15:
 
