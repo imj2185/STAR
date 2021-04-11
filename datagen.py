@@ -36,7 +36,7 @@ def multi_input(data):
     for i in range(C):
         data_new[2,C+i,:,:,:] = np.arccos(data_new[2,i,:,:,:] / bone_length)
 
-    return rearrange(np.stack((data_new[0,:,:,:,:], data_new[1,:,:,:,:], data_new[2,:,:,:,:]), axis=0), 'c f v m -> m f v c')
+    return rearrange(np.concatenate((data_new[0,:,:,:,:], data_new[1,:,:,:,:], data_new[2,:,:,:,:]), axis=0), 'c f v m -> m f v c')
 
 # def gen_bone_data(torch_data, paris, benchmark):
 #     T, N = torch_data.shape[0], torch_data.shape[1]
