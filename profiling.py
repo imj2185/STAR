@@ -26,9 +26,9 @@ def profile(device, _args):
                              drop_rate=_args.drop_rate).to(device)
     adj = skeleton_parts()[0].to(device)
     last_epoch = 100
-    last_epoch, loss = load_checkpoint(osp.join(_args.save_root,
-                                                _args.save_name + '_' + str(last_epoch) + '.pth'),
-                                       model)
+    # last_epoch, loss = load_checkpoint(osp.join(_args.save_root,
+    #                                             _args.save_name + '_' + str(last_epoch) + '.pth'),
+    #                                    model)
     dl = DataLoader(ds, batch_size=args.batch_size)
     # warm-up
     model.eval()
