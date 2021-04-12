@@ -403,7 +403,7 @@ class SkeletonDataset(Dataset, ABC):
             index = energy.argsort()[::-1][0:self.max_body_true]
             data = data[index]
             data = multi_input(data)
-            torch_data = torch.from_numpy(data)
+            torch_data = torch.from_numpy(data).float()
             del data
             torch_data = rearrange(torch_data, 'm f n c -> (m f) n c')  # <- always even so you can get person idx
 
