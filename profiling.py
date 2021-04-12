@@ -2,6 +2,8 @@ import torch
 import os.path as osp
 
 from torch.profiler import profiler
+from torch_geometric.data import DataLoader
+from tqdm import tqdm
 
 from args import make_args
 from data.dataset3 import SkeletonDataset, skeleton_parts
@@ -27,10 +29,44 @@ def profile(device, _args):
     last_epoch, loss = load_checkpoint(osp.join(_args.save_root,
                                                 _args.save_name + '_' + str(last_epoch) + '.pth'),
                                        model)
-
+    dl = DataLoader(ds, batch_size=args.batch_size)
     # warm-up
     model.eval()
-    model(input)
+    total_batch_ = len(ds) // args.batch_size + 1
+    # for i, batch in tqdm(enumerate(dl),
+    #                      total=total_batch_,
+    #                      desc="Warm up phase"):
+    #     batch = batch.to(device)
+    #     sample, label, bi = batch.x, batch.y, batch.batch
+    #     with torch.no_grad():
+    #         out = model(sample, adj=adj, bi=bi)
+    # print(out.shape)
+
+    def trace_handler(p):
+        print(p.key_averages().table(
+            sort_by="self_cuda_time_total", row_limit=-1))
+
+    with profiler.profile(record_shapes=True,
+                          activities=[
+                              torch.profiler.ProfilerActivity.CPU,
+                              torch.profiler.ProfilerActivity.CUDA],
+                          schedule=torch.profiler.schedule(
+                              wait=1,
+                              warmup=5,
+                              active=2),
+                          on_trace_ready=trace_handler
+                          ) as prof:
+        with profiler.record_function("model_inference"):
+            for i, batch in tqdm(enumerate(dl),
+                                 total=total_batch_,
+                                 desc="Warm up phase"):
+                batch = batch.to(device)
+                sample, label, bi = batch.x, batch.y, batch.batch
+                with torch.no_grad():
+                    out = model(sample, adj=adj, bi=bi)
+                prof.step()
+
+    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
 
     with profiler.profile(with_stack=True, profile_memory=True) as prof:
         out, idx = model(input)
