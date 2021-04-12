@@ -17,7 +17,7 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 
 def multi_input(data):
     conn = np.array([2,2,21,3,21,5,6,7,21,9,10,11,1,13,14,15,1,17,18,19,2,23,8,25,12]) - 1
-    data = rearrange(' m f v c -> c f v m')
+    data = rearrange(data, ' m f v c -> c f v m')
     C, T, V, M = data.shape
     data_new = np.zeros((3, C*2, T, V, M))
     data_new[0,:C,:,:,:] = data
@@ -35,7 +35,7 @@ def multi_input(data):
     for i in range(C):
         data_new[2,C+i,:,:,:] = np.arccos(data_new[2,i,:,:,:] / bone_length)
 
-    return rearrange(np.stack((data_new[0,:,:,:,:], data_new[1,:,:,:,:], data_new[2,:,:,:,:]), axis=0), 'c f v m -> m f v c')
+    return rearrange(np.concatenate((data_new[0,:,:,:,:], data_new[1,:,:,:,:], data_new[2,:,:,:,:]), axis=0), 'c f v m -> m f v c')
 
 # def gen_bone_data(torch_data, paris, benchmark):
 #     T, N = torch_data.shape[0], torch_data.shape[1]
@@ -402,10 +402,9 @@ class SkeletonDataset(Dataset, ABC):
             index = energy.argsort()[::-1][0:self.max_body_true]
             data = data[index]
             data = multi_input(data)
-            torch_data = torch.from_numpy(data)
+            torch_data = torch.from_numpy(data).float()
             del data
             torch_data = rearrange(torch_data, 'm f n c -> (m f) n c')  # <- always even so you can get person idx
-
             torch_data = pre_normalization(torch_data)
             # torch_data += torch.normal(mean=0, std=0.01, size=torch_data.size())
             if use_bone:
@@ -452,21 +451,6 @@ class SkeletonDataset(Dataset, ABC):
         #     return sparse_data, noisy_sparse_data
         # else:
         #     return (sparse_data)
-
-    def add_noise(self, data, scale):
-        t = data.x[:, :, :3]
-        y = data.y
-        t += torch.normal(mean=0, std=scale, size=t.size())
-        t = gen_bone_data(t, self.sk_adj)
-        '''print("After gen bone data")
-
-        if torch.isnan(t).sum().item() != 0:
-            print("Nan in tensor")
-        if torch.isinf(t).sum().item() != 0:
-            print("Inf in tensor")'''
-
-        t = Data(x=t, y=y)
-        return t
 
     def transform_data(self, data):
         option_list = [0, 1, 2, 3, 4, 5]  # none, add noise, cut off, rotation
@@ -579,22 +563,8 @@ class SkeletonDataset(Dataset, ABC):
             else:
                 continue
 
-        noisy_sparse_data_list = []
-        # if self.sample == 'train':
-        #     #pool = Pool(processes=num_processes())
-        #     #partial_func = partial(self.add_noise,
-        #     #                    scale=0.01)
-        #
-        #     #progress_bar = tqdm(pool.imap(func=partial_func, iterable=sparse_data_list),
-        #     #                    total=len(sparse_data_list))
-        #
-        #     #for data in progress_bar:
-        #     #    noisy_sparse_data_list.append(data)
-        #     for data in sparse_data_list:
-        #         noisy_sparse_data_list.append(self.add_noise(data, scale=0.01))
-
         if 'ntu' in self.name:
-            torch.save(sparse_data_list + noisy_sparse_data_list,
+            torch.save(sparse_data_list,
                        osp.join(self.processed_dir, self.processed_file_names))
 
     def len(self):
