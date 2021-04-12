@@ -252,7 +252,7 @@ def skeleton_parts(num_joints=25, dataset='ntu', cat=True):
     p3 = power_adj(sk_adj_undirected, max(num_joints, max(sk_adj_undirected[1]) + 1), 3)
 
 
-    cat_adj = torch.cat([sk_adj_undirected, p2], dim=1)
+    cat_adj = torch.cat([p2, p3], dim=1)
 
     _, idx = cat_adj[0].sort()
     cat_adj = cat_adj[:, idx]
