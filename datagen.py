@@ -406,7 +406,6 @@ class SkeletonDataset(Dataset, ABC):
             torch_data = torch.from_numpy(data).float()
             del data
             torch_data = rearrange(torch_data, 'm f n c -> (m f) n c')  # <- always even so you can get person idx
-
             torch_data = pre_normalization(torch_data)
             # torch_data += torch.normal(mean=0, std=0.01, size=torch_data.size())
             if use_bone:
@@ -453,21 +452,6 @@ class SkeletonDataset(Dataset, ABC):
         #     return sparse_data, noisy_sparse_data
         # else:
         #     return (sparse_data)
-
-    def add_noise(self, data, scale):
-        t = data.x[:, :, :3]
-        y = data.y
-        t += torch.normal(mean=0, std=scale, size=t.size())
-        t = gen_bone_data(t, self.sk_adj)
-        '''print("After gen bone data")
-
-        if torch.isnan(t).sum().item() != 0:
-            print("Nan in tensor")
-        if torch.isinf(t).sum().item() != 0:
-            print("Inf in tensor")'''
-
-        t = Data(x=t, y=y)
-        return t
 
     def transform_data(self, data):
         option_list = [0, 1, 2, 3, 4, 5]  # none, add noise, cut off, rotation
@@ -580,22 +564,8 @@ class SkeletonDataset(Dataset, ABC):
             else:
                 continue
 
-        noisy_sparse_data_list = []
-        # if self.sample == 'train':
-        #     #pool = Pool(processes=num_processes())
-        #     #partial_func = partial(self.add_noise,
-        #     #                    scale=0.01)
-        #
-        #     #progress_bar = tqdm(pool.imap(func=partial_func, iterable=sparse_data_list),
-        #     #                    total=len(sparse_data_list))
-        #
-        #     #for data in progress_bar:
-        #     #    noisy_sparse_data_list.append(data)
-        #     for data in sparse_data_list:
-        #         noisy_sparse_data_list.append(self.add_noise(data, scale=0.01))
-
         if 'ntu' in self.name:
-            torch.save(sparse_data_list + noisy_sparse_data_list,
+            torch.save(sparse_data_list,
                        osp.join(self.processed_dir, self.processed_file_names))
 
     def len(self):

@@ -37,7 +37,7 @@ class DualGraphEncoder(nn.Module, ABC):
         self.dropout = drop_rate
         self.trainable_factor = trainable_factor
         # self.bn = nn.BatchNorm1d(hidden_channels * 25, affine=False)
-        self.dn = nn.BatchNorm1d(in_channels * 25, affine=True)
+        self.dn = nn.BatchNorm1d(in_channels * num_joints, affine=True)
         channels = [in_channels] + [hidden_channels] * (num_layers - 1) + [out_channels]
         channels_ = channels[1:] + [out_channels]
 
