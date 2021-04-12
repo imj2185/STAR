@@ -599,8 +599,8 @@ def test():
     # parser.add_argument('--dataset', dest='dataset', default='ntu_60',
     #                    type=str, help='Dataset')
     # sargs = make_args()
-    train_ds = SkeletonDataset(os.getcwd(), name='ntu_60',
-                               use_motion_vector=False, sample='train')
+    #train_ds = SkeletonDataset(os.getcwd(), name='ntu_60',
+    #                           use_motion_vector=False, sample='train')
     test_ds = SkeletonDataset(os.getcwd(), name='ntu_60',
                               use_motion_vector=False, sample='val')
 
