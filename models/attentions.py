@@ -172,7 +172,7 @@ class GlobalContextAttention(nn.Module):
     def __init__(self, in_channels):
         super(GlobalContextAttention, self).__init__()
         self.in_channels = in_channels
-        self.weights = nn.Parameter(torch.FloatTensor(in_channels, in_channels))
+        self.weights = nn.Parameter(torch.empty(in_channels, in_channels))
         nn.init.xavier_normal_(self.weights)
 
     def forward(self, x, batch_index):
