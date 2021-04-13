@@ -37,7 +37,7 @@ def run(model, dataloader, total_batch, adj, prof, device):
 
 
 def profile(device, _args):
-    ds = SkeletonDataset(osp.join(_args.dataset_root, 'dataset/ntu60'), name='ntu_60',
+    ds = SkeletonDataset(osp.join(_args.dataset_root, 'dataset'), name='ntu_60',
                          use_motion_vector=False, sample='val')
     # Load model
     model = DualGraphEncoder(in_channels=_args.in_channels,
@@ -59,7 +59,8 @@ def profile(device, _args):
     with profiler.profile(record_shapes=True,
                           activities=[
                               torch.profiler.ProfilerActivity.CPU,
-                              torch.profiler.ProfilerActivity.CUDA],
+                              torch.profiler.ProfilerActivity.CUDA] if device == 'cuda' else
+                          [torch.profiler.ProfilerActivity.CPU],
                           schedule=torch.profiler.schedule(
                               wait=1,
                               warmup=5,
