@@ -44,7 +44,6 @@ def profile(device, _args):
     adj = skeleton_parts()[0].to(device)
     num_batches = 4
     dl = DataLoader(ds[:args.batch_size * num_batches], batch_size=args.batch_size)
-    # warm-up
     model.eval()
     total_batch_ = len(ds[:args.batch_size * num_batches]) // args.batch_size + 1
 
@@ -62,7 +61,6 @@ def profile(device, _args):
         _ = run(model, dl, total_batch_, adj, prof, device)
 
     prof.export_chrome_trace(osp.join(args.save_root, "time_trace.json"))
-    # print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
 
     with profiler.profile(record_shapes=True,
                           activities=[
