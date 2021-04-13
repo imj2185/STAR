@@ -13,14 +13,14 @@ import os.path as osp
 
 
 def time_trace_handler(p):
-    print(p.key_averages().table(
-        sort_by="self_cuda_time_total" if torch.cuda.is_available() else "cpu_time_total",
-        row_limit=-1))
+    print(p.key_averages(group_by_input_shape=True).table(
+        sort_by="cuda_time_total" if torch.cuda.is_available() else "cpu_time_total",
+        row_limit=10))
 
 
 def memory_trace_handler(p):
     print(p.key_averages().table(
-        sort_by="self_cuda_memory_usage" if torch.cuda.is_available() else "cpu_memory_usage",
+        sort_by="cuda_memory_usage" if torch.cuda.is_available() else "cpu_memory_usage",
         row_limit=10))
 
 
