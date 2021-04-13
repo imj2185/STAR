@@ -1,6 +1,4 @@
 import torch
-import os.path as osp
-
 from torch.profiler import profiler
 from torch_geometric.data import DataLoader
 from tqdm import tqdm
@@ -8,11 +6,30 @@ from tqdm import tqdm
 from args import make_args
 from data.dataset3 import SkeletonDataset, skeleton_parts
 from models.net2s import DualGraphEncoder
-from utility.helper import load_checkpoint
+
+
+import os.path as osp
+# from utility.helper import load_checkpoint
+def trace_handler(p):
+    print(p.key_averages().table(
+        sort_by="self_cuda_time_total" if torch.cuda.is_available() else "cpu_time_total",
+        row_limit=-1))
+
+
+def run(model, dataloader, total_batch, adj, prof, device):
+    for i, batch in tqdm(enumerate(dataloader),
+                         total=total_batch,
+                         desc="Profiling"):
+        batch = batch.to(device)
+        sample, label, bi = batch.x, batch.y, batch.batch
+        with torch.no_grad():
+            out = model(sample, adj=adj, bi=bi)
+        prof.step()
+    return out
 
 
 def profile(device, _args):
-    ds = SkeletonDataset(_args.dataset_root, name='ntu_60',
+    ds = SkeletonDataset(osp.join(_args.dataset_root, 'dataset/ntu60'), name='ntu_60',
                          use_motion_vector=False, sample='val')
     # Load model
     model = DualGraphEncoder(in_channels=_args.in_channels,
@@ -25,27 +42,13 @@ def profile(device, _args):
                              num_conv_layers=_args.num_conv_layers,
                              drop_rate=_args.drop_rate).to(device)
     adj = skeleton_parts()[0].to(device)
-    last_epoch = 100
-    # last_epoch, loss = load_checkpoint(osp.join(_args.save_root,
-    #                                             _args.save_name + '_' + str(last_epoch) + '.pth'),
-    #                                    model)
-    dl = DataLoader(ds, batch_size=args.batch_size)
+    num_batches = 4
+    dl = DataLoader(ds[:args.batch_size * num_batches], batch_size=args.batch_size)
     # warm-up
     model.eval()
-    total_batch_ = len(ds) // args.batch_size + 1
-    # for i, batch in tqdm(enumerate(dl),
-    #                      total=total_batch_,
-    #                      desc="Warm up phase"):
-    #     batch = batch.to(device)
-    #     sample, label, bi = batch.x, batch.y, batch.batch
-    #     with torch.no_grad():
-    #         out = model(sample, adj=adj, bi=bi)
-    # print(out.shape)
+    total_batch_ = len(ds[:args.batch_size * num_batches]) // args.batch_size + 1
 
-    def trace_handler(p):
-        print(p.key_averages().table(
-            sort_by="self_cuda_time_total", row_limit=-1))
-
+    print('Profiling of performance ....')
     with profiler.profile(record_shapes=True,
                           activities=[
                               torch.profiler.ProfilerActivity.CPU,
@@ -56,20 +59,24 @@ def profile(device, _args):
                               active=2),
                           on_trace_ready=trace_handler
                           ) as prof:
-        with profiler.record_function("model_inference"):
-            for i, batch in tqdm(enumerate(dl),
-                                 total=total_batch_,
-                                 desc="Warm up phase"):
-                batch = batch.to(device)
-                sample, label, bi = batch.x, batch.y, batch.batch
-                with torch.no_grad():
-                    out = model(sample, adj=adj, bi=bi)
-                prof.step()
+        _ = run(model, dl, total_batch_, adj, prof, device)
 
-    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
+    prof.export_chrome_trace(osp.join(args.save_root, "time_trace.json"))
+    # print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
 
-    with profiler.profile(with_stack=True, profile_memory=True) as prof:
-        out, idx = model(input)
+    with profiler.profile(record_shapes=True,
+                          activities=[
+                              torch.profiler.ProfilerActivity.CPU,
+                              torch.profiler.ProfilerActivity.CUDA],
+                          schedule=torch.profiler.schedule(
+                              wait=1,
+                              warmup=5,
+                              active=2),
+                          with_stack=True,
+                          profile_memory=True) as prof:
+        _ = run(model, dl, total_batch_, adj, prof, device)
+
+    prof.export_chrome_trace(osp.join(args.save_root, "memory_trace.json"))
 
 
 if __name__ == '__main__':
