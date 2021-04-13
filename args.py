@@ -59,7 +59,7 @@ def make_args():
     parser.add_argument('--last_epoch', dest='last_epoch', default=0, type=int)
     parser.set_defaults(gpu=True,
                         batch_size=32,
-                        dataset_name='NTU',
+                        dataset_name='ntu',
                         dataset_root=osp.join(os.getcwd()),
                         save_root=osp.join(os.getcwd(), 'saved_model'),
                         load_model=False,
