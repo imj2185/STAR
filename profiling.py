@@ -10,10 +10,18 @@ from models.net2s import DualGraphEncoder
 
 import os.path as osp
 # from utility.helper import load_checkpoint
-def trace_handler(p):
+
+
+def time_trace_handler(p):
     print(p.key_averages().table(
         sort_by="self_cuda_time_total" if torch.cuda.is_available() else "cpu_time_total",
         row_limit=-1))
+
+
+def memory_trace_handler(p):
+    print(p.key_averages().table(
+        sort_by="self_cuda_memory_usage" if torch.cuda.is_available() else "cpu_memory_usage",
+        row_limit=10))
 
 
 def run(model, dataloader, total_batch, adj, prof, device):
@@ -42,10 +50,10 @@ def profile(device, _args):
                              num_conv_layers=_args.num_conv_layers,
                              drop_rate=_args.drop_rate).to(device)
     adj = skeleton_parts()[0].to(device)
-    num_batches = 4
-    dl = DataLoader(ds[:args.batch_size * num_batches], batch_size=args.batch_size)
+    num_batches = 100; ds = ds[:args.batch_size * num_batches]
+    dl = DataLoader(ds, batch_size=args.batch_size)
     model.eval()
-    total_batch_ = len(ds[:args.batch_size * num_batches]) // args.batch_size + 1
+    total_batch_ = int(len(ds) / args.batch_size) + 1
 
     print('Profiling of performance ....')
     with profiler.profile(record_shapes=True,
@@ -56,12 +64,13 @@ def profile(device, _args):
                               wait=1,
                               warmup=5,
                               active=2),
-                          on_trace_ready=trace_handler
+                          on_trace_ready=time_trace_handler
                           ) as prof:
         _ = run(model, dl, total_batch_, adj, prof, device)
 
     prof.export_chrome_trace(osp.join(args.save_root, "time_trace.json"))
 
+    print('Profiling of memory usage ....')
     with profiler.profile(record_shapes=True,
                           activities=[
                               torch.profiler.ProfilerActivity.CPU,
@@ -71,7 +80,8 @@ def profile(device, _args):
                               warmup=5,
                               active=2),
                           with_stack=True,
-                          profile_memory=True) as prof:
+                          profile_memory=True,
+                          on_trace_ready=memory_trace_handler) as prof:
         _ = run(model, dl, total_batch_, adj, prof, device)
 
     prof.export_chrome_trace(osp.join(args.save_root, "memory_trace.json"))
