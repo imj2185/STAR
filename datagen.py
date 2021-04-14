@@ -11,32 +11,37 @@ from torch_geometric.data import Dataset, Data
 from torch_sparse import spspmm
 from tqdm import tqdm
 import random
+
+from args import make_args
 from data.sample_tools import random_choose, random_move
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 
 def multi_input(data):
-    conn = np.array([2,2,21,3,21,5,6,7,21,9,10,11,1,13,14,15,1,17,18,19,2,23,8,25,12]) - 1
+    conn = np.array([2, 2, 21, 3, 21, 5, 6, 7, 21, 9, 10, 11, 1, 13, 14, 15, 1, 17, 18, 19, 2, 23, 8, 25, 12]) - 1
     data = rearrange(data, ' m f v c -> c f v m')
-    C, T, V, M = data.shape
-    data_new = np.zeros((3, C*2, T, V, M))
-    data_new[0,:C,:,:,:] = data
-    for i in range(V):
-        data_new[0,C:,:,i,:] = data[:,:,i,:] - data[:,:,1,:]
-    for i in range(T-2):
-        data_new[1,:C,i,:,:] = data[:,i+1,:,:] - data[:,i,:,:]
-        data_new[1,C:,i,:,:] = data[:,i+2,:,:] - data[:,i,:,:]
+    c, t, v, m = data.shape
+    data_new = np.zeros((3, c * 2, t, v, m))
+    data_new[0, :c, :, :, :] = data
+    for i in range(v):
+        data_new[0, c:, :, i, :] = data[:, :, i, :] - data[:, :, 1, :]
+    for i in range(t - 2):
+        data_new[1, :c, i, :, :] = data[:, i + 1, :, :] - data[:, i, :, :]
+        data_new[1, c:, i, :, :] = data[:, i + 2, :, :] - data[:, i, :, :]
     for i in range(len(conn)):
-        data_new[2,:C,:,i,:] = data[:,:,i,:] - data[:,:,conn[i],:]
+        data_new[2, :c, :, i, :] = data[:, :, i, :] - data[:, :, conn[i], :]
     bone_length = 0
-    for i in range(C):
-        bone_length += np.power(data_new[2,i,:,:,:], 2)
+    for i in range(c):
+        bone_length += np.power(data_new[2, i, :, :, :], 2)
     bone_length = np.sqrt(bone_length) + 0.0001
-    for i in range(C):
-        data_new[2,C+i,:,:,:] = np.arccos(data_new[2,i,:,:,:] / bone_length)
+    for i in range(c):
+        data_new[2, c + i, :, :, :] = np.arccos(data_new[2, i, :, :, :] / bone_length)
 
-    return rearrange(np.concatenate((data_new[0,:,:,:,:], data_new[1,:,:,:,:], data_new[2,:,:,:,:]), axis=0), 'c f v m -> m f v c')
+    return rearrange(
+        np.concatenate((data_new[0, :, :, :, :], data_new[1, :, :, :, :], data_new[2, :, :, :, :]), axis=0),
+        'c f v m -> m f v c')
+
 
 # def gen_bone_data(torch_data, paris, benchmark):
 #     T, N = torch_data.shape[0], torch_data.shape[1]
@@ -132,7 +137,7 @@ def pre_normalization(data, z_axis=None, x_axis=None):
     if x_axis is None:
         x_axis = [8, 4]
 
-    data_xyz = data[:,:,:3]
+    data_xyz = data[:, :, :3]
 
     index = (data_xyz.sum(-1).sum(-1) != 0)  # index of non-zero frames
 
@@ -252,7 +257,6 @@ def skeleton_parts(num_joints=25, dataset='ntu', cat=True):
     p2 = torch.stack([p2[0][p2[0] != p2[1]], p2[1][p2[0] != p2[1]]], dim=0)
     p3 = power_adj(sk_adj_undirected, max(num_joints, max(sk_adj_undirected[1]) + 1), 3)
 
-
     cat_adj = torch.cat([sk_adj_undirected, p2], dim=1)
 
     _, idx = cat_adj[0].sort()
@@ -295,14 +299,15 @@ class SkeletonDataset(Dataset, ABC):
     def __init__(self,
                  root,
                  name,
-                 use_motion_vector=True,
                  transform=None,
                  pre_transform=None,
                  benchmark='xsub',
-                 sample='train'):
+                 sample='train',
+                 num_channels=9):
         self.name = name  # ntu ntu120 kinetics
         self.benchmark = benchmark
         self.sample = sample
+        self.num_channels = num_channels
 
         self.num_joints = 25 if 'ntu' in self.name else 18
         self.skeleton_, self.sk_adj = skeleton_parts(num_joints=self.num_joints,
@@ -344,7 +349,6 @@ class SkeletonDataset(Dataset, ABC):
         self.window_size = [75, 94, 112]
 
         print('processed the adjacency matrices of skeleton')
-        self.use_motion_vector = use_motion_vector
         self.missing_skeleton_path = osp.join(os.getcwd(),
                                               'samples_with_missing_skeletons.txt')
         super(SkeletonDataset, self).__init__(root, transform, pre_transform)
@@ -382,7 +386,7 @@ class SkeletonDataset(Dataset, ABC):
         pass
 
     def read_xyz(self, file, sample, max_body=4,
-                 use_bone=False, use_motion=False):  # 取了前两个body
+                 use_bone=True, use_motion=True):  # 取了前两个body
         filename = osp.split(file)[-1]
         if 'ntu' in self.name:
             action_class = int(filename[filename.find('A') + 1: filename.find('A') + 4])
@@ -397,12 +401,12 @@ class SkeletonDataset(Dataset, ABC):
                         if m < max_body and j < self.num_joints:
                             # data[m, n, j, :] = [v['x'], v['y'], v['z'],
                             # v['orientationX'], v['orientationY'], v['orientationZ']]
-                            data[m, n, j, :] = [v['x'], v['y'], v['z']] #M F V C
+                            data[m, n, j, :] = [v['x'], v['y'], v['z']]  # M F V C
             # select 2 max energy body
             energy = np.array([get_nonzero_std(x) for x in data])
-            index = energy.argsort()[::-1][0:self.max_body_true]
+            index = energy.argsort()[::-1][0: self.max_body_true]
             data = data[index]
-            data = multi_input(data)
+            # data = multi_input(data)
             torch_data = torch.from_numpy(data).float()
             del data
             torch_data = rearrange(torch_data, 'm f n c -> (m f) n c')  # <- always even so you can get person idx
@@ -515,6 +519,11 @@ class SkeletonDataset(Dataset, ABC):
 
         sparse_data_list = []
 
+        g = self.num_channels // (3 if 'ntu' in self.name else 2)
+        use_bone, use_vec = g > 1, g > 2
+        if g < 1 or g > 3:
+            raise RuntimeError('Input data channel length is not compatible ...')
+
         if 'ntu' in self.name:
             is_training = False
             if self.missing_skeleton_path is not None:
@@ -551,9 +560,10 @@ class SkeletonDataset(Dataset, ABC):
             sample_name = self.raw_file_names
 
         pool = Pool(processes=num_processes())
-
         partial_func = partial(self.read_xyz,
                                sample=self.sample,
+                               use_bone=use_bone,
+                               use_motion=use_vec,
                                max_body=(4 if 'ntu' in self.name else 5))
 
         progress_bar = tqdm(pool.imap(func=partial_func, iterable=sample_name),
@@ -583,26 +593,18 @@ class SkeletonDataset(Dataset, ABC):
             return [torch.load(osp.join(self.processed_dir,
                                         self.processed_file_names[i])) for i in idx]
         # return self.data[idx]
-        #if self.sample == 'train':
+        # if self.sample == 'train':
         #    return self.transform_data(self.data[idx])
 
         return self.data[idx]
 
 
 def test():
-    # from argparse import ArgumentParser
-    from torch_geometric.data import DataLoader
-    # parser = ArgumentParser()
-    # parser.add_argument('--root', dest='root',
-    #                    default=osp.join(os.getcwd()),
-    #                    type=str, help='Dataset')
-    # parser.add_argument('--dataset', dest='dataset', default='ntu_60',
-    #                    type=str, help='Dataset')
-    # sargs = make_args()
-    #train_ds = SkeletonDataset(os.getcwd(), name='ntu_60',
-    #                           use_motion_vector=False, sample='train')
-    test_ds = SkeletonDataset(os.getcwd(), name='ntu_60',
-                              use_motion_vector=False, sample='val')
+    args = make_args()
+    train_ds = SkeletonDataset(args.dataset_root, name=args.dataset_name,
+                               num_channels=args.in_channels, sample='train')
+    test_ds = SkeletonDataset(args.dataset_root, name=args.dataset_name,
+                              num_channels=args.in_channels, sample='val')
 
     print("Data generation finished.")
 
