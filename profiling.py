@@ -37,8 +37,8 @@ def run(model, dataloader, total_batch, adj, prof, device):
 
 
 def profile(device, _args):
-    ds = SkeletonDataset(osp.join(_args.dataset_root, 'dataset'), name='ntu_60',
-                         use_motion_vector=False, sample='val')
+    ds = SkeletonDataset(osp.join(_args.dataset_root, 'dataset'), name=args.dataset_name,
+                         num_channels=args.in_channels, sample='val')
     # Load model
     model = DualGraphEncoder(in_channels=_args.in_channels,
                              hidden_channels=_args.hid_channels,
