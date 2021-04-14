@@ -1,4 +1,7 @@
+import os.path as osp
+
 import torch
+from deepspeed.profiling.flops_profiler import get_model_profile
 from torch.profiler import profiler
 from torch_geometric.data import DataLoader
 from tqdm import tqdm
@@ -8,7 +11,6 @@ from data.dataset3 import SkeletonDataset, skeleton_parts
 from models.net2s import DualGraphEncoder
 
 
-import os.path as osp
 # from utility.helper import load_checkpoint
 
 
@@ -36,6 +38,43 @@ def run(model, dataloader, total_batch, adj, prof, device):
     return out
 
 
+def input_constructor():
+    bs = 16
+    _frames = torch.randint(high=300, low=100, size=(bs,))
+    lg = _frames.sum()
+    bi = torch.cat([torch.ones(_frames[i]) * i for i in range(bs)])
+    adj = skeleton_parts(cat=False)
+    return torch.randn(lg, 25, 9), adj, bi
+
+
+def _mac_ops(model, in_const):
+    """
+
+    :param model:
+    :param in_const: data = (x, adj, bi)
+    :return:
+    """
+    x, adj, bi = in_const
+    macs, params = get_model_profile(model=model,  # model
+                                     input_res=x.shape,
+                                     # input shape or input to the in_const
+                                     input_constructor=in_const,
+                                     # if specified, a constructor taking input_res is used as input to the model
+                                     print_profile=True,
+                                     # prints the model graph with the measured profile attached to each module
+                                     print_aggregated_profile=True,  # print the aggregated profile for the top modules
+                                     module_depth=-1,
+                                     # depth into the nested modules with -1 being the inner most modules
+                                     top_modules=3,  # the number of top modules to print aggregated profile
+                                     warm_up=10,  # the number of warm-ups before measuring the time of each module
+                                     as_string=True,
+                                     # print raw numbers (e.g. 1000) or as human-readable strings (e.g. 1k)
+                                     ignore_modules=None)  # the list of modules to ignore in the profiling
+    print("{:<30}  {:<8}".format("Batch size: ", torch.max(bi).item() + 1))
+    print('{:<30}  {:<8}'.format('Number of MACs: ', macs))
+    print('{:<30}  {:<8}'.format('Number of parameters: ', params))
+
+
 def profile(device, _args):
     ds = SkeletonDataset(osp.join(_args.dataset_root, 'dataset'), name=args.dataset_name,
                          num_channels=args.in_channels, sample='val')
@@ -50,7 +89,8 @@ def profile(device, _args):
                              num_conv_layers=_args.num_conv_layers,
                              drop_rate=_args.drop_rate).to(device)
     adj = skeleton_parts()[0].to(device)
-    num_batches = 100; ds = ds[:args.batch_size * num_batches]
+    num_batches = 100
+    ds = ds[:args.batch_size * num_batches]
     dl = DataLoader(ds, batch_size=args.batch_size)
     model.eval()
     total_batch_ = int(len(ds) / args.batch_size) + 1
@@ -86,6 +126,8 @@ def profile(device, _args):
         _ = run(model, dl, total_batch_, adj, prof, device)
 
     prof.export_chrome_trace(osp.join(args.save_root, "memory_trace.json"))
+
+    _mac_ops(model, in_const=input_constructor)
 
 
 if __name__ == '__main__':
