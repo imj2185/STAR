@@ -191,7 +191,7 @@ def run(rank, world_size):
                 batch = batch.to(rank)
                 sample, label, bi = batch.x, batch.y, batch.batch
                 with torch.no_grad():
-                    out = model.module(sample, adj=adj, bi=bi)
+                    out, _ = model.module(sample, adj=adj, bi=bi)
                 running_loss += loss.item()
                 pred = torch.max(out, 1)[1]
                 total_samples += label.size(0)
