@@ -12,6 +12,8 @@ from models.net2s import DualGraphEncoder
 
 
 # from utility.helper import load_checkpoint
+adj_mat = skeleton_parts(cat=False).to('cuda')
+bi = None
 
 
 def time_trace_handler(p):
@@ -42,9 +44,14 @@ def input_constructor():
     bs = 16
     _frames = torch.randint(high=300, low=100, size=(bs,))
     lg = _frames.sum()
-    bi = torch.cat([torch.ones(_frames[i]) * i for i in range(bs)])
-    adj = skeleton_parts(cat=False)
-    return torch.randn(lg, 25, 9), adj, bi
+    global bi 
+    bi = torch.cat([torch.ones(_frames[i]) * i for i in range(bs)]).long()
+    #adj = skeleton_parts(cat=False)
+    return torch.randn(lg, 25, 9)
+
+
+def input_const_2(tensor_dim):
+    return {'t': torch.rand(*tensor_dim).to(adj_mat.device), 'adj': adj_mat, 'bi': bi.to(adj_mat.device)}
 
 
 def _mac_ops(model, in_const):
@@ -54,15 +61,15 @@ def _mac_ops(model, in_const):
     :param in_const: data = (x, adj, bi)
     :return:
     """
-    x, adj, bi = in_const
+    x = input_constructor()
     macs, params = get_model_profile(model=model,  # model
-                                     input_res=x.shape,
+                                     input_res=tuple(x.shape),
                                      # input shape or input to the in_const
                                      input_constructor=in_const,
                                      # if specified, a constructor taking input_res is used as input to the model
                                      print_profile=True,
                                      # prints the model graph with the measured profile attached to each module
-                                     print_aggregated_profile=True,  # print the aggregated profile for the top modules
+                                     # print_aggregated_profile=True,  # print the aggregated profile for the top modules
                                      module_depth=-1,
                                      # depth into the nested modules with -1 being the inner most modules
                                      top_modules=3,  # the number of top modules to print aggregated profile
@@ -76,7 +83,7 @@ def _mac_ops(model, in_const):
 
 
 def profile(device, _args):
-    ds = SkeletonDataset(osp.join(_args.dataset_root, 'dataset'), name=args.dataset_name,
+    ds = SkeletonDataset(_args.dataset_root, name='ntu_60',
                          num_channels=args.in_channels, sample='val')
     # Load model
     model = DualGraphEncoder(in_channels=_args.in_channels,
@@ -127,7 +134,7 @@ def profile(device, _args):
 
     prof.export_chrome_trace(osp.join(args.save_root, "memory_trace.json"))
 
-    _mac_ops(model, in_const=input_constructor)
+    _mac_ops(model, in_const=input_const_2)
 
 
 if __name__ == '__main__':

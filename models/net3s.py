@@ -6,7 +6,7 @@ import torch.nn as nn
 from einops import rearrange
 
 from models.positional_encoding import SeqPosEncoding
-from .attentions import SpatialEncoderLayer, TemporalEncoderLayer, GlobalContextAttention
+from .attentions import SpatialEncoderLayer, TemporalEncoderLayer, GlobalContextAttention, SpatialFullEncoderLayer
 
 
 class DualGraphEncoder(nn.Module, ABC):
@@ -48,7 +48,7 @@ class DualGraphEncoder(nn.Module, ABC):
         self.lls = nn.Linear(in_features=channels[0], out_features=channels[1])
 
         self.spatial_layers = nn.ModuleList([
-            SpatialEncoderLayer(in_channels=channels_[i],
+            SpatialFullEncoderLayer(in_channels=channels_[i],
                                 mdl_channels=channels_[i + 1],
                                 heads=num_heads,
                                 dropout=self.drop_rate) for i in range(num_layers)])
