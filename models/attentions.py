@@ -113,8 +113,8 @@ class FullAttention(nn.Module):  # B * T X V X C
         # Compute the unnormalized attention and apply the masks
         qk = torch.einsum("nlhe, nshe -> nhls", queries, keys) # f h v v
 
-        if not attn_mask.all_ones:
-            qk = qk + attn_mask.additive_matrix
+        #if not attn_mask.all_ones:
+        #    qk = qk + attn_mask.additive_matrix
 
         # Compute the attention and the weighted average
         att = torch.softmax(softmax_temp * qk, dim=-1)
