@@ -315,8 +315,7 @@ class SpatialFullEncoderLayer(nn.Module):
 
         self.lin_qkv = Linear(in_channels, mdl_channels * 3, bias=False)
 
-        self.multi_head_attn = FullAttention(in_channels=mdl_channels // heads,
-                                             attention_dropout=dropout[1])
+        self.multi_head_attn = FullAttention(attention_dropout=dropout[1])
 
         self.add_norm_att = AddNorm(self.mdl_channels, False, self.dropout[2], self.heads)
         self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2], self.heads)
