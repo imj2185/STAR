@@ -122,4 +122,9 @@ dataset/
 log/
 logs/
 saved_model/
-gradflow/
+gradflow*/
+
+# image files
+*.pdf
+*.png
+*.jpg
