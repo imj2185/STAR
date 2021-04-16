@@ -192,8 +192,8 @@ class AddNorm(nn.Module):
     def __init__(self, normalized_shape, beta, dropout, heads, **kwargs):
         super(AddNorm, self).__init__(**kwargs)
         self.dropout = nn.Dropout(dropout)
-        # self.ln = nn.LayerNorm(normalized_shape, elementwise_affine=True)
-        self.ln = MaskPowerNorm(normalized_shape, group_num=heads, warmup_iters=1671 * 3)
+        self.ln = nn.LayerNorm(normalized_shape, elementwise_affine=True)
+        #self.ln = MaskPowerNorm(normalized_shape, group_num=heads, warmup_iters=1671 * 3)
         self.beta = beta
         if self.beta:
             self.lin_beta = Linear(3 * normalized_shape, 1, bias=False)

@@ -17,7 +17,7 @@ from tqdm import tqdm
 
 from args import make_args
 from data.dataset3 import SkeletonDataset, skeleton_parts
-from models.net3s import DualGraphEncoder
+from models.net2s import DualGraphEncoder
 from optimizer import LabelSmoothingCrossEntropy, SGD_AGC, CosineAnnealingWarmupRestarts, NoamOpt
 from utility.helper import make_checkpoint, load_checkpoint
 
@@ -142,10 +142,10 @@ def run(rank, world_size):
             sample, label, bi = batch.x, batch.y, batch.batch
             optimizer.zero_grad()
             # print(batch.y.shape, rank)
-            out, feature = model(sample, adj=adj, bi=bi)
+            out = model(sample, adj=adj, bi=bi)
             loss = loss_compute(out, label.long())
-            contrast_loss = con_loss(feature, label.view(-1))
-            loss += contrast_loss
+            #contrast_loss = con_loss(feature, label.view(-1))
+            #loss += contrast_loss
             loss.backward()
             optimizer.step()
 
