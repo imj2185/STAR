@@ -44,7 +44,7 @@ def make_args():
     parser.add_argument('--weight_decay', dest='weight_decay', default=0.09, type=float)
     parser.add_argument('--warmup_epochs', dest='warmup_epochs', default=5, type=float)
     parser.add_argument('--opt_train_factor', dest='opt_train_factor', default=4, type=float)
-    parser.add_argument('--epoch_num', dest='epoch_num', default=200, type=int)  # paper used: 2001
+    parser.add_argument('--epoch_num', dest='epoch_num', default=3, type=int)  # paper used: 2001
     parser.add_argument('--epoch_log', dest='epoch_log', default=50, type=int)  # test every
     parser.add_argument('--epoch_save', dest='epoch_save', default=1, type=int)  # save every
     parser.add_argument('--save_root', dest='save_root', default='saved_model', type=str)
@@ -56,27 +56,27 @@ def make_args():
     parser.add_argument('--cross_k', dest='cross_k', default=1, type=int, help='k value for cros validation')
     parser.add_argument('--alpha', dest='alpha', default=0.01, type=float)
     parser.add_argument('--mlp_head_hidden', dest='mlp_head_hidden', default=128, type=int)  # paper used: 2001
-    parser.add_argument('--last_epoch', dest='last_epoch', default=0, type=int)
+    parser.add_argument('--last_epoch', dest='last_epoch', default=2, type=int)
     parser.set_defaults(gpu=True,
-                        batch_size=32,
+                        batch_size=64,
                         dataset_name='ntu',
                         dataset_root=osp.join(os.getcwd()),
                         save_root=osp.join(os.getcwd(), 'saved_model'),
-                        load_model=False,
+                        load_model=True,
                         in_channels=9,
                         num_enc_layers=5,
                         num_conv_layers=2,
                         weight_decay=4e-5,
                         drop_rate=[0.5, 0.5, 0.5, 0.5],  # linear_attention, sparse_attention, add_norm, ffn
-                        hid_channels=64,
-                        out_channels=64,
-                        heads=8,
+                        hid_channels=32,
+                        out_channels=32,
+                        heads=4,
                         data_parallel=False,
                         cross_k=5,
-                        mlp_head_hidden=128,
+                        mlp_head_hidden=32,
                         lr=0.001,
-                        epoch_save=50,
-                        model_dim=64,
+                        epoch_save=2,
+                        model_dim=32,
                         warmup_epochs=5,
                         opt_train_factor=1)
 

@@ -121,8 +121,8 @@ def run(rank, world_size):
     if args.load_model:
         map_location = {'cuda:%d' % 0: 'cuda:%d' % rank}
         last_epoch, loss = load_checkpoint(osp.join(args.save_root,
-                                                    args.save_name + '_' + str(last_epoch) + '.pickle'),
-                                           model, optimizer, map_location)
+                                                    args.save_name + '_' + str(last_epoch) + '.pt'),
+                                           model, optimizer, map_location, 'gpu')
 
     adj = skeleton_parts()[0].to(rank)
 
@@ -191,7 +191,7 @@ def run(rank, world_size):
                 batch = batch.to(rank)
                 sample, label, bi = batch.x, batch.y, batch.batch
                 with torch.no_grad():
-                    out, _ = model.module(sample, adj=adj, bi=bi)
+                    out = model(sample, adj=adj, bi=bi)
                 running_loss += loss.item()
                 pred = torch.max(out, 1)[1]
                 total_samples += label.size(0)

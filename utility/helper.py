@@ -20,7 +20,7 @@ def load_checkpoint(path, model, optimizer=None, map_location=None, device='cpu'
     checkpoint = torch.load(path, map_location=map_location)
     model.load_state_dict(checkpoint['model_state_dict'])
     if optimizer is not None:
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        optimizer.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     epoch = checkpoint['epoch']
     loss = checkpoint['loss']
     return epoch, loss
