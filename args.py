@@ -56,7 +56,7 @@ def make_args():
     parser.add_argument('--cross_k', dest='cross_k', default=1, type=int, help='k value for cros validation')
     parser.add_argument('--alpha', dest='alpha', default=0.01, type=float)
     parser.add_argument('--mlp_head_hidden', dest='mlp_head_hidden', default=128, type=int)  # paper used: 2001
-    parser.add_argument('--last_epoch', dest='last_epoch', default=2, type=int)
+    parser.add_argument('--last_epoch', dest='last_epoch', default=0, type=int)
     parser.add_argument('--fine_tune', dest='fine_tune', default=False, type=bool)
     parser.set_defaults(gpu=True,
                         batch_size=32,
