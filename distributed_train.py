@@ -109,8 +109,7 @@ def run(rank, world_size):
                       # non-linear activation choices are: nn.SiLU(), nn.Tanh(), nn.LeakyReLU(),
                       nn.SiLU(),
                       nn.Dropout(p=0.3),
-                      nn.Linear(args.mlp_head_hidden, 120)
-        )
+                      nn.Linear(args.mlp_head_hidden, 120))
 
     #for name, param in model.named_parameters():
     #    if param.requires_grad:
