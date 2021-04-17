@@ -70,7 +70,7 @@ def run(rank, world_size):
                                        rank=rank)
     train_loader = DataLoader(train_ds,
                               batch_size=args.batch_size, 
-                              shuffle=True)
+                              sampler=train_sampler)
 
     model = DualGraphEncoder(in_channels=args.in_channels,
                              hidden_channels=args.hid_channels,
@@ -79,7 +79,6 @@ def run(rank, world_size):
                              num_layers=args.num_enc_layers,
                              classes=120,
                              num_heads=args.heads,
-                             sequential=False,
                              num_conv_layers=args.num_conv_layers,
                              drop_rate=args.drop_rate).to(rank)
     print("# of model parameters: ", sum(p.numel() for p in model.parameters()))
@@ -111,6 +110,7 @@ def run(rank, world_size):
     adj = skeleton_parts()[0].to(rank)
 
     for epoch in range(last_epoch, args.epoch_num + last_epoch):
+        train_sampler.set_epoch(epoch)
         model.train()
         running_loss = 0.
         accuracy = 0.
