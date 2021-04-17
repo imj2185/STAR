@@ -59,28 +59,28 @@ def make_args():
     parser.add_argument('--last_epoch', dest='last_epoch', default=2, type=int)
     parser.add_argument('--fine_tune', dest='fine_tune', default=False, type=bool)
     parser.set_defaults(gpu=True,
-                        batch_size=64,
+                        batch_size=32,
                         dataset_name='ntu_120',
                         dataset_root=osp.join(os.getcwd()),
                         save_root=osp.join(os.getcwd(), 'saved_model'),
-                        load_model=True,
+                        load_model=False,
                         in_channels=9,
                         num_enc_layers=5,
                         num_conv_layers=2,
                         weight_decay=4e-5,
                         drop_rate=[0.5, 0.5, 0.5, 0.5],  # linear_attention, sparse_attention, add_norm, ffn
-                        hid_channels=32,
-                        out_channels=32,
-                        heads=4,
+                        hid_channels=64,
+                        out_channels=64,
+                        heads=8,
                         data_parallel=False,
                         cross_k=5,
-                        mlp_head_hidden=32,
+                        mlp_head_hidden=128,
                         lr=0.001,
-                        epoch_save=2,
-                        model_dim=32,
+                        epoch_save=100,
+                        model_dim=64,
                         warmup_epochs=5,
                         opt_train_factor=1,
-                        fine_tune=True)
+                        fine_tune=False)
 
     args = parser.parse_args()
     return args
