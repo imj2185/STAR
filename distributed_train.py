@@ -112,9 +112,9 @@ def run(rank, world_size):
                       nn.Linear(args.mlp_head_hidden, 120)
         )
 
-    for name, param in model.named_parameters():
-        if param.requires_grad:
-            print(name)
+    #for name, param in model.named_parameters():
+    #    if param.requires_grad:
+    #        print(name)
     model = DistributedDataParallel(model, device_ids=[rank])
     # optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     # total_batch_train = len(train_ds) // (torch.cuda.device_count() * args.batch_size) + 1
