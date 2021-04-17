@@ -128,7 +128,8 @@ def run(rank, world_size):
     # lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=12, cycle_mult=1.0, max_lr=0.1,
     #                                             min_lr=1e-4, warmup_steps=3, gamma=0.4)
     loss_compute = LabelSmoothingCrossEntropy()
-    last_epoch = args.last_epoch
+
+    last_epoch = args.last_epoch if args.load_model else 0
 
     if rank == 0:
         writer = SummaryWriter(args.log_dir)
