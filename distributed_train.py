@@ -7,6 +7,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel
@@ -97,6 +98,22 @@ def run(rank, world_size):
                              num_conv_layers=args.num_conv_layers,
                              drop_rate=args.drop_rate).to(rank)
     print("# of model parameters: ", sum(p.numel() for p in model.parameters()))
+    if args.fine_tune:
+        for name, param in model.named_parameters():
+            if 'mlp_head' not in name:
+                #print(name)
+                param.requires_grad = False
+        model.mlp_head = nn.Sequential(
+                      nn.Linear(args.out_channels * 25, args.mlp_head_hidden),
+                      # non-linear activation choices are: nn.SiLU(), nn.Tanh(), nn.LeakyReLU(),
+                      nn.SiLU(),
+                      nn.Dropout(p=0.3),
+                      nn.Linear(args.mlp_head_hidden, 120)
+        )
+
+    for name, param in model.named_parameters():
+        if param.requires_grad:
+            print(name)
     model = DistributedDataParallel(model, device_ids=[rank])
     # optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     # total_batch_train = len(train_ds) // (torch.cuda.device_count() * args.batch_size) + 1

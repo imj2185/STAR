@@ -350,7 +350,7 @@ class SkeletonDataset(Dataset, ABC):
 
         print('processed the adjacency matrices of skeleton')
         self.missing_skeleton_path = osp.join(os.getcwd(),
-                                              'samples_with_missing_skeletons.txt')
+                                              'samples_with_missing_skeletons_120.txt')
         super(SkeletonDataset, self).__init__(root, transform, pre_transform)
         if 'ntu' in self.name:
             path = osp.join(self.processed_dir, self.processed_file_names)
@@ -544,6 +544,8 @@ class SkeletonDataset(Dataset, ABC):
                     is_training = (camera_id in self.training_view)
                 elif self.benchmark == 'xsub':
                     is_training = (subject_id in self.training_subjects)
+                elif self.benchmark == 'xset':
+                    is_training = (setup_id in self.training_setup)
                 else:
                     raise ValueError('Invalid benchmark provided: {}'.format(self.benchmark))
 
@@ -602,10 +604,10 @@ class SkeletonDataset(Dataset, ABC):
 def test():
     args = make_args()
     train_ds = SkeletonDataset(args.dataset_root, name=args.dataset_name,
-                               num_channels=args.in_channels, sample='train')
+                               num_channels=args.in_channels, benchmark='xset',sample='train')
     test_ds = SkeletonDataset(args.dataset_root, name=args.dataset_name,
-                              num_channels=args.in_channels, sample='val')
-
+                              num_channels=args.in_channels, benchmark='xset', sample='val')
+    i = 0
     print("Data generation finished.")
 
 

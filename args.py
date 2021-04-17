@@ -57,9 +57,10 @@ def make_args():
     parser.add_argument('--alpha', dest='alpha', default=0.01, type=float)
     parser.add_argument('--mlp_head_hidden', dest='mlp_head_hidden', default=128, type=int)  # paper used: 2001
     parser.add_argument('--last_epoch', dest='last_epoch', default=2, type=int)
+    parser.add_argument('--fine_tune', dest='fine_tune', default=False, type=bool)
     parser.set_defaults(gpu=True,
                         batch_size=64,
-                        dataset_name='ntu',
+                        dataset_name='ntu_120',
                         dataset_root=osp.join(os.getcwd()),
                         save_root=osp.join(os.getcwd(), 'saved_model'),
                         load_model=True,
@@ -78,7 +79,8 @@ def make_args():
                         epoch_save=2,
                         model_dim=32,
                         warmup_epochs=5,
-                        opt_train_factor=1)
+                        opt_train_factor=1,
+                        fine_tune=True)
 
     args = parser.parse_args()
     return args
