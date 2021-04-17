@@ -119,7 +119,7 @@ def run(rank, world_size):
         start = time.time()
 
         for i, batch in tqdm(enumerate(train_loader),
-                             total=total_batch_train,
+                             total=len(train_loader),
                              desc="Train Epoch {}".format(epoch + 1)):
             batch = batch.to(rank)
             sample, label, bi = batch.x, batch.y, batch.batch
@@ -168,7 +168,7 @@ def run(rank, world_size):
             # adj = skeleton_parts()[0].to(rank)
 
             for i, batch in tqdm(enumerate(test_loader),
-                                 total=total_batch_test,
+                                 total=len(test_loader),
                                  desc="Test: "):
                 batch = batch.to(rank)
                 sample, label, bi = batch.x, batch.y, batch.batch
