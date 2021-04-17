@@ -58,11 +58,9 @@ def run(rank, world_size):
     dist.init_process_group('nccl', rank=rank, world_size=world_size)
     args = make_args()
 
-    train_ds = SkeletonDataset(args.dataset_root, name='ntu_120',
-                               use_motion_vector=False, sample='train')
+    train_ds = SkeletonDataset(args.dataset_root, name='ntu_120', sample='train')
 
-    test_ds = SkeletonDataset(args.dataset_root, name='ntu_120',
-                              use_motion_vector=False, sample='val')
+    test_ds = SkeletonDataset(args.dataset_root, name='ntu_120', sample='val')
 
     shuffled_list = [i for i in range(len(train_ds))]
     shuffle(shuffled_list)
