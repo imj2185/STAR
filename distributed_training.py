@@ -85,10 +85,10 @@ def run(rank, world_size):
     model = DistributedDataParallel(model, device_ids=[rank])
     if args.load_model:
         map_location = {'cuda:%d' % 0: 'cuda:%d' % rank}
-        #model.load_state_dict(torch.load(osp.join(args.save_root, 'ntu_120_xsub.pt'), map_location=map_location))
-        last_epoch, loss = load_checkpoint(osp.join(args.save_root,
-                                           args.save_name + '_' + str(last_epoch) + '.pt'),
-                                           model, optimizer, map_location, 'gpu')
+        model.load_state_dict(torch.load(osp.join(args.save_root, 'ntu_120_xsub.pt'), map_location=map_location))
+        # last_epoch, loss = load_checkpoint(osp.join(args.save_root,
+        #                                    args.save_name + '_' + str(last_epoch) + '.pt'),
+        #                                    model, optimizer, map_location, 'gpu')
     if args.fine_tune:
         for name, param in model.named_parameters():
             if 'mlp_head' not in name:
@@ -174,7 +174,8 @@ def run(rank, world_size):
 
         if rank == 0:  # We evaluate on a single GPU for now.
             if (epoch + 1) % args.epoch_save == 0 and epoch != 0:
-                make_checkpoint(args.save_root, args.save_name, epoch + 1, model, optimizer, loss)
+                #make_checkpoint(args.save_root, args.save_name, epoch + 1, model, optimizer, loss)
+                torch.save(model.state_dict(), osp.join(args.save_root, 'ntu_120_xsub.pt'))
             lr = optimizer.state_dict()['param_groups'][0]['lr']
             writer.add_scalar('params/lr', lr, epoch)
             model.eval()
