@@ -83,7 +83,12 @@ def run(rank, world_size):
                              drop_rate=args.drop_rate).to(rank)
     print("# of model parameters: ", sum(p.numel() for p in model.parameters()))
     model = DistributedDataParallel(model, device_ids=[rank])
-
+    if args.load_model:
+        map_location = {'cuda:%d' % 0: 'cuda:%d' % rank}
+        #model.load_state_dict(torch.load(osp.join(args.save_root, 'ntu_120_xsub.pt'), map_location=map_location))
+        last_epoch, loss = load_checkpoint(osp.join(args.save_root,
+                                           args.save_name + '_' + str(last_epoch) + '.pt'),
+                                           model, optimizer, map_location, 'gpu')
     if args.fine_tune:
         for name, param in model.named_parameters():
             if 'mlp_head' not in name:
@@ -96,7 +101,7 @@ def run(rank, world_size):
                       nn.SiLU(),
                       nn.Dropout(p=0.3),
                       nn.Linear(args.mlp_head_hidden, 120))
-                      
+
     #optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     total_batch_train = len(train_ds) // (torch.cuda.device_count() * args.batch_size) + 1
     optimizer = NoamOpt(args.model_dim,  #model dimension = hidden channel dim
