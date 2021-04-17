@@ -93,6 +93,7 @@ def run(rank, world_size):
                              out_channels=args.out_channels,
                              mlp_head_hidden=args.mlp_head_hidden,
                              num_layers=args.num_enc_layers,
+                             classes=120,
                              num_heads=args.heads,
                              use_joint_mean=False,
                              num_conv_layers=args.num_conv_layers,
