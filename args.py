@@ -76,7 +76,7 @@ def make_args():
                         cross_k=5,
                         mlp_head_hidden=128,
                         lr=0.001,
-                        epoch_save=2,
+                        epoch_save=50,
                         model_dim=64,
                         warmup_epochs=5,
                         opt_train_factor=1,
