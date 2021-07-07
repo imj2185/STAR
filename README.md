@@ -1,6 +1,6 @@
-# APBGCN
+# STAR
 <ins>A</ins>ttention-<ins>B</ins>ased <ins>P</ins>arts-oriented <ins>G</ins>raph <ins>C</ins>onvolution <ins>N</ins>etworks 
-
+<ins>S</ins>parse <ins>T</ins>ransformer-based <ins>A</ins>ction <ins>R</ins>ecognition
 # Dataset
 download ntu rgb+d 60 action recognition from skeleton from http://rose1.ntu.edu.sg/datasets/actionRecognition.asp
 
