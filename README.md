@@ -1,5 +1,5 @@
 # STAR
-Official implementation of [<ins>S</ins>parse <ins>T</ins>ransformer-based <ins>A</ins>ction <ins>R</ins>ecognition)](https://arxiv.org/abs/2107.07089)
+Official implementation of [<ins>S</ins>parse <ins>T</ins>ransformer-based <ins>A</ins>ction <ins>R</ins>ecognition](https://arxiv.org/abs/2107.07089)
 # Dataset
 download NTU RGB+D 60 action recognition of 2D/3D skeleton from http://rose1.ntu.edu.sg/datasets/actionRecognition.asp
 
