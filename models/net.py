@@ -5,7 +5,7 @@ import torch.nn as nn
 # from third_party.performer import SelfAttention
 from einops import rearrange
 
-from models.positional_encoding import SeqPosEncoding
+from models.encoding import SeqPosEncoding
 from .attentions import SpatialEncoderLayer, TemporalEncoderLayer
 from .layers import GlobalContextAttention
 
