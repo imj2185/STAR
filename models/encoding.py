@@ -94,7 +94,7 @@ class SeqPosEncoding(nn.Module):
 
 class PositionalEncoding(object):
     def __init__(self, zero_diagonal=False) -> None:
-        super().__init__()
+        super(PositionalEncoding, self).__init__()
         self.zero_diagonal = zero_diagonal
         self.cached_pos_enc = None
 
