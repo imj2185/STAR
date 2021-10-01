@@ -145,6 +145,7 @@ class KStepRandomWalkEncoding(PositionalEncoding):
         edge_index, edge_attr = get_laplacian(edge_index, edge_attr,
                                               normalization=self.normalization,
                                               num_nodes=num_nodes)
+        # TODO addition of matrix power
         ei, ea = edge_index, edge_attr
         for _ in range(self.k - 1):
             ei, ea = spspmm(ei, ea, edge_index, edge_attr,

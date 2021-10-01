@@ -18,3 +18,5 @@ tensorboardX~=2.1
 torchviz~=0.0.1
 networkx>=2.5
 matplotlib>=3.3.2
+torch_geometric
+torch_sparse
