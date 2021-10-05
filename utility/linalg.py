@@ -7,16 +7,16 @@ from fast_transformers.masking import BaseMask, FullMask
 from torch import Tensor
 from torch_geometric.utils.num_nodes import maybe_num_nodes
 from torch_scatter import scatter_add, scatter
-from torch_sparse import transpose, spspmm  # , spmm
+from torch_sparse import transpose, spspmm, coalesce  # , spmm
 
 
-def power_adj(adj, dim, p):
-    nnz = torch.ones(adj.shape[1])
-    ic, vc = spspmm(adj, nnz, adj, nnz, dim, dim, dim)
+def power_adj(edge_index, dim, p):
+    nnz = torch.ones(edge_index.shape[1])
+    ic, vc = spspmm(edge_index, nnz, edge_index, nnz, dim, dim, dim)
     if p > 2:
         for _ in range(p - 2):
-            ic, vc = spspmm(ic, vc, adj, nnz, dim, dim, dim)
-    return ic
+            ic, vc = spspmm(ic, vc, edge_index, nnz, dim, dim, dim)
+    return ic, vc
 
 
 def softmax_(src: Tensor,
@@ -51,6 +51,14 @@ def softmax_(src: Tensor,
         raise NotImplementedError
 
     return out / (out_sum + 1e-16)
+
+
+def spadd_(edge_index_src, src_val, edge_index_other, other_val, m, n):
+    index_ = torch.cat((edge_index_src, edge_index_other), dim=1)
+    val_ = torch.cat((src_val, other_val), dim=1)
+    m = max(torch.max(edge_index_src[0]).item(), torch.max(edge_index_other[0]).item(), m)
+    n = max(torch.max(edge_index_src[1]).item(), torch.max(edge_index_other[1]).item(), n)
+    return coalesce(index=index_, value=val_, m=m, n=n)
 
 
 def spmm_(indices, nz, m, n, dense, dim=-3):
@@ -211,6 +219,6 @@ if __name__ == "__main__":
     x = torch.ones(3, 5, 3)
     x[0] *= 2
     x[1] *= 3
-    for i in range(m):
+    for i in range(x.shape[1]):
         x[..., i, :] *= i
     adj = torch.tensor([[0, 1, 1, 1, 2, 3, 4, 4], [1, 0, 2, 4, 1, 4, 1, 3]])
