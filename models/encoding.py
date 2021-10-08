@@ -12,6 +12,7 @@ from torch_sparse import spspmm
 
 
 # from utility.linalg import bfs_enc
+from utility.linalg import spadd_
 
 
 def bfs_enc(edges, root, device):
@@ -130,12 +131,14 @@ class KStepRandomWalkEncoding(PositionalEncoding):
     def __init__(self,
                  k=3,
                  beta=0.5,
+                 acc=True,
                  use_edge_attr=False,
                  normalization=None,
                  zero_diagonal=False):
         super().__init__(zero_diagonal=zero_diagonal)
         self.k = k
         self.beta = beta
+        self.accumulated = acc
         self.normalization = normalization
         self.use_edge_attr = use_edge_attr
 
@@ -148,6 +151,10 @@ class KStepRandomWalkEncoding(PositionalEncoding):
         # TODO addition of matrix power
         ei, ea = edge_index, edge_attr
         for _ in range(self.k - 1):
+            if self.accumulated: # A + A^2 + A^3 = A(I + A(I + A))
+                ids = torch.tensor([[i, i] for i in range(num_nodes)]).transpose(1, 0)
+                val = torch.ones(num_nodes)
+                spadd_(ids, val, ei, ea)
             ei, ea = spspmm(ei, ea, edge_index, edge_attr,
                             num_nodes, num_nodes, num_nodes)
         return ei, ea
