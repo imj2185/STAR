@@ -1,11 +1,9 @@
 import os
 import os.path as osp
 import time
-from random import shuffle
 
 import matplotlib
 import matplotlib.pyplot as plt
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -16,9 +14,9 @@ from tqdm import tqdm, trange
 from args import make_args
 from data.dataset3 import SkeletonDataset, skeleton_parts
 from models.net2s import DualGraphEncoder
-from optimizer import SGD_AGC, CosineAnnealingWarmupRestarts, ZeroOneClipper, MaxOneClipper, LabelSmoothingCrossEntropy
+from optimizer import SgdAgc, CosineAnnealingWarmupRestarts, LabelSmoothingCrossEntropy
+# , ZeroOneClipper,
 from utility.helper import make_checkpoint, load_checkpoint
-from random import shuffle
 
 matplotlib.use('Agg')
 
@@ -133,7 +131,7 @@ def run_epoch(data_loader,
                     for param in model.parameters():
                         l1_loss += l1p(param, target=torch.zeros_like(param))
                     factor = 0.9
-                    loss += l1_loss * factor                    #l1_regularization
+                    loss += l1_loss * factor  # l1_regularization
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
@@ -212,7 +210,7 @@ def main():
     print(sum(p.numel() for p in model.parameters()))
     # noam_opt = get_std_opt(model, args)
 
-    optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
+    optimizer = SgdAgc(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
     # optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     # decay_rate = 0.96
     # lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decay_rate)
@@ -220,8 +218,6 @@ def main():
                                                  min_lr=1e-4, warmup_steps=3, gamma=0.7)
 
     # weight_clipper = ZeroOneClipper()
-    weight_clipper = MaxOneClipper()
-
     if args.load_model:
         last_epoch = args.load_epoch
         last_epoch, loss = load_checkpoint(osp.join(args.save_root,
@@ -262,7 +258,8 @@ def main():
         test_loss, test_accuracy = run_epoch(test_loader, model, optimizer,
                                              loss_compute, test_ds, device, gt_list=gt_list, cr_list=cr_list,
                                              wr_list=wr_list, is_train=False, is_test=True,
-                                             desc="Final test: ", args=args, writer=writer, epoch_num=epoch, adj=adj, l1_penalty=l1_penalty)
+                                             desc="Final test: ", args=args, writer=writer, epoch_num=epoch, adj=adj,
+                                             l1_penalty=l1_penalty)
 
         writer.add_scalar('test/test_loss', test_loss, epoch + 1)
         writer.add_scalar('test/test_overall_acc', test_accuracy, epoch + 1)
@@ -273,7 +270,7 @@ def main():
 
         lr_scheduler.step()
         if train_accuracy - 5 > test_accuracy:
-            l1_penalty=True
+            l1_penalty = True
         #     model.apply(weight_clipper)
         #     model.mlp_head[1].apply(weight_clipper)
         #     model.mlp_head[3].apply(weight_clipper)

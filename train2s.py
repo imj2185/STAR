@@ -16,7 +16,7 @@ from tqdm import tqdm, trange
 from args import make_args
 from data.dataset3 import SkeletonDataset, skeleton_parts
 from models.net2s import DualGraphEncoder
-from optimizer import SGD_AGC, CosineAnnealingWarmupRestarts, LabelSmoothingCrossEntropy
+from optimizer import SgdAgc, CosineAnnealingWarmupRestarts, LabelSmoothingCrossEntropy
 from utility.helper import make_checkpoint, load_checkpoint
 from random import shuffle
 
@@ -216,7 +216,7 @@ def main():
     model = model.to(device)
     print(sum(p.numel() for p in model.parameters()))
 
-    optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
+    optimizer = SgdAgc(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
     # optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     decay_rate = 0.97
     # lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decay_rate)

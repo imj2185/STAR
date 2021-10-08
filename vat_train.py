@@ -14,7 +14,7 @@ from tqdm import tqdm, trange
 from args import make_args
 from data.dataset3 import SkeletonDataset, skeleton_parts
 from models.net import DualGraphEncoder
-from optimizer import SGD_AGC, CosineAnnealingWarmupRestarts
+from optimizer import SgdAgc, CosineAnnealingWarmupRestarts
 from utility.helper import make_checkpoint, load_checkpoint
 from random import shuffle
 import imageio
@@ -207,7 +207,7 @@ def main():
     model = model.to(device)
     # noam_opt = get_std_opt(model, args)
 
-    optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=0.0)
+    optimizer = SgdAgc(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=0.0)
     decay_rate = 0.97
     lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=decay_rate)
     #lr_scheduler = CosineAnnealingWarmupRestarts(optimizer, first_cycle_steps=12, cycle_mult=1.0, max_lr=0.1,

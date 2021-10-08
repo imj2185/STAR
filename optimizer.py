@@ -6,6 +6,8 @@ from torch.optim.lr_scheduler import _LRScheduler
 from torch.optim.optimizer import Optimizer, required
 from torch import optim, nn
 
+from collections import defaultdict
+
 
 class NoamOpt(object):
     def __init__(self, model_size, factor, warmup_steps, optimizer):
@@ -62,7 +64,7 @@ def unitwise_norm(x: torch.Tensor):
     return torch.sum(x ** 2, dim=dim, keepdim=keepdim) ** 0.5
 
 
-class SGD_AGC(Optimizer):
+class SgdAgc(Optimizer):
     r"""Implements stochastic gradient descent (optionally with momentum).
     Nesterov momentum is based on the formula from
     `On the importance of initialization and momentum in deep learning`__
@@ -78,7 +80,7 @@ class SGD_AGC(Optimizer):
         dampening (float, optional): dampening for momentum (default: 0.01)
         eps (float, optional): dampening for momentum (default: 1e-3)
     Example:
-        >>> optimizer = torch.optim.SGD_AGC(model.parameters(), lr=0.1, momentum=0.9)
+        >>> optimizer = torch.optim.SgdAgc(model.parameters(), lr=0.1, momentum=0.9)
         >>> optimizer.zero_grad()
         >>> loss_fn(model(input), target).backward()
         >>> optimizer.step()
@@ -131,10 +133,10 @@ class SGD_AGC(Optimizer):
         self.eta = eta
         self.gamma = gamma
 
-        super(SGD_AGC, self).__init__(params, defaults)
+        super(SgdAgc, self).__init__(params, defaults)
 
     def __setstate__(self, state):
-        super(SGD_AGC, self).__setstate__(state)
+        super(SgdAgc, self).__setstate__(state)
         for group in self.param_groups:
             group.setdefault('nesterov', False)
 
@@ -170,8 +172,8 @@ class SGD_AGC(Optimizer):
                 trigger = grad_norm > max_norm  # TODO: not working if "grad_norm < max_norm"
 
                 clipped_grad = p.grad * \
-                    (max_norm / torch.max(grad_norm,
-                                          torch.tensor(1e-6).to(grad_norm.device)))
+                               (max_norm / torch.max(grad_norm,
+                                                     torch.tensor(1e-6).to(grad_norm.device)))
                 p.grad.detach().copy_(torch.where(trigger, clipped_grad, p.grad))
 
         self.t += 1
@@ -298,6 +300,7 @@ class CosineAnnealingWarmupRestarts(_LRScheduler):
 class LabelSmoothingCrossEntropy(nn.Module):
     def __init__(self):
         super(LabelSmoothingCrossEntropy, self).__init__()
+
     def forward(self, x, target, smoothing=0.1):
         confidence = 1. - smoothing
         logprobs = nn.functional.log_softmax(x, dim=-1)
@@ -306,3 +309,71 @@ class LabelSmoothingCrossEntropy(nn.Module):
         smooth_loss = -logprobs.mean(dim=-1)
         loss = confidence * nll_loss + smoothing * smooth_loss
         return loss.mean()
+
+
+class ASAM(object):
+    def __init__(self, optimizer, model, rho=0.5, eta=0.01):
+        self.optimizer = optimizer
+        self.model = model
+        self.rho = rho
+        self.eta = eta
+        self.state = defaultdict(dict)
+
+    @torch.no_grad()
+    def ascent_step(self):
+        _grads = []
+        for n, p in self.model.named_parameters():
+            if p.grad is None:
+                continue
+            wt = self.state[p].get("eps")
+            if wt is None:
+                wt = torch.clone(p).detach()
+                self.state[p]["eps"] = wt
+            if 'weight' in n:
+                wt[...] = p[...]
+                wt.abs_().add_(self.eta)
+                p.grad.mul_(wt)
+            _grads.append(torch.norm(p.grad, p=2))
+        _grad_norm = torch.norm(torch.stack(_grads), p=2) + 1.e-16
+        for n, p in self.model.named_parameters():
+            if p.grad is None:
+                continue
+            wt = self.state[p].get("eps")
+            if 'weight' in n:
+                p.grad.mul_(wt)
+            eps = wt
+            eps[...] = p.grad[...]
+            eps.mul_(self.rho / _grad_norm)
+            p.add_(eps)
+        self.optimizer.zero_grad()
+
+    @torch.no_grad()
+    def descent_step(self):
+        for n, p in self.model.named_parameters():
+            if p.grad is None:
+                continue
+            p.sub_(self.state[p]["eps"])
+        self.optimizer.step()
+        self.optimizer.zero_grad()
+
+
+class SAM(ASAM):
+    @torch.no_grad()
+    def ascent_step(self):
+        grads = []
+        for n, p in self.model.named_parameters():
+            if p.grad is None:
+                continue
+            grads.append(torch.norm(p.grad, p=2))
+        grad_norm = torch.norm(torch.stack(grads), p=2) + 1.e-16
+        for n, p in self.model.named_parameters():
+            if p.grad is None:
+                continue
+            eps = self.state[p].get("eps")
+            if eps is None:
+                eps = torch.clone(p).detach()
+                self.state[p]["eps"] = eps
+            eps[...] = p.grad[...]
+            eps.mul_(self.rho / grad_norm)
+            p.add_(eps)
+        self.optimizer.zero_grad()

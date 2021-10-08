@@ -13,13 +13,13 @@ from tqdm import tqdm
 from args import make_args
 from data.dataset3 import SkeletonDataset, skeleton_parts
 from models.net2s import DualGraphEncoder
-from optimizer import LabelSmoothingCrossEntropy
+from optimizer import LabelSmoothingCrossEntropy, ASAM
 
 
-def run(rank, world_size):
+def run(rank, num_gpu):
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = '12355'
-    dist.init_process_group('nccl', rank=rank, world_size=world_size)
+    dist.init_process_group('nccl', rank=rank, world_size=num_gpu)
     args = make_args()
 
     train_ds = SkeletonDataset(args.dataset_root, name='ntu_60',
@@ -32,8 +32,8 @@ def run(rank, world_size):
     shuffle(shuffled_list)
     train_ds = train_ds[shuffled_list]
 
-    train_sampler = DistributedSampler(train_ds, num_replicas=world_size,
-                                       rank=rank)
+    # train_sampler = DistributedSampler(train_ds, num_replicas=num_gpu,
+    #                                    rank=rank)
     train_loader = DataLoader(train_ds,
                               batch_size=args.batch_size)
 
@@ -50,6 +50,7 @@ def run(rank, world_size):
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     # optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
     loss_compute = LabelSmoothingCrossEntropy()
+    sharpness = ASAM(optimizer, model)
 
     if rank == 0:
         test_loader = DataLoader(test_ds,
