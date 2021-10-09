@@ -35,7 +35,7 @@ def run(rank, num_gpu):
     #                                    rank=rank)
     train_loader = DataLoader(train_ds,
                               batch_size=args.batch_size)
-
+    test_loader = None
     model = DualGraphEncoder(in_channels=args.in_channels,
                              hidden_channels=args.hid_channels,
                              out_channels=args.out_channels,
@@ -47,9 +47,9 @@ def run(rank, num_gpu):
                              drop_rate=args.drop_rate).to(rank)
     model = DistributedDataParallel(model, device_ids=[rank])
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    # optimizer = SGD_AGC(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
+    # optimizer = SgdAgc(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
     loss_compute = LabelSmoothingCrossEntropy()
-    sharpness = ASAM(optimizer, model)
+    minimizer = ASAM(optimizer, model)
 
     if rank == 0:
         test_loader = DataLoader(test_ds,
@@ -62,31 +62,37 @@ def run(rank, num_gpu):
         model.train()
         running_loss = 0.
         accuracy = 0.
-        correct = 0
-        total_samples = 0
+        cnt = 0.
         start = time.time()
         total_batch = len(train_ds) // args.batch_size + 1
-
+        batch_loss = 0.
+        # iterate batches
         for i, batch in tqdm(enumerate(train_loader),
                              total=total_batch,
                              desc="Train Epoch {}".format(epoch + 1)):
             batch = batch.to(rank)
             sample, label, bi = batch.x, batch.y, batch.batch
-            optimizer.zero_grad()
-            out = model(sample, adj=adj, bi=bi)
-            loss = loss_compute(out, label.long())
-            loss.backward()
-            optimizer.step()
 
-            running_loss += loss.item()
-            pred = torch.max(out, 1)[1]
-            total_samples += label.size(0)
-            corr = (pred == label)
-            correct += corr.double().sum().item()
+            # Ascent Step
+            predictions = model(sample, adj=adj, bi=bi)
+            batch_loss = loss_compute(predictions, label.long())
+            batch_loss.mean().backward()
+            minimizer.ascent_step()
+
+            # Descent Step
+            loss_compute(model(sample, adj=adj, bi=bi), label.long()).mean().backward()
+            minimizer.descent_step()
+
+            with torch.no_grad():
+                running_loss += batch_loss.sum().item()
+                accuracy += (torch.argmax(predictions, 1) == label).sum().item()
+            cnt += len(label)
+        running_loss /= cnt
+        accuracy *= 100. / cnt
         elapsed = time.time() - start
-        accuracy = correct / total_samples * 100.
+        # accuracy = correct / total_samples * 100.
         print('\n------ loss: %.3f; accuracy: %.3f; average time: %.4f' %
-              (running_loss / total_batch, accuracy, elapsed / len(train_ds)))
+              (running_loss, accuracy, elapsed / len(train_ds)))
 
         dist.barrier()
 
@@ -98,7 +104,6 @@ def run(rank, num_gpu):
             total_samples = 0
             start = time.time()
             total_batch = len(test_ds) // args.batch_size + 1
-            # adj = skeleton_parts()[0].to(rank)
 
             for i, batch in tqdm(enumerate(test_loader),
                                  total=total_batch,
@@ -107,7 +112,7 @@ def run(rank, num_gpu):
                 sample, label, bi = batch.x, batch.y, batch.batch
                 with torch.no_grad():
                     out = model.module(sample, adj=adj, bi=bi)
-                running_loss += loss.item()
+                running_loss += batch_loss.item()
                 pred = torch.max(out, 1)[1]
                 total_samples += label.size(0)
                 corr = (pred == label)
