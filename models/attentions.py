@@ -37,7 +37,7 @@ class SparseAttention(nn.Module):
         self.softmax_temp = softmax_temp
         self.dropout = attention_dropout
 
-    def forward(self, queries, keys, values, adj):
+    def forward(self, queries, keys, values, adj, pe=None):
         """Implements the multi-head softmax attention.
         Arguments
         ---------
@@ -45,6 +45,7 @@ class SparseAttention(nn.Module):
             :param keys: torch.Tensor (N, S, E) The tensor containing the keys
             :param values: torch.Tensor (N, S, D) The tensor containing the values
             :param adj: the adjacency matrix plays role of mask that encodes where each query can attend to
+            :param pe: positional encoding, this is a relative positional encoding which is applied to edges
         """
         # Extract some shapes and compute the temperature
         n, l, h, e = queries.shape  # batch, n_heads, length, depth
@@ -54,25 +55,17 @@ class SparseAttention(nn.Module):
 
         # Compute the un-normalized sparse attention according to adjacency matrix indices
         if isinstance(adj, torch.Tensor):
-            adj_ = adj
             qk = torch.sum(queries.index_select(dim=-3, index=adj[0]) * keys.index_select(dim=-3, index=adj[1]), dim=-1)
-
         else:
-            qk = adj_ = None
-            """qk = torch.cat([self.beta[k] * torch.sum(
-                queries[..., adj[k][0], :, :] *
-                keys[..., adj[k][1], :, :], dim=-1) for k in range(len(adj))], dim=0)
-            adj_ = torch.cat(adj, dim=1)
-            _, idx = adj_[0].sort()
-            adj_ = adj_[:, idx]
-            qk = qk[idx]"""
+            # qk = adj_ = None
+            raise NotImplemented("not implemented yet for non-tensor.")
 
         # Compute the attention and the weighted average, adj[0] is cols idx in the same row
-        alpha = fn.dropout(softmax_(softmax_temp * qk, adj[0]),
+        alpha = fn.dropout(softmax_(softmax_temp * qk, adj[0], kernel=pe),
                            p=self.dropout,
                            training=self.training)
         # sparse matmul, adj as indices and qk as nonzero
-        v = spmm_(adj_, alpha, l, l, values)
+        v = spmm_(adj, alpha, l, l, values)
         # Make sure that what we return is contiguous
         return v.contiguous()
 

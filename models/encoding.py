@@ -10,7 +10,6 @@ from torch_geometric.utils import get_laplacian
 from torch_geometric.utils.num_nodes import maybe_num_nodes
 from torch_sparse import spspmm
 
-
 # from utility.linalg import bfs_enc
 from utility.linalg import spadd_
 
@@ -145,13 +144,13 @@ class KStepRandomWalkEncoding(PositionalEncoding):
     def eval(self, edge_index, edge_attr, num_nodes=None):
         num_nodes = maybe_num_nodes(edge_index, num_nodes)
         edge_attr = edge_attr if self.use_edge_attr else None
-        edge_index, edge_attr = get_laplacian(edge_index, edge_attr,
-                                              normalization=self.normalization,
-                                              num_nodes=num_nodes)
+        # edge_index, edge_attr = get_laplacian(edge_index, edge_attr,
+        #                                       normalization=self.normalization,
+        #                                       num_nodes=num_nodes)
         # TODO addition of matrix power
         ei, ea = edge_index, edge_attr
         for _ in range(self.k - 1):
-            if self.accumulated: # A + A^2 + A^3 = A(I + A(I + A))
+            if self.accumulated:  # A + A^2 + A^3 = A(I + A(I + A))
                 ids = torch.tensor([[i, i] for i in range(num_nodes)]).transpose(1, 0)
                 val = torch.ones(num_nodes)
                 spadd_(ids, val, ei, ea)

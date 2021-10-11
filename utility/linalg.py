@@ -21,9 +21,9 @@ def power_adj(edge_index, dim, p):
 
 def softmax_(src: Tensor,
              index: Optional[Tensor],
-             ptr: Optional[Tensor] = None,
              num_nodes: Optional[int] = None,
-             dim=-2) -> Tensor:
+             dim=-2,
+             kernel=None) -> Tensor:
     r"""Computes a sparsely evaluated softmax.
     Given a value tensor :attr:`src`, this function first groups the values
     along the first dimension based on the indices specified in :attr:`index`,
@@ -32,20 +32,17 @@ def softmax_(src: Tensor,
     Args:
         src (Tensor): The source tensor.
         index (LongTensor): The indices of elements for applying the softmax.
-        ptr (LongTensor, optional): If given, computes the softmax based on
-            sorted inputs in CSR representation. (default: :obj:`None`)
         num_nodes (int, optional): The number of nodes, *i.e.*
             :obj:`max_val + 1` of :attr:`index`. (default: :obj:`None`)
+        kernel: for some graph algorithms with kernel operator
 
     :rtype: :class:`Tensor`
     """
-    out = src
-    if src.numel() > 0:
-        out = out - src.max()
-    out = out.exp()
-
+    n = maybe_num_nodes(index, num_nodes)
     if index is not None:
-        n = maybe_num_nodes(index, num_nodes)
+        src_max = scatter(src, index, dim, dim_size=n, reduce='max')
+        src_max = src_max.index_select(dim, index)
+        out = (src - src_max).exp() if kernel is None else (src - src_max).exp() * kernel
         out_sum = scatter(out, index, dim=dim, dim_size=n, reduce='sum').index_select(dim, index)
     else:
         raise NotImplementedError
