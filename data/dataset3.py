@@ -12,6 +12,7 @@ from torch_sparse import spspmm
 from tqdm import tqdm
 import random
 from .sample_tools import random_choose, random_move
+from utility.linalg import power_adj
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -234,13 +235,13 @@ def skeleton_parts(num_joints=25, dataset='ntu', cat=True):
     return cat_adj, sk_adj
 
 
-def power_adj(adj, dim, p):
-    val = torch.ones(adj.shape[1])
-    ic, vc = spspmm(adj, val, adj, val, dim, dim, dim)
-    if p > 2:
-        for i in range(p - 2):
-            ic, vc = spspmm(ic, vc, adj, val, dim, dim, dim)
-    return ic
+# def power_adj(adj, dim, p):
+#     val = torch.ones(adj.shape[1])
+#     ic, vc = spspmm(adj, val, adj, val, dim, dim, dim)
+#     if p > 2:
+#         for i in range(p - 2):
+#             ic, vc = spspmm(ic, vc, adj, val, dim, dim, dim)
+#     return ic
 
 
 def resolve_filename(name):
