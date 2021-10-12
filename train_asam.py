@@ -39,7 +39,7 @@ def run(rank, num_gpu):
     test_loader = None
 
     temporal_pos_enc = SeqPosEncoding(model_dim=args.hid_channels)
-    spatial_pos_enc = KStepRandomWalkEncoding().eval(train_ds.sk_adj)
+    spatial_pos_enc = KStepRandomWalkEncoding().eval(train_ds.sk_adj)[1]
 
     model = DualGraphEncoder(in_channels=args.in_channels,
                              hidden_channels=args.hid_channels,
