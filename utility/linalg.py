@@ -42,7 +42,7 @@ def softmax_(src: Tensor,
     if index is not None:
         src_max = scatter(src, index, dim, dim_size=n, reduce='max')
         src_max = src_max.index_select(dim, index)
-        out = (src - src_max).exp() if kernel is None else (src - src_max).exp() * kernel
+        out = (src - src_max).exp() if kernel is None else ((src - src_max) * kernel).exp()
         out_sum = scatter(out, index, dim=dim, dim_size=n, reduce='sum').index_select(dim, index)
     else:
         raise NotImplementedError

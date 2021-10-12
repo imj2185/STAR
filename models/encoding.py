@@ -141,18 +141,17 @@ class KStepRandomWalkEncoding(PositionalEncoding):
         self.normalization = normalization
         self.use_edge_attr = use_edge_attr
 
-    def eval(self, edge_index, edge_attr, num_nodes=None):
+    def eval(self, edge_index, edge_attr=None, num_nodes=None):
         num_nodes = maybe_num_nodes(edge_index, num_nodes)
-        edge_attr = edge_attr if self.use_edge_attr else None
+        edge_attr = edge_attr if edge_attr is not None else torch.ones(edge_index.shape[1])
         # edge_index, edge_attr = get_laplacian(edge_index, edge_attr,
         #                                       normalization=self.normalization,
         #                                       num_nodes=num_nodes)
-        # TODO addition of matrix power
+        ids = torch.tensor([[i, i] for i in range(num_nodes)]).transpose(1, 0)
+        val = torch.ones(num_nodes)
         ei, ea = edge_index, edge_attr
         for _ in range(self.k - 1):
             if self.accumulated:  # A + A^2 + A^3 = A(I + A(I + A))
-                ids = torch.tensor([[i, i] for i in range(num_nodes)]).transpose(1, 0)
-                val = torch.ones(num_nodes)
                 spadd_(ids, val, ei, ea)
             ei, ea = spspmm(ei, ea, edge_index, edge_attr,
                             num_nodes, num_nodes, num_nodes)

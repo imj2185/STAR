@@ -2,15 +2,9 @@ from abc import ABC
 
 import torch
 import torch.nn as nn
-from torch_geometric.nn import global_mean_pool
-# from third_party.performer import SelfAttention
 from einops import rearrange
 
-from models.encoding import SeqPosEncoding
-from utility.tree import tree_encoding_from_traversal
-from .attentions import SpatialEncoderLayer, TemporalEncoderLayer, SpatialFullEncoderLayer, GlobalContextAttention
-from fast_transformers.masking import FullMask
-from .powernorm import MaskPowerNorm
+from .attentions import SpatialEncoderLayer, TemporalEncoderLayer, GlobalContextAttention
 
 
 class DualGraphEncoder(nn.Module, ABC):
@@ -23,6 +17,8 @@ class DualGraphEncoder(nn.Module, ABC):
                  num_heads=8,
                  num_joints=25,
                  classes=60,
+                 spatial_pos_enc=None,
+                 temporal_pos_enc=None,
                  drop_rate=None,
                  sequential=True,
                  trainable_factor=False,
@@ -47,7 +43,8 @@ class DualGraphEncoder(nn.Module, ABC):
 
         self.tree_encoding = None
         # tree_encoding_from_traversal(onehot_length=3, max_padding=hidden_channels)
-        self.positional_encoding = SeqPosEncoding(model_dim=hidden_channels)
+        self.temporal_pos_enc = temporal_pos_enc
+        self.spatial_pos_enc = spatial_pos_enc
 
         self.lls = nn.Linear(in_features=channels[0], out_features=channels[1])
 
@@ -90,7 +87,7 @@ class DualGraphEncoder(nn.Module, ABC):
         # t = rearrange(t, 'b (n c) -> b n c', c=c)
         t = rearrange(t, 'b n c -> n b c')
 
-        t = self.positional_encoding(t, bi)
+        t = self.temporal_pos_enc(t, bi)
         t = rearrange(t, 'n b c -> b n c')
         att = None
 

@@ -11,6 +11,7 @@ from tqdm import tqdm
 
 from args import make_args
 from data.dataset3 import SkeletonDataset, skeleton_parts
+from models.encoding import SeqPosEncoding, KStepRandomWalkEncoding
 from models.net2s import DualGraphEncoder
 from optimizer import LabelSmoothingCrossEntropy, ASAM
 
@@ -36,6 +37,10 @@ def run(rank, num_gpu):
     train_loader = DataLoader(train_ds,
                               batch_size=args.batch_size)
     test_loader = None
+
+    temporal_pos_enc = SeqPosEncoding(model_dim=args.hid_channels)
+    spatial_pos_enc = KStepRandomWalkEncoding().eval(train_ds.sk_adj)
+
     model = DualGraphEncoder(in_channels=args.in_channels,
                              hidden_channels=args.hid_channels,
                              out_channels=args.out_channels,
@@ -43,6 +48,8 @@ def run(rank, num_gpu):
                              num_layers=args.num_enc_layers,
                              num_heads=args.heads,
                              sequential=False,
+                             temporal_pos_enc=temporal_pos_enc,
+                             spatial_pos_enc=spatial_pos_enc,
                              num_conv_layers=args.num_conv_layers,
                              drop_rate=args.drop_rate).to(rank)
     model = DistributedDataParallel(model, device_ids=[rank])
