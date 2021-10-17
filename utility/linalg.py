@@ -51,10 +51,8 @@ def softmax_(src: Tensor,
 
 
 def spadd_(edge_index_src, val_src, edge_index_other, val_other, m=None, n=None):
-    index_ = torch.cat((edge_index_src, edge_index_other), dim=1)
-    val_ = torch.cat((val_src, val_other), dim=1)
-    m = max(torch.max(edge_index_src[0]).item(), torch.max(edge_index_other[0]).item(), m)
-    n = max(torch.max(edge_index_src[1]).item(), torch.max(edge_index_other[1]).item(), n)
+    index_ = torch.cat((edge_index_src, edge_index_other), dim=-1)
+    val_ = torch.cat((val_src, val_other), dim=-1)
     return coalesce(index=index_, value=val_, m=m, n=n)
 
 
