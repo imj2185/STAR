@@ -8,7 +8,7 @@ or use google drive
 [NTU60](https://drive.google.com/open?id=1CUZnBtYwifVXS21yVg62T-vrPVayso5H)
 [NTU120](https://drive.google.com/open?id=1tEbuaEqMxAV7dNc4fqu1O4M7mC6CJ50w)
 
-uzip data as the following file structure: APBGCN/raw/.\*skeleton (create "raw" directory under APBGCN and put skeleton files)
+uzip data as the following file structure: `$(project_folder)/raw/.\*skeleton` or `$(project_folder)/dataset/raw/.\*skeleton` (create "raw" folder under $(project_folder) or $(project_folder)/dataset then put raw skeleton files under "raw" folder)
 
 run the code below to generate dataset:
 ```python
@@ -26,7 +26,7 @@ python train_dist.py -#distributed training
 parser.set_defaults(gpu=True,
                     batch_size=128,
                     dataset_name='NTU',
-                    dataset_root=osp.join(os.getcwd()),
+                    dataset_root=osp.join(os.getcwd()),  # or dataset_root=osp.join(os.getcwd(), 'dataset')
                     load_model=False,
                     in_channels=9,
                     num_enc_layers=5,
