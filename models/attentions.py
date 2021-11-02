@@ -189,6 +189,14 @@ class LinearAttention(nn.Module):
         return rearrange(v, 'n h l d -> n l h d').contiguous()
 
 
+class CrossViewAttention(nn.Module):
+    def __init__(self):
+        super(CrossViewAttention, self).__init__()
+
+    def forward(self, x, adj):
+        return
+
+
 class AddNorm(nn.Module):
     def __init__(self, normalized_shape, beta, dropout, heads, **kwargs):
         super(AddNorm, self).__init__(**kwargs)
