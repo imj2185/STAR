@@ -4,11 +4,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as fn
 from einops import rearrange
-from torch.nn import Linear
-
-from utility.linalg import BatchedMask, softmax_, spmm_
 from fast_transformers.feature_maps import elu_feature_map
+from torch.nn import Linear
 from torch_scatter import scatter_sum, scatter_mean
+
+from utility.linalg import softmax_, spmm_
 from .powernorm import MaskPowerNorm
 
 
@@ -68,6 +68,34 @@ class SparseAttention(nn.Module):
         v = spmm_(adj, alpha, l, l, values)
         # Make sure that what we return is contiguous
         return v.contiguous()
+
+
+class CrossViewAttention(nn.Module):
+    def __init__(self, in_channels, softmax_temp=None, dropout=0.1):
+        super(CrossViewAttention, self).__init__()
+        self.in_channels = in_channels
+        self.softmax_temp = softmax_temp
+        self.dropout = dropout
+
+    def forward(self, x, adj, offset=1):
+        n, l, h, e = x.shape  # batch, n_heads, length, depth
+        softmax_temp = self.softmax_temp or 1. / math.sqrt(e)
+        rows, cols = adj
+
+        # y = torch.cat((x[offset:, ...], x[-1].expand(offset, l, h, e)))
+        # scores = torch.sum(x.index_select(dim=-3, index=rows) * y.index_select(dim=-3, index=cols), dim=-1)
+        # alpha = fn.dropout(softmax_(softmax_temp * scores, rows),
+        #                    p=self.dropout,
+        #                    training=self.training)
+        # aggregation = spmm_(adj, alpha, l, l, y)
+        x = torch.cat((x, x[-1].expand(offset, l, h, e)))
+        scr = torch.sum(x[:-offset:, ...].index_select(dim=-3, index=rows) *
+                        x[offset:, ...].index_select(dim=-3, index=cols), dim=-1)
+        alpha = fn.dropout(softmax_(softmax_temp * scr, rows),
+                           p=self.dropout,
+                           training=self.training)
+        aggregation = spmm_(adj, alpha, l, l, x[offset:, ...])
+        return aggregation.contiguous()
 
 
 class FullAttention(nn.Module):  # B * T X V X C
@@ -187,14 +215,6 @@ class LinearAttention(nn.Module):
             v = torch.matmul(rearrange(q, 'n h l d -> n h l 1 d'),
                              kv).squeeze(dim=-2) * z.unsqueeze(-1)
         return rearrange(v, 'n h l d -> n l h d').contiguous()
-
-
-class CrossViewAttention(nn.Module):
-    def __init__(self):
-        super(CrossViewAttention, self).__init__()
-
-    def forward(self, x, adj):
-        return
 
 
 class AddNorm(nn.Module):
@@ -325,8 +345,8 @@ class GlobalContextAttention(nn.Module):
 
 class SpatialFullEncoderLayer(nn.Module):
     def __init__(self,
-                 in_channels=6,
                  mdl_channels=64,
+                 in_channels=6,
                  heads=8,
                  beta=True,
                  dropout=None):
@@ -335,13 +355,6 @@ class SpatialFullEncoderLayer(nn.Module):
         self.mdl_channels = mdl_channels
         self.heads = heads
         self.beta = beta
-        if dropout is None:
-            self.dropout = [0.5, 0.5, 0.5, 0.5]  # temp_conv, sparse_attention, add_norm, ffn
-        else:
-            self.dropout = dropout
-
-        # self.tree_key_weights = nn.Parameter(torch.randn(in_channels, in_channels), requires_grad=True)
-        # self.tree_value_weights = nn.Parameter(torch.randn(in_channels, in_channels), requires_grad=True)
 
         self.lin_qkv = Linear(in_channels, mdl_channels * 3, bias=False)
 
@@ -351,6 +364,11 @@ class SpatialFullEncoderLayer(nn.Module):
         self.add_norm_att = AddNorm(self.mdl_channels, False, self.dropout[2], self.heads)
         self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2], self.heads)
         self.ffn = FeedForward(self.mdl_channels, self.mdl_channels, self.dropout[3])
+
+        if dropout is None:
+            self.dropout = [0.5, 0.5, 0.5, 0.5]  # temp_conv, sparse_attention, add_norm, ffn
+        else:
+            self.dropout = dropout
 
         self.reset_parameters()
 
