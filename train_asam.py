@@ -38,9 +38,11 @@ def run(rank, num_gpu):
                               batch_size=args.batch_size)
     test_loader = None
 
+    print('Calculating temporal/sequential positional encoding ......'.format(n=3))
     temporal_pos_enc = SeqPosEncoding(model_dim=args.hid_channels)
+    print('Calculating A^{n} for spatial positional encoding ......'.format(n=3))
     spatial_pos_enc = KStepRandomWalkEncoding().eval(train_ds.sk_adj)[1]
-
+    print('Initializing model ......')
     model = DualGraphEncoder(in_channels=args.in_channels,
                              hidden_channels=args.hid_channels,
                              out_channels=args.out_channels,
@@ -98,7 +100,7 @@ def run(rank, num_gpu):
         accuracy *= 100. / cnt
         elapsed = time.time() - start
         # accuracy = correct / total_samples * 100.
-        print('\n------ loss: %.3f; accuracy: %.3f; average time: %.4f' %
+        print('------ loss: %.3f; accuracy: %.3f; average time: %.4f\n' %
               (running_loss, accuracy, elapsed / len(train_ds)))
 
         dist.barrier()
@@ -126,7 +128,7 @@ def run(rank, num_gpu):
                 correct += corr.double().sum().item()
             elapsed = time.time() - start
             accuracy = correct / total_samples * 100.
-            print('\n------ loss: %.3f; accuracy: %.3f; average time: %.4f' %
+            print('------ loss: %.3f; accuracy: %.3f; average time: %.4f\n' %
                   (running_loss / total_batch, accuracy, elapsed / len(test_ds)))
 
         dist.barrier()
