@@ -51,11 +51,12 @@ def make_args():
     parser.add_argument('--save_name', dest='save_name', default='check_point', type=str)
     parser.add_argument('--model_dim', dest='model_dim', default=150, type=int)
     parser.add_argument('--log_dir', dest='log_dir', default=osp.join(os.getcwd(), 'logs33'), type=str)
-    parser.add_argument('--gradflow_dir', dest='gradflow_dir', default=osp.join(os.getcwd(), 'gradflow'), type=str)
+    parser.add_argument('--grad_flow_dir', dest='grad_flow_dir', default=osp.join(os.getcwd(), 'grad_flow'), type=str)
     parser.add_argument('--data_parallel', dest='data_parallel', default=False, type=bool, help='DataParallel')
     parser.add_argument('--cross_k', dest='cross_k', default=1, type=int, help='k value for cros validation')
     parser.add_argument('--alpha', dest='alpha', default=0.01, type=float)
     parser.add_argument('--mlp_head_hidden', dest='mlp_head_hidden', default=128, type=int)  # paper used: 2001
+    parser.add_argument('--num_of_streams', dest='num_of_streams', default=3, type=int)
 
     parser.set_defaults(gpu=True,
                         batch_size=32,

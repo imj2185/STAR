@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from args import make_args
 from data.dataset3 import SkeletonDataset, skeleton_parts
-from models.net2s import DualGraphEncoder
+from models.net3streams import DualGraphEncoder
 from optimizer import LabelSmoothingCrossEntropy
 
 
@@ -44,6 +44,7 @@ def run(rank, world_size):
                              num_layers=args.num_enc_layers,
                              num_heads=args.heads,
                              sequential=False,
+                             cross_view_attn=(args.num_of_streams == 3),
                              num_conv_layers=args.num_conv_layers,
                              drop_rate=args.drop_rate).to(rank)
     model = DistributedDataParallel(model, device_ids=[rank])
@@ -54,14 +55,15 @@ def run(rank, world_size):
     if rank == 0:
         test_loader = DataLoader(test_ds,
                                  batch_size=args.batch_size)
+    else:
+        test_loader = None
 
     last_epoch = 0
     adj = skeleton_parts()[0].to(rank)
-
+    loss = 0.
     for epoch in range(last_epoch, args.epoch_num + last_epoch):
         model.train()
         running_loss = 0.
-        accuracy = 0.
         correct = 0
         total_samples = 0
         start = time.time()
@@ -93,7 +95,6 @@ def run(rank, world_size):
         if rank == 0:  # We evaluate on a single GPU for now.
             model.eval()
             running_loss = 0.
-            accuracy = 0.
             correct = 0
             total_samples = 0
             start = time.time()

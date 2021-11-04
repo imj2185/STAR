@@ -12,7 +12,7 @@ from tqdm import tqdm
 from args import make_args
 from data.dataset3 import SkeletonDataset, skeleton_parts
 from models.encoding import SeqPosEncoding, KStepRandomWalkEncoding
-from models.net2s import DualGraphEncoder
+from models.net3streams import DualGraphEncoder
 from optimizer import LabelSmoothingCrossEntropy, ASAM
 
 
@@ -50,6 +50,7 @@ def run(rank, num_gpu):
                              num_layers=args.num_enc_layers,
                              num_heads=args.heads,
                              sequential=False,
+                             cross_view_attn=(args.num_of_streams == 3),
                              temporal_pos_enc=temporal_pos_enc,
                              spatial_pos_enc=spatial_pos_enc,
                              num_conv_layers=args.num_conv_layers,

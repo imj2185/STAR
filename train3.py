@@ -13,7 +13,7 @@ from tqdm import tqdm, trange
 
 from args import make_args
 from data.dataset3 import SkeletonDataset, skeleton_parts
-from models.net2s import DualGraphEncoder
+from models.net2streams import DualGraphEncoder
 from optimizer import SgdAgc, CosineAnnealingWarmupRestarts, LabelSmoothingCrossEntropy
 # , ZeroOneClipper,
 from utility.helper import make_checkpoint, load_checkpoint
