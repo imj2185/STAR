@@ -6,8 +6,8 @@ import torch.nn as nn
 from einops import rearrange
 
 from models.encoding import SeqPosEncoding
-from .attentions import SpatialEncoderLayer, TemporalEncoderLayer
-from .layers import GlobalContextAttention
+from .layers import SpatialEncoderLayer, TemporalEncoderLayer
+from .attentions import GlobalContextAttention
 
 
 class DualGraphEncoder(nn.Module, ABC):

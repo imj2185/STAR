@@ -4,7 +4,8 @@ import torch
 import torch.nn as nn
 from einops import rearrange
 
-from .attentions import SpatialEncoderLayer, TemporalEncoderLayer, GlobalContextAttention
+from .layers import SpatialEncoderLayer, TemporalEncoderLayer
+from .attentions import GlobalContextAttention
 
 
 class DualGraphEncoder(nn.Module, ABC):
