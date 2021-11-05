@@ -48,14 +48,15 @@ class SparseAttention(nn.Module):
             :param pe: positional encoding, this is a relative positional encoding which is applied to edges
         """
         # Extract some shapes and compute the temperature
-        n, l, h, e = queries.shape  # batch, n_heads, length, depth
-        _, _, s, d = values.shape
+        _, l, _, e = queries.shape  # batch, n_heads, length, depth
+        # _, _, s, d = values.shape
 
         softmax_temp = self.softmax_temp or 1. / math.sqrt(e)
 
         # Compute the un-normalized sparse attention according to adjacency matrix indices
         if isinstance(adj, torch.Tensor):
-            qk = torch.sum(queries.index_select(dim=-3, index=adj[0]) * keys.index_select(dim=-3, index=adj[1]), dim=-1)
+            qk = torch.sum(queries.index_select(dim=-3, index=adj[0]) * 
+                           keys.index_select(dim=-3, index=adj[1]), dim=-1)
         else:
             # qk = adj_ = None
             raise NotImplemented("not implemented yet for non-tensor.")
@@ -78,7 +79,7 @@ class CrossViewAttention(nn.Module):
         self.dropout = dropout
 
     def forward(self, x, adj, offset=1):
-        n, l, h, e = x.shape  # batch, n_heads, length, depth
+        _, l, h, e = x.shape
         softmax_temp = self.softmax_temp or 1. / math.sqrt(e)
         rows, cols = adj
 

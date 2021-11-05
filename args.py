@@ -58,8 +58,9 @@ def make_args():
     parser.add_argument('--mlp_head_hidden', dest='mlp_head_hidden', default=128, type=int)  # paper used: 2001
     parser.add_argument('--num_of_streams', dest='num_of_streams', default=3, type=int)
 
+    # n_streams = 3
     parser.set_defaults(gpu=True,
-                        batch_size=32,
+                        batch_size=32,  # if n_streams < 3 else 16,
                         dataset_name='NTU',
                         dataset_root=osp.join(os.getcwd(), 'dataset'),
                         load_model=False,
@@ -70,6 +71,7 @@ def make_args():
                         drop_rate=[0.4, 0.4, 0.4, 0.4],  # linear_attention, sparse_attention, add_norm, ffn
                         hid_channels=64,
                         out_channels=64,
+                        num_of_streams=3,  # n_streams,
                         heads=8,
                         data_parallel=False,
                         cross_k=5,

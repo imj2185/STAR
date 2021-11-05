@@ -578,8 +578,6 @@ class CrossViewEncoderLayer(nn.Module):
         query, value = self.lin_qv(x).chunk(2, dim=-1)
 
         query = rearrange(query, 'f n (h c) -> f n h c', h=self.heads)
-        value = rearrange(value, 'f n (h c) -> f n h c', h=self.heads)
-
         t = self.multi_head_attn(query, adj)
         t = rearrange(t, 'f n h c -> f n (h c)', h=self.heads)
 
