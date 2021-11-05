@@ -554,6 +554,8 @@ class CrossViewEncoderLayer(nn.Module):
         self.heads = heads
         if dropout is None:
             self.dropout = [0.5, 0.5, 0.5, 0.5]  # temp_conv, sparse_attention, add_norm, ffn
+        else:
+            self.dropout = dropout
 
         self.lin_qv = Linear(in_channels, mdl_channels * 2, bias=False)
         self.multi_head_attn = CrossViewAttention(in_channels=mdl_channels // heads,
