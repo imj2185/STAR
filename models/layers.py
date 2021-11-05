@@ -547,20 +547,21 @@ class CrossViewEncoderLayer(nn.Module):
                  in_channels=6,
                  mdl_channels=64,
                  heads=8,
-                 dropout=0.1):
+                 dropout=None):
         super(CrossViewEncoderLayer, self).__init__()
         self.in_channels = in_channels
         self.mdl_channels = mdl_channels
         self.heads = heads
-        self.dropout = dropout
+        if dropout is None:
+            self.dropout = [0.5, 0.5, 0.5, 0.5]  # temp_conv, sparse_attention, add_norm, ffn
 
         self.lin_qv = Linear(in_channels, mdl_channels * 2, bias=False)
         self.multi_head_attn = CrossViewAttention(in_channels=mdl_channels // heads,
-                                                  dropout=dropout)
+                                                  dropout=dropout[1])
 
-        self.add_norm_att = AddNorm(self.mdl_channels, False, self.dropout, self.heads)
-        self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout, self.heads)
-        self.ffn = FeedForward(self.mdl_channels, self.mdl_channels, self.dropout)
+        self.add_norm_att = AddNorm(self.mdl_channels, False, self.dropout[2], self.heads)
+        self.add_norm_ffn = AddNorm(self.mdl_channels, False, self.dropout[2], self.heads)
+        self.ffn = FeedForward(self.mdl_channels, self.mdl_channels, self.dropout[3])
 
         self.reset_parameters()
 
