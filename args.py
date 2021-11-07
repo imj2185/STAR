@@ -66,16 +66,16 @@ def make_args():
                         load_model=False,
                         in_channels=9,
                         num_enc_layers=5,
-                        num_conv_layers=2,
+                        # num_conv_layers=2,
                         weight_decay=4e-5,
                         drop_rate=[0.4, 0.4, 0.4, 0.4],  # linear_attention, sparse_attention, add_norm, ffn
-                        hid_channels=64,
-                        out_channels=64,
+                        hid_channels=72,
+                        out_channels=72,
                         num_of_streams=3,  # n_streams,
-                        heads=8,
-                        data_parallel=False,
+                        heads=12,
+                        # data_parallel=True,
                         cross_k=5,
-                        mlp_head_hidden=128)
+                        mlp_head_hidden=64)
 
     args = parser.parse_args()
     return args
