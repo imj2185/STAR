@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from tensorboardX import SummaryWriter
-from torch_geometric.data import DataLoader
+from torch_geometric.loader import DataLoader
 from tqdm import tqdm, trange
 
 from args import make_args

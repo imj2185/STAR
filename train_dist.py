@@ -7,7 +7,7 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data.distributed import DistributedSampler
-from torch_geometric.data import DataLoader
+from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 
 from args import make_args
