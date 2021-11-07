@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as fn
 from einops import rearrange
-from fast_transformers.feature_maps import elu_feature_map
+# from fast_transformers.feature_maps import elu_feature_map
 from torch.nn import Linear
 from torch_scatter import scatter_sum, scatter_mean
 
@@ -188,7 +188,8 @@ class LinearAttention(nn.Module):
         self.eps = eps
         self.feature_map = (
             feature_map(in_channels) if feature_map else
-            elu_feature_map(query_dims=in_channels)
+            # elu_feature_map(query_dims=in_channels)
+            lambda x: torch.nn.functional.elu(x) + 1
         )
 
     def forward(self, queries, keys, values, bi=None):
