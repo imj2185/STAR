@@ -197,9 +197,9 @@ class LinearAttention(nn.Module):
         # _, _, s, d = values.shape
         softmax_temp = self.softmax_temp or (e ** -0.25)  # TODO: how to use this?
         (queries, keys) = map(lambda x: x * softmax_temp, (queries, keys))
-        self.feature_map.new_feature_map(queries.device)
-        q = self.feature_map.forward_queries(queries)
-        k = self.feature_map.forward_keys(keys)
+        # self.feature_map.new_feature_map(queries.device)
+        q = self.feature_map(queries)  # self.feature_map.forward_queries(queries)
+        k = self.feature_map(keys)     # self.feature_map.forward_keys(keys)
 
         if bi is None:
             kv = torch.einsum("nshd, nshm -> nhmd", k, values)
