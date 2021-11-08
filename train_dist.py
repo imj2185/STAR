@@ -44,7 +44,7 @@ def run(rank, world_size):
                              num_layers=args.num_enc_layers,
                              num_heads=args.heads,
                              sequential=False,
-                             cross_view_attn=(args.num_of_streams == 3),
+                             use_cross_view=(args.num_of_streams == 3),
                              num_conv_layers=args.num_conv_layers,
                              drop_rate=args.drop_rate).to(rank)
     model = DistributedDataParallel(model, device_ids=[rank])

@@ -50,7 +50,7 @@ def run(rank, num_gpu):
                              num_layers=args.num_enc_layers,
                              num_heads=args.heads,
                              sequential=False,
-                             cross_view_attn=(args.num_of_streams == 3),
+                             use_cross_view=(args.num_of_streams == 3),
                              temporal_pos_enc=temporal_pos_enc,
                              spatial_pos_enc=spatial_pos_enc,
                              num_conv_layers=args.num_conv_layers,
@@ -101,7 +101,7 @@ def run(rank, num_gpu):
         accuracy *= 100. / cnt
         elapsed = time.time() - start
         # accuracy = correct / total_samples * 100.
-        print('------ loss: %.3f; accuracy: %.3f; average time: %.4f\n' %
+        print('------ loss: %.3f; accuracy: %.3f%%; average time: %.4f\n' %
               (running_loss, accuracy, elapsed / len(train_ds)))
 
         dist.barrier()
@@ -129,7 +129,7 @@ def run(rank, num_gpu):
                 correct += corr.double().sum().item()
             elapsed = time.time() - start
             accuracy = correct / total_samples * 100.
-            print('------ loss: %.3f; accuracy: %.3f; average time: %.4f\n' %
+            print('------ loss: %.3f; accuracy: %.3f%%; average time: %.4f\n' %
                   (running_loss / total_batch, accuracy, elapsed / len(test_ds)))
 
         dist.barrier()

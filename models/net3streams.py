@@ -22,7 +22,7 @@ class DualGraphEncoder(nn.Module, ABC):
                  temporal_pos_enc=None,
                  drop_rate=None,
                  sequential=True,
-                 cross_view_attn=True,
+                 use_cross_view=False,
                  trainable_factor=False,
                  num_conv_layers=3):
         super(DualGraphEncoder, self).__init__()
@@ -62,13 +62,15 @@ class DualGraphEncoder(nn.Module, ABC):
                                  heads=num_heads,
                                  dropout=self.drop_rate) for i in range(num_layers)])
 
-        self.use_cross_view = cross_view_attn
-        if cross_view_attn:
+        self.use_cross_view = use_cross_view
+        if use_cross_view:
             self.cross_view_layers = nn.ModuleList([
                 CrossViewEncoderLayer(in_channels=channels_[i],
                                       mdl_channels=channels_[i + 1],
                                       heads=num_heads,
                                       dropout=self.drop_rate) for i in range(num_layers)])
+        else:
+            self.cross_view_layers = None
 
         self.context_attention = GlobalContextAttention(in_channels=out_channels)
 
@@ -103,11 +105,11 @@ class DualGraphEncoder(nn.Module, ABC):
             if self.use_cross_view:
                 y = self.cross_view_layers[i](t, adj)
             else:
-                y = 0.
+                y = 1e-16
             u = rearrange(t, 'f n c -> n f c')
             u = self.temporal_layers[i](u, bi)
             u = rearrange(u, 'n f c -> f n c')
-            t = x + u if not self.use_cross_view else x + u + y
+            t = x + u + y
 
         t = rearrange(t, 'f n c -> n f c')
         # bi_ = bi[:bi.shape[0]:2**self.num_layers]
