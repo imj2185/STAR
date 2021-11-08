@@ -578,10 +578,12 @@ class CrossViewEncoderLayer(nn.Module):
         query, value = self.lin_qv(x).chunk(2, dim=-1)
 
         query = rearrange(query, 'f n (h c) -> f n h c', h=self.heads)
-        t = self.multi_head_attn(query, adj)
+        value = rearrange(value, 'f n (h c) -> f n h c', h=self.heads)
+
+        t = self.multi_head_attn(query, value, adj)
         t = rearrange(t, 'f n h c -> f n (h c)', h=self.heads)
 
-        x = self.add_norm_att(value, t)
+        x = self.add_norm_att(x, t)
         x = self.add_norm_ffn(x, self.ffn(x))
 
         return x
@@ -604,9 +606,6 @@ class SpatialEncoderLayer(nn.Module):
         else:
             self.dropout = dropout
 
-        # self.tree_key_weights = nn.Parameter(torch.randn(in_channels, in_channels), requires_grad=True)
-        # self.tree_value_weights = nn.Parameter(torch.randn(in_channels, in_channels), requires_grad=True)
-
         self.lin_qkv = Linear(in_channels, mdl_channels * 3, bias=False)
 
         self.multi_head_attn = SparseAttention(in_channels=mdl_channels // heads,
@@ -627,12 +626,6 @@ class SpatialEncoderLayer(nn.Module):
     def forward(self, x, adj=None):
         f, n, c = x.shape
         query, key, value = self.lin_qkv(x).chunk(3, dim=-1)
-
-        # tree_pos_enc_key = torch.matmul(tree_encoding, self.tree_key_weights)
-        # tree_pos_enc_value = torch.matmul(tree_encoding, self.tree_value_weights)
-
-        # key = key + tree_pos_enc_key.unsqueeze(dim=0)
-        # value = value + tree_pos_enc_value.unsqueeze(dim=0)
 
         query = rearrange(query, 'f n (h c) -> f n h c', h=self.heads)
         key = rearrange(key, 'f n(h c) -> f n h c', h=self.heads)

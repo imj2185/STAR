@@ -60,7 +60,7 @@ def make_args():
 
     # n_streams = 3
     parser.set_defaults(gpu=True,
-                        batch_size=32,  # if n_streams < 3 else 16,
+                        batch_size=64,  # if n_streams < 3 else 16,
                         dataset_name='NTU',
                         dataset_root=osp.join(os.getcwd(), 'dataset'),
                         load_model=False,

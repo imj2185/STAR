@@ -78,24 +78,23 @@ class CrossViewAttention(nn.Module):
         self.softmax_temp = softmax_temp
         self.dropout = dropout
 
-    def forward(self, x, adj, offset=1):
-        _, l, h, e = x.shape
+    def forward(self, queries, values, adj, offset=1):
+        _, l, h, e = queries.shape
         softmax_temp = self.softmax_temp or 1. / math.sqrt(e)
         rows, cols = adj
-
-        # y = torch.cat((x[offset:, ...], x[-1].expand(offset, l, h, e)))
-        # scores = torch.sum(x.index_select(dim=-3, index=rows) * y.index_select(dim=-3, index=cols), dim=-1)
+        # y = torch.cat((queries[offset:, ...], queries[-1].expand(offset, l, h, e)))
+        # scores = torch.sum(queries.index_select(dim=-3, index=rows) * y.index_select(dim=-3, index=cols), dim=-1)
         # alpha = fn.dropout(softmax_(softmax_temp * scores, rows),
         #                    p=self.dropout,
         #                    training=self.training)
-        # aggregation = spmm_(adj, alpha, l, l, y)
-        x = torch.cat((x, x[-1].expand(offset, l, h, e)))
-        scr = torch.sum(x[:-offset:, ...].index_select(dim=-3, index=rows) *
-                        x[offset:, ...].index_select(dim=-3, index=cols), dim=-1)
+        # aggregation = spmm_(adj, alpha, l, l, values)
+        queries = torch.cat((queries, queries[-1].expand(offset, l, h, e)))
+        scr = torch.sum(queries[:-offset:, ...].index_select(dim=-3, index=rows) *
+                        queries[offset:, ...].index_select(dim=-3, index=cols), dim=-1)
         alpha = fn.dropout(softmax_(softmax_temp * scr, rows),
                            p=self.dropout,
                            training=self.training)
-        aggregation = spmm_(adj, alpha, l, l, x[offset:, ...])
+        aggregation = spmm_(adj, alpha, l, l, values)
         return aggregation.contiguous()
 
 
