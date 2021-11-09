@@ -13,7 +13,7 @@ from tqdm import tqdm
 from args import make_args
 from data.dataset3 import SkeletonDataset, skeleton_parts
 from models.encoding import SeqPosEncoding, KStepRandomWalkEncoding
-from models.net3streams import DualGraphEncoder
+from models.net2streams import DualGraphEncoder
 from optimizer import LabelSmoothingCrossEntropy
 
 
@@ -50,7 +50,7 @@ def run(rank, world_size):
                              num_layers=args.num_enc_layers,
                              num_heads=args.heads,
                              sequential=False,
-                             use_cross_view=(args.num_of_streams == 3),
+                             # use_cross_view=(args.num_of_streams == 3),
                              temporal_pos_enc=temporal_pos_enc,
                              spatial_pos_enc=spatial_pos_enc,
                              num_conv_layers=args.num_conv_layers,
@@ -95,7 +95,7 @@ def run(rank, world_size):
             correct += corr.double().sum().item()
         elapsed = time.time() - start
         accuracy = correct / total_samples * 100.
-        print('\n------ loss: %.3f; accuracy: %.3f; average time: %.4f' %
+        print('------ loss: %.3f; accuracy: %.3f%%; average time: %.4f\n' %
               (running_loss / total_batch, accuracy, elapsed / len(train_ds)))
 
         dist.barrier()
@@ -123,7 +123,7 @@ def run(rank, world_size):
                 correct += corr.double().sum().item()
             elapsed = time.time() - start
             accuracy = correct / total_samples * 100.
-            print('\n------ loss: %.3f; accuracy: %.3f; average time: %.4f' %
+            print('------ loss: %.3f; accuracy: %.3f%%; average time: %.4f\n' %
                   (running_loss / total_batch, accuracy, elapsed / len(test_ds)))
 
         dist.barrier()

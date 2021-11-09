@@ -101,15 +101,14 @@ class DualGraphEncoder(nn.Module, ABC):
 
         # Core pipeline
         for i in range(self.num_layers):
-            x = self.spatial_layers[i](t, adj)
+            y, u = t
+            t = self.spatial_layers[i](t, adj)
             if self.use_cross_view:
-                y = self.cross_view_layers[i](t, adj)
-            else:
-                y = 1e-16
-            u = rearrange(t, 'f n c -> n f c')
+                y = self.cross_view_layers[i](y, adj)
+            u = rearrange(u, 'f n c -> n f c')
             u = self.temporal_layers[i](u, bi)
             u = rearrange(u, 'n f c -> f n c')
-            t = x + u + y
+            t += u if self.use_cross_view else u + y
 
         t = rearrange(t, 'f n c -> n f c')
         # bi_ = bi[:bi.shape[0]:2**self.num_layers]
